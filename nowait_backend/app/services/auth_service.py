@@ -321,7 +321,7 @@ def _get_user_id_by_email(email: str) -> str | None:
 
 
 def _admin_confirm_user(user_id: str) -> None:
-    """Force-confirm a user's email via Admin API."""
+    """Force-confirm email and reset password via Admin API."""
     url = f"{settings.SUPABASE_URL}/auth/v1/admin/users/{user_id}"
     headers = {
         "apikey": settings.SUPABASE_SERVICE_KEY,
@@ -329,8 +329,8 @@ def _admin_confirm_user(user_id: str) -> None:
         "Content-Type": "application/json",
     }
     try:
-        resp = httpx.put(url, json={"email_confirm": True}, headers=headers, timeout=10.0)
-        print(f"[DEMO] Force-confirm → HTTP {resp.status_code}")
+        resp = httpx.put(url, json={"email_confirm": True, "password": settings.DEMO_PASSWORD}, headers=headers, timeout=10.0)
+        print(f"[DEMO] Force-confirm+reset → HTTP {resp.status_code}")
     except Exception as e:
         print(f"[DEMO] Force-confirm exception: {e}")
 
