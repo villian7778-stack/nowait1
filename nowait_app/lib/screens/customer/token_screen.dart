@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,9 @@ import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/ping_dot.dart';
+import '../../widgets/dashed_circle_painter.dart';
+import 'queue_status_screen.dart';
 
 class TokenScreen extends StatefulWidget {
   final ShopModel shop;
@@ -30,18 +34,18 @@ class TokenScreen extends StatefulWidget {
 
 class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin {
   late AnimationController _spinController;
-  late AnimationController _pulseController;
   late AnimationController _entryController;
-  late Animation<double> _pulseAnim;
   late Animation<double> _entryAnim;
 
-  int _peopleAhead = 0;
+  bool _isComing = false;
+  bool _comingNotified = false;
+  Timer? _autoNavTimer;
+  int _countdown = 3;
   final _l = LocaleService.instance;
 
   @override
   void initState() {
     super.initState();
-    _peopleAhead = widget.position - 1;
     _l.addListener(_onLocale);
 
     _spinController = AnimationController(
@@ -49,41 +53,94 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
       duration: const Duration(seconds: 12),
     )..repeat();
 
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
-    _pulseAnim = Tween(begin: 0.95, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
     _entryAnim = CurvedAnimation(parent: _entryController, curve: Curves.easeOutBack);
+
+    // Auto-navigate to QueueStatusScreen after 3 seconds
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _autoNavTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _countdown--);
+      if (_countdown <= 0) {
+        t.cancel();
+        _autoNavigate();
+      }
+    });
+  }
+
+  Future<void> _autoNavigate() async {
+    if (!mounted) return;
+    // Fetch live entry so QueueStatusScreen starts with fresh data
+    QueueEntry? entry;
+    try {
+      final entries = await QueueService.instance.getMyStatus(shopId: widget.shop.id);
+      entry = entries.where((e) => e.entryId == widget.entryId).firstOrNull;
+    } catch (_) {}
+
+    // Fallback: construct from static join data
+    entry ??= QueueEntry(
+      id: widget.entryId,
+      entryId: widget.entryId,
+      shopId: widget.shop.id,
+      shopName: widget.shop.name,
+      token: widget.token,
+      position: widget.position,
+      peopleAhead: widget.position - 1,
+      estimatedWaitMinutes: widget.estimatedWait,
+      nowServingToken: widget.shop.currentToken,
+      status: widget.position <= 3 ? QueueStatus.almostThere : QueueStatus.waiting,
+    );
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: entry!)),
+    );
   }
 
   @override
   void dispose() {
     _l.removeListener(_onLocale);
     _spinController.dispose();
-    _pulseController.dispose();
     _entryController.dispose();
+    _autoNavTimer?.cancel();
     super.dispose();
   }
 
   void _onLocale() => setState(() {});
 
-  void _notifyImComing() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_l.tr('shopNotifiedMsg', params: {'shop': widget.shop.name})),
-        backgroundColor: AppColors.tertiary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  Future<void> _notifyImComing() async {
+    if (_isComing || _comingNotified) return;
+    setState(() => _isComing = true);
+    try {
+      await QueueService.instance.notifyComing(widget.entryId);
+      if (mounted) {
+        setState(() { _isComing = false; _comingNotified = true; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l.tr('shopNotifiedMsg', params: {'shop': widget.shop.name})),
+            backgroundColor: AppColors.tertiary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _isComing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isComing = false);
+    }
   }
 
   void _cancelQueue() {
@@ -107,6 +164,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              _autoNavTimer?.cancel();
               try {
                 await QueueService.instance.cancelQueue(widget.entryId);
               } on ApiException catch (e) {
@@ -162,7 +220,6 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                       ],
                     ),
                   ),
-                  // Live indicator
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
@@ -171,7 +228,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                     ),
                     child: Row(
                       children: [
-                        _PingDot(),
+                        const PingDot(),
                         const SizedBox(width: 5),
                         Text(
                           _l.tr('live'),
@@ -204,65 +261,85 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                 angle: _spinController.value * 2 * pi,
                                 child: CustomPaint(
                                   size: const Size(200, 200),
-                                  painter: _DashedCirclePainter(),
+                                  painter: DashedCirclePainter(),
                                 ),
                               ),
                             ),
-                            ScaleTransition(
-                              scale: _pulseAnim,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      gradient: AppColors.primaryGradient135,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      _l.tr('yourToken'),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                        letterSpacing: 1.5,
-                                      ),
-                                    ),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    gradient: AppColors.primaryGradient135,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    widget.token,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 52,
+                                  child: Text(
+                                    _l.tr('yourToken'),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
                                       fontWeight: FontWeight.w800,
-                                      color: AppColors.primary,
-                                      letterSpacing: -2,
+                                      color: Colors.white,
+                                      letterSpacing: 1.5,
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.tertiaryFixed.withValues(alpha: 0.3),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      _l.tr('positionLabel', params: {'n': '${widget.position}'}),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.tertiary,
-                                        letterSpacing: 1.0,
-                                      ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  widget.token,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 52,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                    letterSpacing: -2,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.tertiaryFixed.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    _l.tr('positionLabel', params: {'n': '${widget.position}'}),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.tertiary,
+                                      letterSpacing: 1.0,
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+
+                    // Auto-navigate countdown banner
+                    if (_countdown > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.timer_outlined, color: AppColors.primary, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Opening live tracker in $_countdown...',
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 12),
 
                     // ── Queue info bento ─────────────────────────────────────
                     Row(
@@ -270,10 +347,10 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                         Expanded(
                           child: _StatCell(
                             icon: Icons.people_outline_rounded,
-                            value: '$_peopleAhead',
-                            suffix: _peopleAhead == 1 ? _l.tr('person') : _l.tr('people'),
+                            value: '${widget.position - 1}',
+                            suffix: (widget.position - 1) == 1 ? _l.tr('person') : _l.tr('people'),
                             label: _l.tr('aheadOfYou'),
-                            highlight: _peopleAhead <= 2,
+                            highlight: (widget.position - 1) <= 2,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -314,38 +391,13 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                               children: [
                                 Text(
                                   _l.tr('nowServing'),
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.tertiary,
-                                  ),
+                                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.tertiary),
                                 ),
                                 Text(
                                   'Token #${widget.shop.currentToken.toString().padLeft(2, '0')}',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onSurface,
-                                  ),
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface),
                                 ),
                               ],
-                            ),
-                          ),
-                          Flexible(
-                            child: Text(
-                              _peopleAhead == 0
-                                  ? _l.tr('yourTurnMsg')
-                                  : _l.tr('moreAhead', params: {'n': '$_peopleAhead'}),
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _peopleAhead == 0
-                                    ? AppColors.tertiary
-                                    : AppColors.onSurfaceVariant,
-                              ),
-                              textAlign: TextAlign.right,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -386,11 +438,35 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                     // ── I'm Coming button ────────────────────────────────────
                     SizedBox(
                       width: double.infinity,
-                      child: GradientButton(
-                        label: _l.tr('imComing'),
-                        onPressed: _notifyImComing,
-                        icon: Icons.directions_walk_rounded,
-                      ),
+                      child: _comingNotified
+                          ? Container(
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: AppColors.tertiary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_rounded, color: AppColors.tertiary, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('Shop notified — on your way!', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.tertiary)),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : _isComing
+                              ? Container(
+                                  height: 52,
+                                  decoration: BoxDecoration(gradient: AppColors.primaryGradient135, borderRadius: BorderRadius.circular(16)),
+                                  child: const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))),
+                                )
+                              : GradientButton(
+                                  label: _l.tr('imComing'),
+                                  onPressed: _notifyImComing,
+                                  icon: Icons.directions_walk_rounded,
+                                ),
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
@@ -399,11 +475,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                         onPressed: _cancelQueue,
                         child: Text(
                           _l.tr('cancelQueue'),
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.error,
-                          ),
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.error),
                         ),
                       ),
                     ),
@@ -455,11 +527,7 @@ class _StatCell extends StatelessWidget {
               children: [
                 TextSpan(
                   text: value,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.onSurface,
-                  ),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.onSurface),
                 ),
                 const WidgetSpan(child: SizedBox(width: 4)),
                 TextSpan(
@@ -474,90 +542,4 @@ class _StatCell extends StatelessWidget {
       ),
     );
   }
-}
-
-class _PingDot extends StatefulWidget {
-  @override
-  State<_PingDot> createState() => _PingDotState();
-}
-
-class _PingDotState extends State<_PingDot> with SingleTickerProviderStateMixin {
-  late AnimationController _c;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat();
-    _anim = Tween(begin: 0.0, end: 1.0).animate(_c);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 12,
-      height: 12,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (context, child) => Transform.scale(
-              scale: 1 + _anim.value,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.tertiary.withValues(alpha: 1 - _anim.value),
-                ),
-              ),
-            ),
-          ),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.tertiary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashedCirclePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.3)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - 2;
-    const dashCount = 20;
-    const dashLength = 0.12;
-    const gapLength = 0.2;
-    const total = dashLength + gapLength;
-
-    for (int i = 0; i < dashCount; i++) {
-      final startAngle = i * total * pi;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        dashLength * pi,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
 }

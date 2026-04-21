@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/models.dart';
 import '../../services/shop_service.dart';
 import '../../services/api_client.dart';
@@ -21,9 +24,15 @@ class _EditShopScreenState extends State<EditShopScreen> {
   late final TextEditingController _addressController;
   late final TextEditingController _cityController;
   late final TextEditingController _avgWaitController;
+  late final TextEditingController _openingHoursController;
   late String _selectedCategory;
   bool _isLoading = false;
   final _l = LocaleService.instance;
+
+  late List<String> _existingImages;
+  final List<String> _removedUrls = [];
+  final List<XFile> _newImages = [];
+  bool _isUploadingImages = false;
 
   final _categories = [
     'Salon',
@@ -44,9 +53,36 @@ class _EditShopScreenState extends State<EditShopScreen> {
         TextEditingController(text: widget.shop.city);
     _avgWaitController = TextEditingController(
         text: widget.shop.avgWaitMinutes.toString());
+    _openingHoursController = TextEditingController(
+        text: widget.shop.openingHours ?? '9:00 AM - 8:00 PM');
     _selectedCategory = _categories.contains(widget.shop.category)
         ? widget.shop.category
         : _categories.first;
+    _existingImages = List<String>.from(widget.shop.images);
+  }
+
+  int get _totalImageCount => _existingImages.length + _newImages.length;
+
+  Future<void> _pickNewImages() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickMultiImage(imageQuality: 80);
+    if (picked.isNotEmpty) {
+      setState(() {
+        final remaining = 10 - _totalImageCount;
+        _newImages.addAll(picked.take(remaining));
+      });
+    }
+  }
+
+  void _removeExistingImage(String url) {
+    setState(() {
+      _existingImages.remove(url);
+      _removedUrls.add(url);
+    });
+  }
+
+  void _removeNewImage(int index) {
+    setState(() => _newImages.removeAt(index));
   }
 
   void _onLocale() => setState(() {});
@@ -58,6 +94,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
     _addressController.dispose();
     _cityController.dispose();
     _avgWaitController.dispose();
+    _openingHoursController.dispose();
     super.dispose();
   }
 
@@ -72,7 +109,11 @@ class _EditShopScreenState extends State<EditShopScreen> {
       _addressController.text.trim() != widget.shop.address ||
       _cityController.text.trim() != widget.shop.city ||
       (int.tryParse(_avgWaitController.text) ?? widget.shop.avgWaitMinutes) !=
-          widget.shop.avgWaitMinutes;
+          widget.shop.avgWaitMinutes ||
+      _openingHoursController.text.trim() !=
+          (widget.shop.openingHours ?? '9:00 AM - 8:00 PM');
+
+  bool get _hasImageChanges => _removedUrls.isNotEmpty || _newImages.isNotEmpty;
 
   Future<void> _save() async {
     if (!_isValid) {
@@ -81,22 +122,52 @@ class _EditShopScreenState extends State<EditShopScreen> {
       );
       return;
     }
-    if (!_hasChanges) {
+    if (!_hasChanges && !_hasImageChanges) {
       Navigator.pop(context);
       return;
     }
     setState(() => _isLoading = true);
     try {
-      final updated = await ShopService.instance.updateShop(
-        widget.shop.id,
-        name: _nameController.text.trim(),
-        category: _selectedCategory,
-        address: _addressController.text.trim(),
-        city: _cityController.text.trim(),
-        avgWaitMinutes:
-            int.tryParse(_avgWaitController.text) ??
-                widget.shop.avgWaitMinutes,
-      );
+      // Delete removed images
+      if (_removedUrls.isNotEmpty) {
+        setState(() => _isUploadingImages = true);
+        for (final url in _removedUrls) {
+          try {
+            await ShopService.instance.deleteImage(widget.shop.id, url);
+          } catch (_) {}
+        }
+      }
+
+      // Upload new images
+      if (_newImages.isNotEmpty) {
+        setState(() => _isUploadingImages = true);
+        for (final img in _newImages) {
+          try {
+            await ShopService.instance.uploadImage(widget.shop.id, img);
+          } catch (_) {}
+        }
+      }
+      if (mounted) setState(() => _isUploadingImages = false);
+
+      ShopModel? updated;
+      if (_hasChanges) {
+        updated = await ShopService.instance.updateShop(
+          widget.shop.id,
+          name: _nameController.text.trim(),
+          category: _selectedCategory,
+          address: _addressController.text.trim(),
+          city: _cityController.text.trim(),
+          avgWaitMinutes:
+              int.tryParse(_avgWaitController.text) ??
+                  widget.shop.avgWaitMinutes,
+          openingHours: _openingHoursController.text.trim().isNotEmpty
+              ? _openingHoursController.text.trim()
+              : null,
+        );
+      } else {
+        updated = await ShopService.instance.getShop(widget.shop.id);
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -124,7 +195,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _isUploadingImages = false; });
     }
   }
 
@@ -200,9 +271,15 @@ class _EditShopScreenState extends State<EditShopScreen> {
                               cap: TextCapitalization.words),
                         ]),
                         const SizedBox(height: 24),
-                        _sectionTitle('Queue Settings'),
+                        _sectionTitle('Hours & Queue Settings'),
                         const SizedBox(height: 14),
                         _buildSection([
+                          _field(
+                            _openingHoursController,
+                            'OPENING HOURS',
+                            '9:00 AM - 8:00 PM',
+                          ),
+                          const SizedBox(height: 16),
                           _field(
                             _avgWaitController,
                             'AVG. WAIT TIME (MINUTES)',
@@ -217,6 +294,151 @@ class _EditShopScreenState extends State<EditShopScreen> {
                                 fontSize: 11,
                                 color: AppColors.onSurfaceVariant),
                           ),
+                        ]),
+                        const SizedBox(height: 24),
+                        _sectionTitle('Gallery'),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Up to 10 photos. Changes are saved when you tap Save Changes.',
+                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 14),
+                        _buildSection([
+                          if (_isUploadingImages)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text('Saving images…', style: GoogleFonts.inter(fontSize: 12, color: AppColors.primary)),
+                                ],
+                              ),
+                            ),
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 8,
+                              mainAxisSpacing: 8,
+                              childAspectRatio: 1,
+                            ),
+                            itemCount: _totalImageCount + (_totalImageCount < 10 ? 1 : 0),
+                            itemBuilder: (_, i) {
+                              // Add button
+                              if (i == _totalImageCount) {
+                                return GestureDetector(
+                                  onTap: _pickNewImages,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: AppColors.outline.withValues(alpha: 0.3)),
+                                    ),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.add_photo_alternate_outlined, color: AppColors.primary, size: 26),
+                                        SizedBox(height: 4),
+                                        Text('Add', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                              // Existing uploaded image
+                              if (i < _existingImages.length) {
+                                final url = _existingImages[i];
+                                return Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(
+                                        url,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surfaceContainerLow,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(Icons.broken_image_outlined, color: AppColors.onSurfaceVariant),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 4, right: 4,
+                                      child: GestureDetector(
+                                        onTap: () => _removeExistingImage(url),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(3),
+                                          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                          child: const Icon(Icons.close, color: Colors.white, size: 12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
+                              // Newly picked (not yet uploaded) image
+                              final newIdx = i - _existingImages.length;
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: kIsWeb
+                                        ? Image.network(
+                                            _newImages[newIdx].path,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          )
+                                        : Image.file(
+                                            File(_newImages[newIdx].path),
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          ),
+                                  ),
+                                  Positioned(
+                                    top: 4, right: 4,
+                                    child: GestureDetector(
+                                      onTap: () => _removeNewImage(newIdx),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                        child: const Icon(Icons.close, color: Colors.white, size: 12),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    bottom: 4, left: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.85),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text('New', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          if (_totalImageCount == 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Tap + to add up to 10 photos',
+                                style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                              ),
+                            ),
                         ]),
                       ],
                     ),

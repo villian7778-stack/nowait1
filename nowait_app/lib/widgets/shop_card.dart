@@ -43,27 +43,17 @@ class ShopCard extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.surfaceContainerHigh,
-                        AppColors.surfaceContainerHighest,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      _categoryIcon(shop.category),
-                      color: AppColors.primary,
-                      size: 32,
-                    ),
-                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: shop.images.isNotEmpty
+                      ? Image.network(
+                          shop.images.first,
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _iconThumbnail(),
+                        )
+                      : _iconThumbnail(),
                 ),
                 // Star badge on thumbnail for promoted shops
                 if (shop.isPromoted)
@@ -280,6 +270,23 @@ class ShopCard extends StatelessWidget {
             RatingBadge(rating: shop.rating),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _iconThumbnail() {
+    return Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.surfaceContainerHigh, AppColors.surfaceContainerHighest],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(_categoryIcon(shop.category), color: AppColors.primary, size: 32),
       ),
     );
   }

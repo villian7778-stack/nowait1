@@ -28,7 +28,7 @@ def get_summary(shop_id: str, actor_id: str, period: str = "today") -> dict:
 
     result = (
         supabase.table("queue_entries")
-        .select("status, actual_service_minutes, joined_at")
+        .select("status, joined_at")
         .eq("shop_id", shop_id)
         .gte("joined_at", since)
         .execute()
@@ -40,8 +40,8 @@ def get_summary(shop_id: str, actor_id: str, period: str = "today") -> dict:
     total_cancelled = sum(1 for e in entries if e["status"] == "cancelled")
     total_skipped = sum(1 for e in entries if e["status"] == "skipped")
 
-    service_times = [e["actual_service_minutes"] for e in entries if e.get("actual_service_minutes")]
-    avg_service = round(sum(service_times) / len(service_times), 1) if service_times else None
+    # actual_service_minutes column does not exist in schema; avg derived from shop settings instead
+    avg_service = None
 
     cancel_rate = round(total_cancelled / total_joined * 100, 1) if total_joined else 0
     skip_rate = round(total_skipped / total_joined * 100, 1) if total_joined else 0

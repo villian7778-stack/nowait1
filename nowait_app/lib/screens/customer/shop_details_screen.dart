@@ -138,45 +138,26 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                     children: [
                       PageView.builder(
                         controller: _pageController,
-                        itemCount: 3,
-                        onPageChanged: (i) =>
-                            setState(() => _currentImage = i),
-                        itemBuilder: (_, i) => Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: _gradientForCategory(shop.category, i),
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                          ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Icon(
-                                  _iconForCategory(shop.category),
-                                  color: Colors.white.withValues(alpha: 0.25),
-                                  size: 90,
-                                ),
-                              ),
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.photo_camera_outlined,
-                                        color: Colors.white54, size: 28),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Shop Photo ${i + 1}',
-                                      style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          color: Colors.white60),
+                        itemCount: shop.images.isNotEmpty ? shop.images.length : 1,
+                        onPageChanged: (i) => setState(() => _currentImage = i),
+                        itemBuilder: (_, i) {
+                          if (shop.images.isNotEmpty) {
+                            return Image.network(
+                              shop.images[i],
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              loadingBuilder: (_, child, progress) => progress == null
+                                  ? child
+                                  : Container(
+                                      color: AppColors.surfaceContainerLow,
+                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                              errorBuilder: (_, __, ___) => _placeholderPage(shop, i),
+                            );
+                          }
+                          return _placeholderPage(shop, i);
+                        },
                       ),
                       // Back button
                       Positioned(
@@ -197,31 +178,31 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                           ),
                         ),
                       ),
-                      // Dots
-                      Positioned(
-                        bottom: 12,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            3,
-                            (i) => AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 3),
-                              width: _currentImage == i ? 20 : 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: _currentImage == i
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(3),
+                      // Dots (only when multiple images)
+                      if (shop.images.length > 1)
+                        Positioned(
+                          bottom: 12,
+                          left: 0,
+                          right: 0,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              shop.images.length,
+                              (i) => AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                width: _currentImage == i ? 20 : 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: _currentImage == i
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -602,6 +583,35 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
         const SizedBox(width: 4),
         Text(text, style: GoogleFonts.inter(fontSize: 12, color: color)),
       ],
+    );
+  }
+
+  Widget _placeholderPage(ShopModel shop, int i) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: _gradientForCategory(shop.category, i),
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        children: [
+          Center(
+            child: Icon(_iconForCategory(shop.category), color: Colors.white.withValues(alpha: 0.25), size: 90),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.photo_camera_outlined, color: Colors.white54, size: 28),
+                const SizedBox(height: 4),
+                Text('No photos yet', style: GoogleFonts.inter(fontSize: 12, color: Colors.white60)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

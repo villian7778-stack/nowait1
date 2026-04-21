@@ -18,11 +18,17 @@ class AnalyticsService {
       '/analytics/shops/$shopId/hourly',
       query: {'days': days.toString()},
     );
-    return (res as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
   }
 
   Future<List<Map<String, dynamic>>> getStaffPerformance(String shopId) async {
     final res = await ApiClient.instance.get('/analytics/shops/$shopId/staff');
-    return (res as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
   }
 }

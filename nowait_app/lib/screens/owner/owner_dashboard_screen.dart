@@ -231,6 +231,28 @@ class _ShopsTabState extends State<_ShopsTab> {
                       borderRadius: 16,
                     ),
                   ),
+                  const SizedBox(height: 20),
+                  // Item 18: Onboarding steps
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10, offset: const Offset(0, 2))],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Get started in 3 steps', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                        const SizedBox(height: 14),
+                        _OnboardingStep(number: '1', title: 'Create Shop', subtitle: 'Add your shop name, address, and category'),
+                        const SizedBox(height: 10),
+                        _OnboardingStep(number: '2', title: 'Add Services', subtitle: 'List the services you offer with pricing'),
+                        const SizedBox(height: 10),
+                        _OnboardingStep(number: '3', title: 'Subscribe', subtitle: 'Activate your plan to start receiving customers'),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 28),
                 ] else if (_shop != null) ...[
                   Container(
@@ -501,6 +523,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
   List<Map<String, dynamic>> _hourly = [];
   List<Map<String, dynamic>> _staffPerf = [];
   bool _isLoading = false;
+  bool _hasError = false; // Item 16
   String _period = 'today';
 
   @override
@@ -516,8 +539,8 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
   }
 
   Future<void> _load() async {
-    if (widget.shop == null) return;
-    setState(() => _isLoading = true);
+    if (widget.shop == null) return; // Item 7
+    setState(() { _isLoading = true; _hasError = false; });
     try {
       final results = await Future.wait([
         AnalyticsService.instance.getSummary(widget.shop!.id, period: _period),
@@ -533,7 +556,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _hasError = true; }); // Item 16
     }
   }
 
@@ -613,6 +636,30 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                   const SizedBox(height: 20),
                   if (_isLoading)
                     const Center(child: CircularProgressIndicator())
+                  // Item 16: Show error state with retry
+                  else if (_hasError)
+                    GestureDetector(
+                      onTap: _load,
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLowest,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 8, offset: const Offset(0, 2))],
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.onSurfaceVariant),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Couldn't load analytics — tap to retry",
+                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   else if (_summary != null) ...[
                     // Metric grid
                     GridView.count(
@@ -968,6 +1015,45 @@ class _OwnerProfileTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Item 18: Onboarding step widget used in _ShopsTab when no shop exists
+class _OnboardingStep extends StatelessWidget {
+  final String number;
+  final String title;
+  final String subtitle;
+
+  const _OnboardingStep({required this.number, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient135,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+              Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

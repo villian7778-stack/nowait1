@@ -4,6 +4,20 @@ class PromotionService {
   static final PromotionService instance = PromotionService._();
   PromotionService._();
 
+  Future<List<Map<String, dynamic>>> getPromotions(
+    String shopId, {
+    bool activeOnly = false,
+  }) async {
+    final res = await ApiClient.instance.get(
+      '/promotions/shop/$shopId',
+      query: activeOnly ? {'active_only': 'true'} : null,
+    );
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
   Future<Map<String, dynamic>> createPromotion(
     String shopId, {
     required String title,
@@ -15,5 +29,9 @@ class PromotionService {
       'description': description,
       'valid_until': validUntil,
     });
+  }
+
+  Future<void> deletePromotion(String promotionId) async {
+    await ApiClient.instance.delete('/promotions/$promotionId');
   }
 }

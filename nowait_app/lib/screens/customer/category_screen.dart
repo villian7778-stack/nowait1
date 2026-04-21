@@ -623,21 +623,32 @@ class _PromotedShopCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image / gradient hero
-            Container(
-              height: 95,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Icon(
-                      Icons.storefront_outlined,
-                      color: Colors.white.withValues(alpha: 0.3),
-                      size: 50,
-                    ),
-                  ),
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+              child: SizedBox(
+                height: 95,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (shop.images.isNotEmpty)
+                      Image.network(
+                        shop.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          ),
+                          child: Center(child: Icon(Icons.storefront_outlined, color: Colors.white.withValues(alpha: 0.3), size: 50)),
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        ),
+                        child: Center(child: Icon(Icons.storefront_outlined, color: Colors.white.withValues(alpha: 0.3), size: 50)),
+                      ),
                   Positioned(
                     top: 8,
                     left: 10,
@@ -676,6 +687,7 @@ class _PromotedShopCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -794,22 +806,18 @@ class _ShopListCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Shop image placeholder
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: LinearGradient(
-                  colors: [
-                    categoryColor.withValues(alpha: 0.15),
-                    categoryColor.withValues(alpha: 0.3),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Icon(Icons.storefront_outlined, color: categoryColor, size: 30),
+            // Shop image thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: shop.images.isNotEmpty
+                  ? Image.network(
+                      shop.images.first,
+                      width: 68,
+                      height: 68,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _iconThumbnail(categoryColor),
+                    )
+                  : _iconThumbnail(categoryColor),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -966,6 +974,21 @@ class _ShopListCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _iconThumbnail(Color color) {
+    return Container(
+      width: 68,
+      height: 68,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withValues(alpha: 0.15), color.withValues(alpha: 0.3)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Icon(Icons.storefront_outlined, color: color, size: 30),
     );
   }
 

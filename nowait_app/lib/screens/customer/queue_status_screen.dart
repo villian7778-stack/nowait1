@@ -8,6 +8,8 @@ import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/ping_dot.dart';
+import '../../widgets/dashed_circle_painter.dart';
 import 'shop_details_screen.dart';
 
 class QueueStatusScreen extends StatefulWidget {
@@ -50,7 +52,8 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Poll every 10 seconds for live updates
+    // Poll every 10 seconds for live updates; cancel any stale timer first
+    _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refresh());
   }
 
@@ -106,13 +109,27 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
               setState(() => _isCancelling = true);
               try {
                 await QueueService.instance.cancelQueue(_entry.entryId);
-                if (mounted) Navigator.pop(context);
+                if (mounted) {
+                  _pollTimer?.cancel();
+                  // Show snackbar on the screen below before popping
+                  final messenger = ScaffoldMessenger.of(context);
+                  Navigator.pop(context);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: const Text('Queue cancelled successfully'),
+                      backgroundColor: AppColors.tertiary,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                }
               } on ApiException catch (e) {
                 if (mounted) {
+                  setState(() => _isCancelling = false);
                   ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.message)));
+                      SnackBar(content: Text(e.message), backgroundColor: AppColors.error));
                 }
-              } finally {
+              } catch (_) {
                 if (mounted) setState(() => _isCancelling = false);
               }
             },
@@ -203,7 +220,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                 ),
                 child: Row(
                   children: [
-                    _PingDot(),
+                    const PingDot(),
                     const SizedBox(width: 5),
                     Text(_l.tr('live'),
                         style: GoogleFonts.inter(
@@ -432,7 +449,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     border: Border.fromBorderSide(
                         BorderSide(color: Colors.transparent, width: 0)),
                   ),
-                  child: CustomPaint(painter: _DashedCirclePainter()),
+                  child: CustomPaint(painter: DashedCirclePainter()),
                 ),
               ),
             ),
@@ -554,92 +571,3 @@ class _StatCell extends StatelessWidget {
   }
 }
 
-class _PingDot extends StatefulWidget {
-  @override
-  State<_PingDot> createState() => _PingDotState();
-}
-
-class _PingDotState extends State<_PingDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _c;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1000))
-      ..repeat();
-    _anim = Tween(begin: 0.0, end: 1.0).animate(_c);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 12,
-      height: 12,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _anim,
-            builder: (context, child) => Transform.scale(
-              scale: 1 + _anim.value,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.tertiary.withValues(alpha: 1 - _anim.value),
-                ),
-              ),
-            ),
-          ),
-          Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-                shape: BoxShape.circle, color: AppColors.tertiary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashedCirclePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.3)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - 2;
-    const dashCount = 20;
-    const dashLength = 0.12;
-    const gapLength = 0.2;
-    const total = dashLength + gapLength;
-
-    for (int i = 0; i < dashCount; i++) {
-      final startAngle = i * total * pi;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        dashLength * pi,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}

@@ -55,6 +55,13 @@ class _SchemeScreenState extends State<SchemeScreen> {
       );
       return;
     }
+    // Prevent collision with the "Featured Promotion" paid boost entry
+    if (_titleController.text.trim() == 'Featured Promotion') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please use a different title for your scheme')),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final validUntil = DateTime.now()

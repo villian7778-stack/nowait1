@@ -130,6 +130,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 
   void _showAddStaffSheet() {
+    _nameCtrl.clear(); // Clear stale input from previous open
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -262,11 +263,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('Register Yourself as Staff', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
-                                        Text('Add yourself to the team visible on your shop page', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+                                        Text('Register Yourself as Staff', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                        Text('Add yourself to the team visible on your shop page', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70), maxLines: 2, overflow: TextOverflow.ellipsis),
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 22),
                                 ],
                               ),
@@ -283,7 +285,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                               children: [
                                 Icon(Icons.verified_rounded, color: AppColors.tertiary, size: 18),
                                 const SizedBox(width: 10),
-                                Text('You appear as a team member on your shop page', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.tertiary)),
+                                Expanded(
+                                  child: Text('You appear as a team member on your shop page', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.tertiary), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                ),
                               ],
                             ),
                           ),

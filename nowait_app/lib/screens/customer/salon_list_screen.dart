@@ -9,8 +9,10 @@ import 'shop_details_screen.dart';
 
 class SalonListScreen extends StatefulWidget {
   final String? category;
+  final String? initialCity;
+  final bool autofocusSearch;
 
-  const SalonListScreen({super.key, this.category});
+  const SalonListScreen({super.key, this.category, this.initialCity, this.autofocusSearch = false});
 
   @override
   State<SalonListScreen> createState() => _SalonListScreenState();
@@ -19,8 +21,10 @@ class SalonListScreen extends StatefulWidget {
 class _SalonListScreenState extends State<SalonListScreen> {
   String _activeFilter = 'Near Me';
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
   List<ShopModel> _shops = [];
   bool _isLoading = true;
+  String? _selectedCity;
   final _l = LocaleService.instance;
 
   final _filters = ['Near Me', 'Top Rated', 'Wait Time', 'Open Now'];
@@ -29,14 +33,20 @@ class _SalonListScreenState extends State<SalonListScreen> {
   void initState() {
     super.initState();
     _l.addListener(_onLocale);
+    _selectedCity = widget.initialCity;
     _loadShops();
+    if (widget.autofocusSearch) {
+      // Defer focus until widget is built
+      WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocusNode.requestFocus());
+    }
   }
 
   void _onLocale() => setState(() {});
 
   Future<void> _loadShops() async {
+    setState(() => _isLoading = true);
     try {
-      final shops = await ShopService.instance.listShops();
+      final shops = await ShopService.instance.listShops(city: _selectedCity);
       if (mounted) setState(() { _shops = shops; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
@@ -87,6 +97,7 @@ class _SalonListScreenState extends State<SalonListScreen> {
   void dispose() {
     _l.removeListener(_onLocale);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -149,16 +160,15 @@ class _SalonListScreenState extends State<SalonListScreen> {
                       ),
                       child: TextField(
                         controller: _searchController,
+                        focusNode: _searchFocusNode,
                         onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
                           hintText: 'Search by name or service...',
-                          prefixIcon:
-                              Icon(Icons.search_rounded, size: 20),
+                          prefixIcon: Icon(Icons.search_rounded, size: 20),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
-                          contentPadding:
-                              EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
@@ -376,26 +386,22 @@ class _PromotedShopCard extends StatelessWidget {
         child: Column(
           children: [
             // Hero image area
-            Container(
-              height: 100,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.8),
-                    AppColors.secondary.withValues(alpha: 0.8)
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Icon(Icons.content_cut,
-                        color: Colors.white.withValues(alpha: 0.3), size: 60),
-                  ),
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (shop.images.isNotEmpty)
+                      Image.network(
+                        shop.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _gradientPlaceholder(),
+                      )
+                    else
+                      _gradientPlaceholder(),
                   Positioned(
                     top: 10,
                     right: 10,
@@ -420,6 +426,7 @@ class _PromotedShopCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
             Padding(
               padding: const EdgeInsets.all(14),
@@ -481,6 +488,19 @@ class _PromotedShopCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _gradientPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary.withValues(alpha: 0.8), AppColors.secondary.withValues(alpha: 0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(child: Icon(Icons.content_cut, color: Colors.white.withValues(alpha: 0.3), size: 60)),
     );
   }
 }

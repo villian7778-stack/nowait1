@@ -36,8 +36,11 @@ class QueueService {
     return await ApiClient.instance.post('/queues/shop/$shopId/next');
   }
 
-  Future<void> skipCustomer(String entryId) async {
-    await ApiClient.instance.post('/queues/$entryId/skip');
+  Future<void> skipCustomer(String entryId, {String? note}) async {
+    final body = <String, dynamic>{};
+    if (note != null && note.isNotEmpty) body['note'] = note;
+    await ApiClient.instance.post('/queues/$entryId/skip',
+        body: body.isNotEmpty ? body : null);
   }
 
   Future<void> pauseQueue(String shopId) async {

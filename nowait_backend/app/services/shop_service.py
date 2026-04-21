@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -5,6 +6,9 @@ from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.schemas.shop import ShopCreate, ShopUpdate
+
+MAX_SHOP_IMAGES = 10
+_STORAGE_BUCKET = "shop-images"
 
 
 def _has_active_subscription(shop_id: str) -> bool:
@@ -262,6 +266,58 @@ def add_service(shop_id: str, owner_id: str, name: str, description: str, price:
         "price": price,
     }).execute()
     return result.data[0]
+
+
+def upload_shop_image(shop_id: str, owner_id: str, file_data: bytes, original_filename: str, content_type: str) -> dict:
+    existing = execute_one(
+        supabase.table("shops").select("id, images").eq("id", shop_id).eq("owner_id", owner_id)
+    )
+    if not existing.data:
+        raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+    current_images: list = existing.data.get("images") or []
+    if len(current_images) >= MAX_SHOP_IMAGES:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_SHOP_IMAGES} images allowed per shop")
+
+    ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else "jpg"
+    storage_path = f"{shop_id}/{uuid.uuid4()}.{ext}"
+
+    supabase.storage.from_(_STORAGE_BUCKET).upload(
+        path=storage_path,
+        file=file_data,
+        file_options={"content-type": content_type, "upsert": "true"},
+    )
+
+    public_url: str = supabase.storage.from_(_STORAGE_BUCKET).get_public_url(storage_path)
+
+    new_images = current_images + [public_url]
+    supabase.table("shops").update({"images": new_images}).eq("id", shop_id).execute()
+    return {"url": public_url, "images": new_images}
+
+
+def delete_shop_image(shop_id: str, owner_id: str, image_url: str) -> dict:
+    existing = execute_one(
+        supabase.table("shops").select("id, images").eq("id", shop_id).eq("owner_id", owner_id)
+    )
+    if not existing.data:
+        raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+    current_images: list = existing.data.get("images") or []
+    if image_url not in current_images:
+        raise HTTPException(status_code=404, detail="Image not found in this shop")
+
+    bucket_prefix = f"/storage/v1/object/public/{_STORAGE_BUCKET}/"
+    idx = image_url.find(bucket_prefix)
+    if idx != -1:
+        storage_path = image_url[idx + len(bucket_prefix):]
+        try:
+            supabase.storage.from_(_STORAGE_BUCKET).remove([storage_path])
+        except Exception:
+            pass
+
+    new_images = [u for u in current_images if u != image_url]
+    supabase.table("shops").update({"images": new_images}).eq("id", shop_id).execute()
+    return {"images": new_images}
 
 
 def delete_service(service_id: str, owner_id: str) -> bool:

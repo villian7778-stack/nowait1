@@ -1,9 +1,12 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from app.dependencies import get_current_owner, get_current_user
 from app.schemas.shop import (
+    DeleteImageRequest,
+    DeleteImageResponse,
+    ImageUploadResponse,
     ServiceCreate,
     ServiceResponse,
     ShopCreate,
@@ -104,6 +107,44 @@ def toggle_open(shop_id: str, current_user: dict = Depends(get_current_owner)):
     Closed shops do not accept new queue entries.
     """
     return shop_service.toggle_open(shop_id, current_user["id"])
+
+
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/{shop_id}/images", response_model=ImageUploadResponse, status_code=201, summary="Upload a shop image (owner only)")
+async def upload_shop_image(
+    shop_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_owner),
+):
+    """Upload one image for the shop. Max 10 images, 5 MB each, JPEG/PNG/WebP/GIF only."""
+    content_type = (file.content_type or "").lower()
+    if content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Only JPEG, PNG, WebP, or GIF images are allowed.")
+
+    file_data = await file.read()
+    if len(file_data) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image must be 5 MB or smaller.")
+
+    return shop_service.upload_shop_image(
+        shop_id,
+        current_user["id"],
+        file_data,
+        file.filename or "image.jpg",
+        content_type,
+    )
+
+
+@router.delete("/{shop_id}/images", response_model=DeleteImageResponse, summary="Delete a shop image (owner only)")
+def delete_shop_image(
+    shop_id: str,
+    body: DeleteImageRequest,
+    current_user: dict = Depends(get_current_owner),
+):
+    """Remove an image from the shop by its URL. Also deletes the file from storage."""
+    return shop_service.delete_shop_image(shop_id, current_user["id"], body.image_url)
 
 
 @router.post("/{shop_id}/services", response_model=ServiceResponse, status_code=201, summary="Add a service to the shop")

@@ -79,7 +79,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     (Icons.queue_rounded, 'Accept Customer Queues', 'Customers can join your queue', true),
     (Icons.toggle_on_rounded, 'Open/Close Shop Control', 'Manage your shop status', true),
     (Icons.bar_chart_rounded, 'Queue Analytics', 'Daily traffic & wait insights', true),
-    (Icons.rocket_launch_outlined, 'Promote Shop', 'Appear in featured section (₹20/day)', false),
+    (Icons.rocket_launch_outlined, 'Featured Promotions (add-on)', 'Appear in featured section (₹20/day)', false),
     (Icons.local_offer_outlined, 'Add Schemes & Offers', 'Run deals for customers', true),
     (Icons.support_agent_rounded, 'Priority Support', '24/7 dedicated support', false),
   ];
@@ -151,8 +151,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     setState(() {
                       _isActive = true;
                       _isLoading = false;
-                      _subscriptionJustActivated = true;
+                      _subscriptionJustActivated = false; // Allow refresh
                     });
+                    _fetchSubscription();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: const Text('✓  Subscription activated! Your shop is now live.'),

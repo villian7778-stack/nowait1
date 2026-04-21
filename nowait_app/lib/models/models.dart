@@ -46,6 +46,7 @@ class ShopModel {
   final SchemeModel? activeScheme;
   final bool queuePaused;
   final int? maxQueueSize;
+  final String? openingHours;
 
   ShopModel({
     required this.id,
@@ -67,6 +68,7 @@ class ShopModel {
     this.activeScheme,
     this.queuePaused = false,
     this.maxQueueSize,
+    this.openingHours,
   });
 
   bool get canAcceptQueue => isOpen && hasActiveSubscription && !queuePaused;
@@ -108,6 +110,7 @@ class ShopModel {
       activeScheme: activeScheme,
       queuePaused: json['queue_paused'] as bool? ?? false,
       maxQueueSize: json['max_queue_size'] as int?,
+      openingHours: json['opening_hours'] as String?,
     );
   }
 }

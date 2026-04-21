@@ -24,7 +24,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _cityController = TextEditingController();
-  String _selectedRole = 'Customer';
+  String _selectedRole = 'customer';
   bool _isLoading = false;
 
   LocaleService get _l => LocaleService.instance;
@@ -65,9 +65,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return;
     }
     setState(() => _isLoading = true);
-    final apiRole = _selectedRole == _l.tr('shopOwner') || _selectedRole == 'Shop Owner'
-        ? 'owner'
-        : 'customer';
+    final apiRole = _selectedRole; // already stores 'customer' or 'owner'
     try {
       if (widget.isCompletingProfile) {
         await AuthService.instance.completeProfile(
@@ -471,13 +469,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _roleChip(String label, IconData icon, String roleKey) {
-    // Selected when the stored role key matches
-    final selected = (_selectedRole == label) ||
-        (_selectedRole == 'Customer' && roleKey == 'customer') ||
-        (_selectedRole == 'Shop Owner' && roleKey == 'owner');
+    final selected = _selectedRole == roleKey;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedRole = label),
+        onTap: () => setState(() => _selectedRole = roleKey),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 12),

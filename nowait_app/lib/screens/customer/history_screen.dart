@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
+import 'salon_list_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -79,15 +80,41 @@ class _HistoryScreenState extends State<HistoryScreen> {
             else if (_history.isEmpty)
               SliverFillRemaining(
                 child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history_rounded, size: 64, color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
-                      const SizedBox(height: 16),
-                      Text('No visits yet', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
-                      const SizedBox(height: 6),
-                      Text('Join a queue to see your visit history here', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant), textAlign: TextAlign.center),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.history_rounded, size: 64, color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
+                        const SizedBox(height: 16),
+                        Text('No visits yet', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
+                        const SizedBox(height: 6),
+                        Text('Join a queue to see your visit history here', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant), textAlign: TextAlign.center),
+                        const SizedBox(height: 24),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SalonListScreen()),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient135,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4))],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.search_rounded, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Text('Find a Shop', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               )

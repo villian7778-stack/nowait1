@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/shop_service.dart';
 import '../../services/staff_service.dart';
 import '../../services/api_client.dart';
@@ -18,11 +21,18 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _cityController = TextEditingController();
-  final _openingHoursController = TextEditingController(text: '9:00 AM - 8:00 PM');
   String _selectedCategory = 'Salon';
-  int _galleryCount = 0;
+
+  // Item 9: Time pickers replace text field for opening hours
+  TimeOfDay _openTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _closeTime = const TimeOfDay(hour: 20, minute: 0);
+
+  // Item 4: Real image list instead of fake counter
+  final List<XFile> _selectedImages = [];
+
   bool _isLoading = false;
 
+  // Item 13: Each service has name, price, and duration
   final List<Map<String, TextEditingController>> _services = [];
   final List<TextEditingController> _staffControllers = [];
   final _staffInputController = TextEditingController();
@@ -45,10 +55,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _cityController.dispose();
-    _openingHoursController.dispose();
     for (final s in _services) {
       s['name']?.dispose();
       s['price']?.dispose();
+      s['duration']?.dispose();
     }
     for (final c in _staffControllers) {
       c.dispose();
@@ -62,6 +72,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       _services.add({
         'name': TextEditingController(),
         'price': TextEditingController(),
+        'duration': TextEditingController(text: '30'), // Item 13: duration field
       });
     });
   }
@@ -70,6 +81,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     setState(() {
       _services[index]['name']?.dispose();
       _services[index]['price']?.dispose();
+      _services[index]['duration']?.dispose();
       _services.removeAt(index);
     });
   }
@@ -90,6 +102,43 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     });
   }
 
+  // Item 4: Pick images from gallery
+  Future<void> _pickImages() async {
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage(imageQuality: 80);
+    if (images.isNotEmpty) {
+      setState(() {
+        final remaining = 10 - _selectedImages.length;
+        _selectedImages.addAll(images.take(remaining));
+      });
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() => _selectedImages.removeAt(index));
+  }
+
+  // Item 9: Format TimeOfDay to human-readable string
+  String _formatTime(TimeOfDay t) {
+    final hour = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final minute = t.minute.toString().padLeft(2, '0');
+    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
+  String get _openingHoursString =>
+      '${_formatTime(_openTime)} - ${_formatTime(_closeTime)}';
+
+  Future<void> _pickOpenTime() async {
+    final picked = await showTimePicker(context: context, initialTime: _openTime);
+    if (picked != null) setState(() => _openTime = picked);
+  }
+
+  Future<void> _pickCloseTime() async {
+    final picked = await showTimePicker(context: context, initialTime: _closeTime);
+    if (picked != null) setState(() => _closeTime = picked);
+  }
+
   bool get _isValid =>
       _nameController.text.trim().isNotEmpty &&
       _addressController.text.trim().isNotEmpty &&
@@ -104,12 +153,13 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     }
     setState(() => _isLoading = true);
     try {
+      // Item 13: Send dynamic duration_minutes per service
       final servicesList = _services
           .where((s) => s['name']!.text.trim().isNotEmpty)
           .map((s) => {
                 'name': s['name']!.text.trim(),
                 'price': double.tryParse(s['price']!.text) ?? 0.0,
-                'duration_minutes': 30,
+                'duration_minutes': int.tryParse(s['duration']!.text) ?? 30,
               })
           .toList();
 
@@ -119,27 +169,51 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
         services: servicesList,
+        openingHours: _openingHoursString,
       );
 
-      // Add any staff members entered inline
+      // Upload selected images to Supabase Storage
+      for (final img in _selectedImages) {
+        try {
+          await ShopService.instance.uploadImage(shop.id, img);
+        } catch (_) {}
+      }
+
+      // Item 11: Track failed staff additions
+      final List<String> failedStaff = [];
       for (final ctrl in _staffControllers) {
         final staffName = ctrl.text.trim();
         if (staffName.isNotEmpty) {
           try {
             await StaffService.instance.addStaffByName(shop.id, staffName);
-          } catch (_) {} // best-effort; don't fail shop creation
+          } catch (_) {
+            failedStaff.add(staffName);
+          }
         }
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✓  ${_nameController.text} has been successfully set up.'),
-          backgroundColor: AppColors.tertiary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+
+      if (failedStaff.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Shop created, but staff ${failedStaff.join(', ')} could not be added'),
+            backgroundColor: AppColors.onSurfaceVariant,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓  ${_nameController.text} has been successfully set up.'),
+            backgroundColor: AppColors.tertiary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
       Navigator.pop(context);
     } on ApiException catch (e) {
       if (mounted) {
@@ -204,12 +278,70 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                           const SizedBox(height: 16),
                           _underlineField(_cityController, 'CITY', 'Your city', TextCapitalization.words),
                           const SizedBox(height: 16),
-                          _underlineField(_openingHoursController, 'OPENING HOURS', '9:00 AM - 8:00 PM'),
+                          // Item 9: Time pickers instead of text field
+                          _buildLabel('OPENING HOURS'),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: _pickOpenTime,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.wb_sunny_outlined, size: 16, color: AppColors.primary),
+                                        const SizedBox(width: 6),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text('Opens', style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant)),
+                                            Text(_formatTime(_openTime), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: _pickCloseTime,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.nights_stay_outlined, size: 16, color: AppColors.secondary),
+                                        const SizedBox(width: 6),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text('Closes', style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant)),
+                                            Text(_formatTime(_closeTime), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ]),
                         const SizedBox(height: 24),
                         _sectionTitle('Gallery'),
                         const SizedBox(height: 14),
                         _buildSection([
+                          // Item 4: Real image picker grid, no fake counter
                           GridView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
@@ -219,18 +351,17 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                               mainAxisSpacing: 8,
                               childAspectRatio: 1,
                             ),
-                            itemCount: _galleryCount + 1,
+                            itemCount: _selectedImages.length + (_selectedImages.length < 10 ? 1 : 0),
                             itemBuilder: (_, i) {
-                              if (i == _galleryCount) {
+                              if (i == _selectedImages.length) {
                                 return GestureDetector(
-                                  onTap: () => setState(() => _galleryCount = (_galleryCount + 1).clamp(0, 8)),
+                                  onTap: _pickImages,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: AppColors.surfaceContainerLow,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: AppColors.outline.withValues(alpha: 0.3),
-                                        style: BorderStyle.solid,
                                       ),
                                     ),
                                     child: const Column(
@@ -244,35 +375,48 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                   ),
                                 );
                               }
-                              return Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [AppColors.primary.withValues(alpha: 0.5), AppColors.secondary.withValues(alpha: 0.5)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: kIsWeb
+                                        ? Image.network(
+                                            _selectedImages[i].path,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          )
+                                        : Image.file(
+                                            File(_selectedImages[i].path),
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          ),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    const Center(child: Icon(Icons.photo_outlined, color: Colors.white54, size: 28)),
-                                    Positioned(
-                                      top: 4,
-                                      right: 4,
-                                      child: GestureDetector(
-                                        onTap: () => setState(() => _galleryCount--),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(3),
-                                          decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                                          child: const Icon(Icons.close, color: Colors.white, size: 12),
-                                        ),
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: () => _removeImage(i),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                        child: const Icon(Icons.close, color: Colors.white, size: 12),
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               );
                             },
                           ),
+                          if (_selectedImages.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Tap + to add up to 10 photos',
+                                style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                              ),
+                            ),
                         ]),
                         const SizedBox(height: 24),
                         Row(
@@ -300,6 +444,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                         ),
                         const SizedBox(height: 14),
                         _buildSection([
+                          // Item 13: Each service row includes duration field
                           ...List.generate(_services.length, (i) => Column(
                             children: [
                               if (i > 0) Divider(color: AppColors.outline.withValues(alpha: 0.2), height: 24),
@@ -310,13 +455,24 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                     flex: 3,
                                     child: _underlineField(_services[i]['name']!, 'SERVICE NAME', 'e.g. Haircut'),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     flex: 2,
                                     child: _underlineField(
                                       _services[i]['price']!,
                                       'PRICE (₹)',
                                       '0',
+                                      TextCapitalization.none,
+                                      TextInputType.number,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 2,
+                                    child: _underlineField(
+                                      _services[i]['duration']!,
+                                      'MINS',
+                                      '30',
                                       TextCapitalization.none,
                                       TextInputType.number,
                                     ),
@@ -348,7 +504,6 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                         ),
                         const SizedBox(height: 14),
                         _buildSection([
-                          // Input row
                           Row(
                             children: [
                               Expanded(
@@ -373,7 +528,6 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                               ),
                             ],
                           ),
-                          // Staff chips
                           if (_staffControllers.isNotEmpty) ...[
                             const SizedBox(height: 14),
                             Wrap(
@@ -418,7 +572,6 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
               ],
             ),
           ),
-          // Sticky button
           Positioned(
             left: 0,
             right: 0,
@@ -459,6 +612,13 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0, color: AppColors.onSurfaceVariant),
     );
   }
 

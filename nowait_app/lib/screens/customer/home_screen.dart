@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
+import '../../services/notification_service.dart';
 import '../auth/login_screen.dart';
 import 'category_screen.dart';
 import 'history_screen.dart';
@@ -186,12 +187,22 @@ class _HomeTabState extends State<_HomeTab> {
   String? _loadError;
   String? _selectedCity;
   List<String> _availableCities = [];
+  int _unreadCount = 0;
   static const _cityPrefKey = 'selected_city';
 
   @override
   void initState() {
     super.initState();
     _initCity();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final data = await NotificationService.instance.getNotifications();
+      final count = data['unread_count'] as int? ?? 0;
+      if (mounted) setState(() => _unreadCount = count);
+    } catch (_) {}
   }
 
   Future<void> _initCity() async {
@@ -393,10 +404,13 @@ class _HomeTabState extends State<_HomeTab> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                        ),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                          );
+                          _loadUnreadCount();
+                        },
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
@@ -417,19 +431,20 @@ class _HomeTabState extends State<_HomeTab> {
                                 size: 22,
                               ),
                             ),
-                            Positioned(
-                              right: 9,
-                              top: 9,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF5252),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 1.5),
+                            if (_unreadCount > 0)
+                              Positioned(
+                                right: 9,
+                                top: 9,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF5252),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -466,7 +481,10 @@ class _HomeTabState extends State<_HomeTab> {
                   GestureDetector(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const SalonListScreen()),
+                      MaterialPageRoute(builder: (_) => SalonListScreen(
+                        initialCity: _selectedCity,
+                        autofocusSearch: true,
+                      )),
                     ),
                     child: Container(
                       height: 52,
@@ -718,7 +736,7 @@ class _HomeTabState extends State<_HomeTab> {
         GestureDetector(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const SalonListScreen()),
+            MaterialPageRoute(builder: (_) => SalonListScreen(initialCity: _selectedCity)),
           ),
           child: Row(
             children: [
@@ -1012,18 +1030,17 @@ class _CompactShopCard extends StatelessWidget {
             // Icon + promoted badge row
             Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(
-                    _categoryIcon(shop.category),
-                    color: _categoryColor(shop.category),
-                    size: 22,
-                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: shop.images.isNotEmpty
+                      ? Image.network(
+                          shop.images.first,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _iconBox(),
+                        )
+                      : _iconBox(),
                 ),
                 const Spacer(),
                 if (shop.isPromoted)
@@ -1085,6 +1102,18 @@ class _CompactShopCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _iconBox() {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Icon(_categoryIcon(shop.category), color: _categoryColor(shop.category), size: 22),
     );
   }
 

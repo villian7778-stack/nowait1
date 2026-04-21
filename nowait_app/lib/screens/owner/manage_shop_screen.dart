@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/shop_service.dart';
+import '../../services/subscription_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
@@ -31,6 +33,8 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
   List<Map<String, dynamic>> _queueItems = [];
   bool _loadingQueue = false;
   int _unreadCount = 0;
+  int? _subscriptionDaysLeft;
+  Timer? _refreshTimer;
   final _l = LocaleService.instance;
 
   @override
@@ -40,6 +44,9 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     _l.addListener(_onLocale);
     _loadQueue();
     _loadUnreadCount();
+    _loadSubscriptionExpiry();
+    // Auto-refresh queue every 15 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadQueue());
   }
 
   Future<void> _loadUnreadCount() async {
@@ -49,8 +56,18 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadSubscriptionExpiry() async {
+    try {
+      final res = await SubscriptionService.instance.getSubscription(_shop.id);
+      final sub = res['subscription'] as Map<String, dynamic>?;
+      final days = sub?['days_remaining'] as int?;
+      if (mounted) setState(() => _subscriptionDaysLeft = days);
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _l.removeListener(_onLocale);
     super.dispose();
   }
@@ -144,7 +161,58 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     );
   }
 
+  /// Shows skip dialog with optional reason, then calls the API.
+  void _showSkipDialog(String entryId, String customerName) {
+    final noteCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Skip $customerName?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Optionally add a reason:', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: noteCtrl,
+              decoration: InputDecoration(
+                hintText: 'e.g. Did not show up',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await QueueService.instance.skipCustomer(entryId, note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
+                if (mounted) {
+                  _loadQueue();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$customerName skipped'), backgroundColor: AppColors.onSurfaceVariant, behavior: SnackBarBehavior.floating),
+                  );
+                }
+              } on ApiException catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: AppColors.error));
+              }
+            },
+            child: Text('Skip', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildQueueList() {
+    final hasSubscription = _shop.hasActiveSubscription;
+
     if (_loadingQueue) {
       return [const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))];
     }
@@ -165,6 +233,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
       final token = entry['token_number'] as int? ?? 0;
       final name = entry['customer_name'] as String? ?? 'Customer';
       final status = entry['status'] as String? ?? 'waiting';
+      final entryId = entry['id'] as String? ?? '';
       final pos = entry['position'] as int? ?? 0;
       final isServing = status == 'serving';
       final isComing = entry['coming_at'] != null;
@@ -188,7 +257,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
         ),
         child: Row(
           children: [
-            // Token bubble
             Container(
               width: 40, height: 40,
               decoration: BoxDecoration(
@@ -219,14 +287,10 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                 ],
               ),
             ),
-            // "On the way" badge — appears when customer taps "I'm Coming"
             if (isComing) ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.tertiary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: AppColors.tertiary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -238,21 +302,46 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               ),
               const SizedBox(width: 6),
             ],
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isServing ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                isServing ? 'Serving' : 'Waiting',
-                style: GoogleFonts.inter(
-                  fontSize: 11, fontWeight: FontWeight.w600,
-                  color: isServing ? AppColors.primary : AppColors.onSurfaceVariant,
+            // Skip button — only for waiting customers
+            if (!isServing && entryId.isNotEmpty)
+              GestureDetector(
+                onTap: hasSubscription
+                    ? () => _showSkipDialog(entryId, name)
+                    : () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Activate a subscription to manage your queue')),
+                        ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: hasSubscription
+                        ? AppColors.errorContainer
+                        : AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Skip',
+                    style: GoogleFonts.inter(
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      color: hasSubscription ? AppColors.error : AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isServing ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isServing ? 'Serving' : 'Waiting',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                    color: isServing ? AppColors.primary : AppColors.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       );
@@ -260,6 +349,12 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
   }
 
   Future<void> _callNext() async {
+    if (!_shop.hasActiveSubscription) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Activate a subscription to manage your queue')),
+      );
+      return;
+    }
     if (_shop.queueCount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -275,29 +370,10 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     try {
       final res = await QueueService.instance.advanceQueue(_shop.id);
       final nowServingToken = res['now_serving_token'] as int? ?? (_shop.currentToken + 1);
-      final remaining = res['total_remaining'] as int? ?? (_shop.queueCount - 1);
       if (mounted) {
-        setState(() {
-          _shop = ShopModel(
-            id: _shop.id,
-            name: _shop.name,
-            category: _shop.category,
-            address: _shop.address,
-            city: _shop.city,
-            rating: _shop.rating,
-            distance: _shop.distance,
-            isOpen: _shop.isOpen,
-            avgWaitMinutes: _shop.avgWaitMinutes,
-            queueCount: remaining,
-            currentToken: nowServingToken,
-            isPromoted: _shop.isPromoted,
-            hasActiveSubscription: _shop.hasActiveSubscription,
-            activeScheme: _shop.activeScheme,
-            ownerName: _shop.ownerName,
-            images: _shop.images,
-            services: _shop.services,
-          );
-        });
+        // Refresh shop data instead of manually reconstructing ShopModel
+        final updatedShop = await ShopService.instance.getShop(_shop.id);
+        setState(() => _shop = updatedShop);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✓  Calling Token #${nowServingToken.toString().padLeft(2, '0')}'),
@@ -343,9 +419,22 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     }
   }
 
+  // Name of customer currently being served
+  String? get _servingName {
+    try {
+      return _queueItems.firstWhere((e) => e['status'] == 'serving')['customer_name'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasSubscription = _shop.hasActiveSubscription;
+    final showExpiryWarning = hasSubscription &&
+        _subscriptionDaysLeft != null &&
+        _subscriptionDaysLeft! <= 5 &&
+        _subscriptionDaysLeft! >= 1;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -366,7 +455,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
             ),
             title: Text(_l.tr('manageShop'), style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700)),
             actions: [
-              // Notification bell — shows unread count for "coming" alerts etc.
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
@@ -442,6 +530,38 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Subscription expiry warning (items 3-5 days) ─────────
+                  if (showExpiryWarning) ...[
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop)),
+                      ).then((_) => _loadSubscriptionExpiry()),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3CD),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.6)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time_rounded, color: Color(0xFFA67C00), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Subscription expiring in $_subscriptionDaysLeft day${_subscriptionDaysLeft == 1 ? '' : 's'} — Renew Now',
+                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF7A5800)),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: Color(0xFF7A5800), size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
                   // ── Subscription inactive warning ───────────────────────
                   if (!hasSubscription) ...[
                     Container(
@@ -520,10 +640,11 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                           GestureDetector(
                             onTap: _isTogglingOpen ? null : _toggleOpen,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
+                                // Green tint when open, red tint when closed
                                 color: _shop.isOpen
-                                    ? Colors.white.withValues(alpha: 0.25)
+                                    ? Colors.green.withValues(alpha: 0.3)
                                     : Colors.red.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -534,8 +655,10 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                                     )
                                   : Text(
-                                      _shop.isOpen ? '${_l.tr('open')}  ·  ${_l.tr('closed')}' : '${_l.tr('closed')}  ·  ${_l.tr('open')}',
-                                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                                      _shop.isOpen
+                                          ? 'OPEN — tap to close'
+                                          : 'CLOSED — tap to open',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
                                     ),
                             ),
                           )
@@ -596,11 +719,17 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                             ),
                           )
                         : GradientButton(
-                            label: _shop.queueCount > 0
-                                ? 'Next  ·  Call Token #${(_shop.currentToken + 1).toString().padLeft(2, '0')}'
-                                : 'Queue Empty',
+                            label: !hasSubscription
+                                ? 'Subscription required'
+                                : _shop.queueCount > 0
+                                    ? 'Next  ·  Call Token #${(_shop.currentToken + 1).toString().padLeft(2, '0')}'
+                                    : 'Queue Empty',
                             onPressed: _callNext,
-                            icon: _shop.queueCount > 0 ? Icons.campaign_rounded : Icons.check_circle_outline_rounded,
+                            icon: !hasSubscription
+                                ? Icons.lock_outlined
+                                : _shop.queueCount > 0
+                                    ? Icons.campaign_rounded
+                                    : Icons.check_circle_outline_rounded,
                             height: 72,
                             borderRadius: 20,
                           ),
@@ -681,6 +810,29 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Queue quick stats header ─────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'In queue: ${_shop.queueCount}  ·  Avg wait: ${_shop.avgWaitMinutes} min'
+                            '${_servingName != null ? '  ·  Serving: $_servingName' : ''}',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   ..._buildQueueList(),
