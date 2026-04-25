@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,8 +24,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  final _cityController = TextEditingController();
-  String _selectedRole = 'customer';
+  String _selectedState = '';
+  String _selectedCity = '';
+  Map<String, List<String>> _stateCityData = {};
+  String _selectedRole = '';
   bool _isLoading = false;
 
   LocaleService get _l => LocaleService.instance;
@@ -33,6 +36,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   void initState() {
     super.initState();
     LocaleService.instance.addListener(_onLocale);
+    _loadStateCityData();
   }
 
   @override
@@ -41,20 +45,45 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    _cityController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStateCityData() async {
+    final jsonStr =
+        await rootBundle.loadString('assets/data/india_state_city.json');
+    final Map<String, dynamic> raw = json.decode(jsonStr);
+    if (mounted) {
+      setState(() {
+        _stateCityData =
+            raw.map((k, v) => MapEntry(k, List<String>.from(v as List)));
+      });
+    }
   }
 
   void _onLocale() => setState(() {});
 
+  List<String> get _sortedStates {
+    final states = _stateCityData.keys.toList()..sort();
+    return states;
+  }
+
+  List<String> get _citiesForState {
+    if (_selectedState.isEmpty) return [];
+    return _stateCityData[_selectedState] ?? [];
+  }
+
   bool get _isValid {
     if (widget.isCompletingProfile) {
       return _nameController.text.trim().isNotEmpty &&
-          _cityController.text.trim().isNotEmpty;
+          _selectedState.isNotEmpty &&
+          _selectedCity.isNotEmpty &&
+          _selectedRole.isNotEmpty;
     }
     return _nameController.text.trim().isNotEmpty &&
         _phoneController.text.length == 10 &&
-        _cityController.text.trim().isNotEmpty;
+        _selectedState.isNotEmpty &&
+        _selectedCity.isNotEmpty &&
+        _selectedRole.isNotEmpty;
   }
 
   void _createAccount() async {
@@ -65,12 +94,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return;
     }
     setState(() => _isLoading = true);
-    final apiRole = _selectedRole; // already stores 'customer' or 'owner'
+    final apiRole = _selectedRole;
     try {
       if (widget.isCompletingProfile) {
         await AuthService.instance.completeProfile(
           _nameController.text.trim(),
-          _cityController.text.trim(),
+          _selectedState,
+          _selectedCity,
           apiRole,
         );
         if (!mounted) return;
@@ -84,7 +114,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         );
       } else {
         AuthService.instance.pendingName = _nameController.text.trim();
-        AuthService.instance.pendingCity = _cityController.text.trim();
+        AuthService.instance.pendingState = _selectedState;
+        AuthService.instance.pendingCity = _selectedCity;
         AuthService.instance.pendingRole = apiRole;
         await AuthService.instance.sendOtp(_phoneController.text);
         if (!mounted) return;
@@ -217,12 +248,40 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             icon: Icons.location_on_outlined,
                           ),
                           const SizedBox(height: 14),
-                          _buildField(
-                            controller: _cityController,
+                          _buildSearchablePickerField(
+                            label: _l.tr('stateLabel'),
+                            hint: _l.tr('stateHint'),
+                            icon: Icons.map_outlined,
+                            value: _selectedState.isEmpty ? null : _selectedState,
+                            enabled: true,
+                            onTap: () => _showSearchPicker(
+                              title: _l.tr('stateLabel'),
+                              items: _sortedStates,
+                              onSelected: (val) {
+                                setState(() {
+                                  _selectedState = val;
+                                  _selectedCity = '';
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _buildSearchablePickerField(
                             label: _l.tr('cityLabel'),
-                            hint: _l.tr('cityHint'),
+                            hint: _selectedState.isEmpty
+                                ? _l.tr('stateHint')
+                                : _l.tr('cityHint'),
                             icon: Icons.location_city_outlined,
-                            textCapitalization: TextCapitalization.words,
+                            value: _selectedCity.isEmpty ? null : _selectedCity,
+                            enabled: _selectedState.isNotEmpty,
+                            onTap: _selectedState.isEmpty
+                                ? null
+                                : () => _showSearchPicker(
+                                      title: _l.tr('cityLabel'),
+                                      items: _citiesForState,
+                                      onSelected: (val) =>
+                                          setState(() => _selectedCity = val),
+                                    ),
                           ),
                           const SizedBox(height: 14),
                           _buildRoleSelector(),
@@ -351,6 +410,104 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     );
   }
 
+  Widget _buildSearchablePickerField({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required String? value,
+    required bool enabled,
+    required VoidCallback? onTap,
+  }) {
+    final hasValue = value != null && value.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: enabled ? onTap : null,
+          child: Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: enabled
+                  ? AppColors.surfaceContainerLowest
+                  : AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasValue
+                    ? AppColors.primary.withValues(alpha: 0.4)
+                    : AppColors.outline.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: hasValue
+                      ? AppColors.primary
+                      : AppColors.onSurfaceVariant
+                          .withValues(alpha: enabled ? 1.0 : 0.4),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    hasValue ? value : hint,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight:
+                          hasValue ? FontWeight.w500 : FontWeight.normal,
+                      color: hasValue
+                          ? AppColors.onSurface
+                          : AppColors.onSurfaceVariant
+                              .withValues(alpha: enabled ? 0.6 : 0.4),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: AppColors.onSurfaceVariant
+                      .withValues(alpha: enabled ? 0.7 : 0.3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showSearchPicker({
+    required String title,
+    required List<String> items,
+    required ValueChanged<String> onSelected,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SearchPickerSheet(
+        title: title,
+        items: items,
+        onSelected: (val) {
+          Navigator.pop(ctx);
+          onSelected(val);
+        },
+      ),
+    );
+  }
+
   Widget _buildPhoneField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +566,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     Text(
                       '+91',
                       style: GoogleFonts.inter(
-                          fontSize: 14, fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.onSurface),
                     ),
                   ],
@@ -537,10 +695,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   onTap: () => LocaleService.instance.setLanguage(code),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 4),
                     decoration: BoxDecoration(
                       gradient: selected ? AppColors.primaryGradient135 : null,
-                      color: selected ? null : AppColors.surfaceContainerLow,
+                      color:
+                          selected ? null : AppColors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -549,7 +709,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           badge,
                           style: TextStyle(
                             fontSize: code == kLangEn ? 16 : 18,
-                            color: selected ? Colors.white : AppColors.onSurfaceVariant,
+                            color: selected
+                                ? Colors.white
+                                : AppColors.onSurfaceVariant,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -559,7 +721,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: selected ? Colors.white : AppColors.onSurfaceVariant,
+                            color: selected
+                                ? Colors.white
+                                : AppColors.onSurfaceVariant,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -572,6 +736,206 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+// ── Searchable bottom-sheet picker ────────────────────────────────────────────
+
+class _SearchPickerSheet extends StatefulWidget {
+  final String title;
+  final List<String> items;
+  final ValueChanged<String> onSelected;
+
+  const _SearchPickerSheet({
+    required this.title,
+    required this.items,
+    required this.onSelected,
+  });
+
+  @override
+  State<_SearchPickerSheet> createState() => _SearchPickerSheetState();
+}
+
+class _SearchPickerSheetState extends State<_SearchPickerSheet> {
+  final _searchController = TextEditingController();
+  List<String> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.items;
+    _searchController.addListener(_onSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearch);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearch() {
+    final q = _searchController.text.toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? widget.items
+          : widget.items
+              .where((item) => item.toLowerCase().contains(q))
+              .toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      margin: EdgeInsets.only(bottom: bottomPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowPrimary,
+            blurRadius: 24,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Handle
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 16),
+            decoration: BoxDecoration(
+              color: AppColors.outline.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Text(
+                  widget.title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Search field
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search ${widget.title.toLowerCase()}…',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.clear_rounded, size: 18),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Result count
+          if (_searchController.text.isNotEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_filtered.length} result${_filtered.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          // List
+          Expanded(
+            child: _filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off_rounded,
+                            size: 40,
+                            color: AppColors.onSurfaceVariant
+                                .withValues(alpha: 0.4)),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No results found',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    itemCount: _filtered.length,
+                    itemBuilder: (_, index) {
+                      final item = _filtered[index];
+                      return InkWell(
+                        onTap: () => widget.onSelected(item),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.onSurface,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
+                                color: AppColors.onSurfaceVariant
+                                    .withValues(alpha: 0.4),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

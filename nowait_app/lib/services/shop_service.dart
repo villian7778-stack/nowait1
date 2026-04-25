@@ -44,6 +44,7 @@ class ShopService {
     required String category,
     required String address,
     required String city,
+    String state = '',
     int avgWaitMinutes = 10,
     List<Map<String, dynamic>> services = const [],
     String? openingHours,
@@ -53,6 +54,7 @@ class ShopService {
       'category': category,
       'address': address,
       'city': city,
+      'state': state,
       'avg_wait_minutes': avgWaitMinutes,
       'services': services,
       if (openingHours != null) 'opening_hours': openingHours,
@@ -66,6 +68,7 @@ class ShopService {
     String? category,
     String? address,
     String? city,
+    String? state,
     int? avgWaitMinutes,
     String? openingHours,
   }) async {
@@ -74,11 +77,25 @@ class ShopService {
       if (category != null) 'category': category,
       if (address != null) 'address': address,
       if (city != null) 'city': city,
+      if (state != null) 'state': state,
       if (avgWaitMinutes != null) 'avg_wait_minutes': avgWaitMinutes,
       if (openingHours != null) 'opening_hours': openingHours,
     };
     final res = await ApiClient.instance.put('/shops/$shopId', body: body);
     return ShopModel.fromJson(res);
+  }
+
+  Future<void> addService(String shopId, {required String name, required double price, int durationMinutes = 20}) async {
+    await ApiClient.instance.post('/shops/$shopId/services', body: {
+      'name': name,
+      'price': price,
+      'duration_minutes': durationMinutes,
+      'description': '',
+    });
+  }
+
+  Future<void> deleteService(String serviceId) async {
+    await ApiClient.instance.delete('/shops/services/$serviceId');
   }
 
   Future<ShopModel> toggleOpen(String shopId) async {

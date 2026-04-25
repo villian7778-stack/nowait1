@@ -32,6 +32,7 @@ class ShopModel {
   final String category;
   final String address;
   final String city;
+  final String state;
   final double rating;
   final bool isOpen;
   int queueCount;
@@ -54,6 +55,7 @@ class ShopModel {
     required this.category,
     required this.address,
     required this.city,
+    this.state = '',
     required this.rating,
     required this.isOpen,
     required this.queueCount,
@@ -96,6 +98,7 @@ class ShopModel {
       category: json['category'] ?? '',
       address: json['address'] ?? '',
       city: json['city'] ?? '',
+      state: json['state'] ?? '',
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       isOpen: json['is_open'] ?? false,
       queueCount: json['queue_count'] ?? 0,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 import '../../models/models.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
@@ -160,25 +161,25 @@ class _HomeTabState extends State<_HomeTab> {
       name: 'Salon',
       subtitle: 'Haircut · Beard · Styling',
       color: Color(0xFF2563EB),
-      icon: Icons.spa_outlined,
+      icon: Icons.content_cut,
     ),
     _CategoryInfo(
       name: 'Beauty Parlour',
       subtitle: 'Facial · Waxing · Bridal',
       color: Color(0xFFDB2777),
-      icon: Icons.diamond_outlined,
+      icon: Icons.face_retouching_natural,
     ),
     _CategoryInfo(
       name: 'Hospital',
       subtitle: 'OPD · Dentist · Lab Tests',
       color: Color(0xFF059669),
-      icon: Icons.favorite_outline_rounded,
+      icon: Icons.local_hospital,
     ),
     _CategoryInfo(
       name: 'Garage',
       subtitle: 'Oil · Tyres · AC Repair',
       color: Color(0xFFD97706),
-      icon: Icons.settings_outlined,
+      icon: Icons.car_repair,
     ),
   ];
 
@@ -1106,45 +1107,20 @@ class _CompactShopCard extends StatelessWidget {
   }
 
   Widget _iconBox() {
+    final color = CategoryTheme.color(shop.category);
     return Container(
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        gradient: LinearGradient(
+          colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.25)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(13),
       ),
-      child: Icon(_categoryIcon(shop.category), color: _categoryColor(shop.category), size: 22),
+      child: Icon(CategoryTheme.icon(shop.category), color: color, size: 22),
     );
-  }
-
-  IconData _categoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'salon':
-        return Icons.spa_outlined;
-      case 'beauty parlour':
-        return Icons.diamond_outlined;
-      case 'hospital':
-        return Icons.favorite_outline_rounded;
-      case 'garage':
-        return Icons.settings_outlined;
-      default:
-        return Icons.storefront_outlined;
-    }
-  }
-
-  Color _categoryColor(String category) {
-    switch (category.toLowerCase()) {
-      case 'salon':
-        return const Color(0xFF2563EB);
-      case 'beauty parlour':
-        return const Color(0xFFDB2777);
-      case 'hospital':
-        return const Color(0xFF059669);
-      case 'garage':
-        return const Color(0xFFD97706);
-      default:
-        return AppColors.primary;
-    }
   }
 }
 

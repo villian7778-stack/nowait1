@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/shop_service.dart';
@@ -9,6 +11,7 @@ import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/searchable_picker_sheet.dart';
 
 class CreateShopScreen extends StatefulWidget {
   const CreateShopScreen({super.key});
@@ -20,8 +23,11 @@ class CreateShopScreen extends StatefulWidget {
 class _CreateShopScreenState extends State<CreateShopScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
-  final _cityController = TextEditingController();
-  String _selectedCategory = 'Salon';
+  final _avgWaitController = TextEditingController(text: '10');
+  String? _selectedCategory;
+  String _selectedState = '';
+  String _selectedCity = '';
+  Map<String, List<String>> _stateCityData = {};
 
   // Item 9: Time pickers replace text field for opening hours
   TimeOfDay _openTime = const TimeOfDay(hour: 9, minute: 0);
@@ -45,6 +51,15 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     super.initState();
     _l.addListener(_onLocale);
     _addService();
+    _loadStateCityData();
+  }
+
+  Future<void> _loadStateCityData() async {
+    final raw = await rootBundle.loadString('assets/data/india_state_city.json');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    setState(() {
+      _stateCityData = decoded.map((k, v) => MapEntry(k, List<String>.from(v as List)));
+    });
   }
 
   void _onLocale() => setState(() {});
@@ -54,7 +69,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     _l.removeListener(_onLocale);
     _nameController.dispose();
     _addressController.dispose();
-    _cityController.dispose();
+    _avgWaitController.dispose();
     for (final s in _services) {
       s['name']?.dispose();
       s['price']?.dispose();
@@ -72,7 +87,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       _services.add({
         'name': TextEditingController(),
         'price': TextEditingController(),
-        'duration': TextEditingController(text: '30'), // Item 13: duration field
+        'duration': TextEditingController(text: '20'),
       });
     });
   }
@@ -141,8 +156,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
 
   bool get _isValid =>
       _nameController.text.trim().isNotEmpty &&
+      _selectedCategory != null &&
       _addressController.text.trim().isNotEmpty &&
-      _cityController.text.trim().isNotEmpty;
+      _selectedState.isNotEmpty &&
+      _selectedCity.isNotEmpty;
 
   Future<void> _submit() async {
     if (!_isValid) {
@@ -165,9 +182,11 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
 
       final shop = await ShopService.instance.createShop(
         name: _nameController.text.trim(),
-        category: _selectedCategory,
+        category: _selectedCategory!,
         address: _addressController.text.trim(),
-        city: _cityController.text.trim(),
+        state: _selectedState,
+        city: _selectedCity,
+        avgWaitMinutes: int.tryParse(_avgWaitController.text) ?? 10,
         services: servicesList,
         openingHours: _openingHoursString,
       );
@@ -276,7 +295,35 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                           const SizedBox(height: 16),
                           _underlineField(_addressController, 'ADDRESS', 'Street, locality'),
                           const SizedBox(height: 16),
-                          _underlineField(_cityController, 'CITY', 'Your city', TextCapitalization.words),
+                          SearchablePickerField(
+                            label: 'STATE',
+                            hint: 'Select state',
+                            icon: Icons.map_outlined,
+                            value: _selectedState.isEmpty ? null : _selectedState,
+                            onTap: () => showSearchPicker(
+                              context: context,
+                              title: 'State',
+                              items: _stateCityData.keys.toList()..sort(),
+                              onSelected: (val) => setState(() {
+                                _selectedState = val;
+                                _selectedCity = '';
+                              }),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SearchablePickerField(
+                            label: 'CITY',
+                            hint: _selectedState.isEmpty ? 'Select state first' : 'Select city',
+                            icon: Icons.location_city_outlined,
+                            value: _selectedCity.isEmpty ? null : _selectedCity,
+                            enabled: _selectedState.isNotEmpty,
+                            onTap: _selectedState.isEmpty ? null : () => showSearchPicker(
+                              context: context,
+                              title: 'City',
+                              items: (_stateCityData[_selectedState] ?? [])..sort(),
+                              onSelected: (val) => setState(() => _selectedCity = val),
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           // Item 9: Time pickers instead of text field
                           _buildLabel('OPENING HOURS'),
@@ -335,6 +382,19 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          _underlineField(
+                            _avgWaitController,
+                            'AVG. WAIT TIME PER CUSTOMER (MINUTES)',
+                            '10',
+                            TextCapitalization.none,
+                            TextInputType.number,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Estimated time each customer spends. Helps customers see expected wait.',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                           ),
                         ]),
                         const SizedBox(height: 24),
@@ -442,9 +502,13 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Enter the services or treatments you provide (e.g., haircut, repair, consultation, etc). Customers will see these when they visit your shop.',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
+                        ),
                         const SizedBox(height: 14),
                         _buildSection([
-                          // Item 13: Each service row includes duration field
                           ...List.generate(_services.length, (i) => Column(
                             children: [
                               if (i > 0) Divider(color: AppColors.outline.withValues(alpha: 0.2), height: 24),
@@ -453,7 +517,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                 children: [
                                   Expanded(
                                     flex: 3,
-                                    child: _underlineField(_services[i]['name']!, 'SERVICE NAME', 'e.g. Haircut'),
+                                    child: _underlineField(_services[i]['name']!, 'SERVICE NAME', 'e.g. YourService'),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -472,7 +536,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                     child: _underlineField(
                                       _services[i]['duration']!,
                                       'MINS',
-                                      '30',
+                                      '20',
                                       TextCapitalization.none,
                                       TextInputType.number,
                                     ),
@@ -699,8 +763,9 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: _selectedCategory,
-          onChanged: (v) => setState(() => _selectedCategory = v!),
+          value: _selectedCategory,
+          hint: Text('Select category', style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant.withValues(alpha: 0.6))),
+          onChanged: (v) => setState(() => _selectedCategory = v),
           decoration: InputDecoration(
             filled: false,
             border: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.4), width: 0.8)),

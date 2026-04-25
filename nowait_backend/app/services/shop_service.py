@@ -174,9 +174,11 @@ def create_shop(owner_id: str, data: ShopCreate) -> dict:
         "category": data.category,
         "address": data.address,
         "city": data.city,
+        "state": data.state,
         "avg_wait_minutes": data.avg_wait_minutes,
         "images": data.images,
         "description": data.description,
+        **({"opening_hours": data.opening_hours} if data.opening_hours else {}),
     }
     result = supabase.table("shops").insert(shop_data).execute()
     if not result.data:

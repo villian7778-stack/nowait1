@@ -23,6 +23,7 @@ class VerifyOTPRequest(BaseModel):
 
 class CompleteProfileRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
+    state: str = Field(min_length=1, max_length=100)
     city: str = Field(min_length=1, max_length=100)
     role: str
     phone: Optional[str] = None  # used in demo mode when JWT has no phone claim
@@ -44,6 +45,7 @@ class ProfileResponse(BaseModel):
     id: str
     name: str
     phone: str
+    state: str = ''
     city: str
     role: str
     created_at: str
