@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
@@ -309,18 +310,18 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                           children: [
                             Expanded(
                               child: _BentoCell(
-                                icon: Icons.schedule_rounded,
-                                value: '~${shop.avgWaitMinutes}m',
-                                label: _l.tr('avgWait'),
+                                icon: Icons.access_time_rounded,
+                                value: shop.openingHours ?? '—',
+                                label: 'Opening Hours',
+                                valueSize: 13,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: _BentoCell(
-                                icon: Icons.place_outlined,
-                                value: shop.city,
-                                label: _l.tr('city'),
-                                valueSize: 15,
+                                icon: Icons.schedule_outlined,
+                                value: '~${shop.avgWaitMinutes}m',
+                                label: _l.tr('avgWait'),
                               ),
                             ),
                           ],
@@ -616,39 +617,14 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   }
 
   List<Color> _gradientForCategory(String cat, int idx) {
-    final base = {
-          'Salon': [AppColors.primary, AppColors.secondary],
-          'Beauty Parlour': [
-            const Color(0xFFD63177),
-            const Color(0xFFE64080)
-          ],
-          'Hospital': [
-            const Color(0xFF006B2D),
-            const Color(0xFF00873B)
-          ],
-          'Garage': [const Color(0xFFB45309), const Color(0xFFD97706)],
-        }[cat] ??
-        [AppColors.primary, AppColors.secondary];
+    final base = CategoryTheme.gradient(cat);
     return [
       base[0].withValues(alpha: 0.6 + idx * 0.1),
       base[1].withValues(alpha: 0.6 + idx * 0.1),
     ];
   }
 
-  IconData _iconForCategory(String cat) {
-    switch (cat) {
-      case 'Salon':
-        return Icons.content_cut;
-      case 'Beauty Parlour':
-        return Icons.face_retouching_natural;
-      case 'Hospital':
-        return Icons.local_hospital;
-      case 'Garage':
-        return Icons.car_repair;
-      default:
-        return Icons.storefront;
-    }
-  }
+  IconData _iconForCategory(String cat) => CategoryTheme.icon(cat);
 }
 
 // ── Staff section — informational only, shown on shop detail ─────────────────
@@ -767,16 +743,20 @@ class _BentoCell extends StatelessWidget {
   final String value;
   final String label;
   final double? valueSize;
+  final bool fullWidth;
 
-  const _BentoCell(
-      {required this.icon,
-      required this.value,
-      required this.label,
-      this.valueSize});
+  const _BentoCell({
+    required this.icon,
+    required this.value,
+    required this.label,
+    this.valueSize,
+    this.fullWidth = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cell = Container(
+      width: fullWidth ? double.infinity : null,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
@@ -788,27 +768,52 @@ class _BentoCell extends StatelessWidget {
               offset: const Offset(0, 3)),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: AppColors.primary, size: 20),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: valueSize ?? 22,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
+      child: fullWidth
+          ? Row(
+              children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: valueSize ?? 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(height: 8),
+                Text(
+                  value,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: valueSize ?? 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                ),
+              ],
             ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-                fontSize: 11, color: AppColors.onSurfaceVariant),
-          ),
-        ],
-      ),
     );
+    return cell;
   }
 }
 

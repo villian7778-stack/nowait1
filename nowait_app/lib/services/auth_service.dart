@@ -12,6 +12,7 @@ class AuthService {
 
   // Temp storage for registration flow
   String? pendingName;
+  String? pendingState;
   String? pendingCity;
   String? pendingRole;
   String? pendingPhone; // kept for demo mode (no phone in JWT)
@@ -42,6 +43,7 @@ class AuthService {
     refreshToken = null;
     profile = null;
     pendingName = null;
+    pendingState = null;
     pendingCity = null;
     pendingRole = null;
     pendingPhone = null;
@@ -74,15 +76,17 @@ class AuthService {
     return false;
   }
 
-  Future<void> completeProfile(String name, String city, String role) async {
+  Future<void> completeProfile(String name, String state, String city, String role) async {
     final res = await ApiClient.instance.post('/auth/complete-profile', body: {
       'name': name,
+      'state': state,
       'city': city,
       'role': role,
       if (pendingPhone != null) 'phone': pendingPhone!,
     });
     profile = Map<String, dynamic>.from(res);
     pendingName = null;
+    pendingState = null;
     pendingCity = null;
     pendingRole = null;
     pendingPhone = null;

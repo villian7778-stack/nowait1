@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 import '../../widgets/shop_card.dart' show ShopCard, showSchemeSheet;
 import 'salon_list_screen.dart';
 import 'notifications_screen.dart';
@@ -289,10 +290,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
                             width: 160,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary.withValues(alpha: 0.7 + i * 0.05),
-                                  AppColors.secondary.withValues(alpha: 0.7 + i * 0.05),
-                                ],
+                                colors: CategoryTheme.gradient(cat.name),
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -395,16 +393,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
     );
   }
 
-  IconData _catIcon(String name) {
-    switch (name) {
-      case 'Salon': return Icons.content_cut;
-      case 'Beauty Parlour': return Icons.face_retouching_natural;
-      case 'Hospital': return Icons.local_hospital;
-      case 'Garage': return Icons.car_repair;
-      case 'Clinic': return Icons.medical_services;
-      default: return Icons.storefront;
-    }
-  }
+  IconData _catIcon(String name) => CategoryTheme.icon(name);
 }
 
 // ── City picker sheet ─────────────────────────────────────────────────────────

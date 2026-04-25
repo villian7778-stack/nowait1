@@ -21,7 +21,9 @@ class ShopCreate(BaseModel):
     category: str = Field(min_length=1, max_length=50)
     address: str = Field(min_length=1, max_length=300)
     city: str = Field(min_length=1, max_length=100)
+    state: str = Field(default="", max_length=100)
     avg_wait_minutes: int = Field(default=10, ge=1, le=240)
+    opening_hours: Optional[str] = Field(default=None, max_length=100)
     images: List[str] = Field(default=[], max_length=10)
     description: str = Field(default="", max_length=1000)
     services: List[ServiceCreate] = []
@@ -32,7 +34,9 @@ class ShopUpdate(BaseModel):
     category: Optional[str] = Field(default=None, max_length=50)
     address: Optional[str] = Field(default=None, max_length=300)
     city: Optional[str] = Field(default=None, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=100)
     avg_wait_minutes: Optional[int] = Field(default=None, ge=1, le=240)
+    opening_hours: Optional[str] = Field(default=None, max_length=100)
     images: Optional[List[str]] = Field(default=None, max_length=10)
     description: Optional[str] = Field(default=None, max_length=1000)
 
@@ -51,10 +55,12 @@ class ShopSummary(BaseModel):
     category: str
     address: str
     city: str
+    state: str = ""
     is_open: bool
     has_active_subscription: bool
     can_accept_queue: bool
     avg_wait_minutes: int
+    opening_hours: Optional[str] = None
     rating: float
     images: List[str]
     queue_count: int

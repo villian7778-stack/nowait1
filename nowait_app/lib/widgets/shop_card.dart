@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../theme/category_theme.dart';
 import 'status_badge.dart';
 
 class ShopCard extends StatelessWidget {
@@ -275,37 +276,21 @@ class ShopCard extends StatelessWidget {
   }
 
   Widget _iconThumbnail() {
+    final color = CategoryTheme.color(shop.category);
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.surfaceContainerHigh, AppColors.surfaceContainerHighest],
+          colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.25)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
       child: Center(
-        child: Icon(_categoryIcon(shop.category), color: AppColors.primary, size: 32),
+        child: Icon(CategoryTheme.icon(shop.category), color: color, size: 32),
       ),
     );
-  }
-
-  IconData _categoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'salon':
-        return Icons.content_cut;
-      case 'beauty parlour':
-        return Icons.face_retouching_natural;
-      case 'hospital':
-        return Icons.local_hospital;
-      case 'garage':
-        return Icons.car_repair;
-      case 'clinic':
-        return Icons.medical_services;
-      default:
-        return Icons.storefront;
-    }
   }
 }
 

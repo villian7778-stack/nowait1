@@ -5,8 +5,11 @@ import '../../models/models.dart';
 import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet;
 import 'shop_details_screen.dart';
+
+IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
 
 class CategoryScreen extends StatefulWidget {
   final String category;
@@ -126,35 +129,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return shops;
   }
 
-  IconData get _categoryIcon {
-    switch (widget.category) {
-      case 'Salon': return Icons.content_cut;
-      case 'Beauty Parlour': return Icons.face_retouching_natural;
-      case 'Hospital': return Icons.local_hospital;
-      case 'Garage': return Icons.car_repair;
-      default: return Icons.storefront;
-    }
-  }
-
-  Color get _categoryColor {
-    switch (widget.category) {
-      case 'Salon': return AppColors.primary;
-      case 'Beauty Parlour': return const Color(0xFFD63177);
-      case 'Hospital': return AppColors.tertiary;
-      case 'Garage': return const Color(0xFFB45309);
-      default: return AppColors.primary;
-    }
-  }
-
-  List<Color> get _categoryGradient {
-    switch (widget.category) {
-      case 'Salon': return [AppColors.primary, AppColors.secondary];
-      case 'Beauty Parlour': return [const Color(0xFFD63177), const Color(0xFFE64080)];
-      case 'Hospital': return [const Color(0xFF006B2D), const Color(0xFF00873B)];
-      case 'Garage': return [const Color(0xFFB45309), const Color(0xFFD97706)];
-      default: return [AppColors.primary, AppColors.secondary];
-    }
-  }
+  IconData get _categoryIcon => CategoryTheme.icon(widget.category);
+  Color get _categoryColor => CategoryTheme.color(widget.category);
+  List<Color> get _categoryGradient => CategoryTheme.gradient(widget.category);
 
   List<CategoryProduct> get _products {
     switch (widget.category) {
@@ -639,7 +616,7 @@ class _PromotedShopCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
                           ),
-                          child: Center(child: Icon(Icons.storefront_outlined, color: Colors.white.withValues(alpha: 0.3), size: 50)),
+                          child: Center(child: Icon(_categoryIconFor(shop.category), color: Colors.white.withValues(alpha: 0.5), size: 48)),
                         ),
                       )
                     else
@@ -647,7 +624,7 @@ class _PromotedShopCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
                         ),
-                        child: Center(child: Icon(Icons.storefront_outlined, color: Colors.white.withValues(alpha: 0.3), size: 50)),
+                        child: Center(child: Icon(_categoryIconFor(shop.category), color: Colors.white.withValues(alpha: 0.5), size: 48)),
                       ),
                   Positioned(
                     top: 8,
@@ -983,12 +960,14 @@ class _ShopListCard extends StatelessWidget {
       height: 68,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withValues(alpha: 0.15), color.withValues(alpha: 0.3)],
+          colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.28)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
-      child: Icon(Icons.storefront_outlined, color: color, size: 30),
+      child: Center(
+        child: Icon(_categoryIconFor(shop.category), color: color, size: 30),
+      ),
     );
   }
 

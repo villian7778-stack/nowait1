@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 import '../../widgets/shop_card.dart' show ShopCard, showSchemeSheet;
 import 'shop_details_screen.dart';
 
@@ -492,15 +493,16 @@ class _PromotedShopCard extends StatelessWidget {
   }
 
   Widget _gradientPlaceholder() {
+    final colors = CategoryTheme.gradient(shop.category);
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.primary.withValues(alpha: 0.8), AppColors.secondary.withValues(alpha: 0.8)],
+          colors: [colors[0].withValues(alpha: 0.8), colors[1].withValues(alpha: 0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
-      child: Center(child: Icon(Icons.content_cut, color: Colors.white.withValues(alpha: 0.3), size: 60)),
+      child: Center(child: Icon(CategoryTheme.icon(shop.category), color: Colors.white.withValues(alpha: 0.3), size: 60)),
     );
   }
 }

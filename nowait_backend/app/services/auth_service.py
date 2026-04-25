@@ -199,6 +199,7 @@ def complete_profile(user_id: str, phone: str, data: CompleteProfileRequest) -> 
         "id": user_id,
         "phone": phone,
         "name": data.name,
+        "state": data.state,
         "city": data.city,
         "role": data.role,
     }
