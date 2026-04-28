@@ -12,6 +12,7 @@
 -- Drop old functions (v1 and v2)
 DROP FUNCTION IF EXISTS join_queue(UUID, UUID, UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS join_queue_v2(UUID, UUID, UUID, UUID) CASCADE;
+DROP FUNCTION IF EXISTS join_queue_v2(UUID, UUID, UUID, UUID, UUID[], INTEGER) CASCADE;
 DROP FUNCTION IF EXISTS advance_queue(UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS advance_queue_v2(UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS skip_customer(UUID, UUID) CASCADE;
@@ -118,16 +119,18 @@ CREATE TABLE staff_members (
 
 -- Single FIFO queue per shop — no staff routing
 CREATE TABLE queue_entries (
-    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id      UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    user_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    token_number INTEGER NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'waiting'
-                     CHECK (status IN ('waiting', 'serving', 'completed', 'skipped', 'cancelled')),
-    service_id   UUID REFERENCES services(id) ON DELETE SET NULL,
-    coming_at    TIMESTAMPTZ,
-    joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    served_at    TIMESTAMPTZ,
+    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id               UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    user_id               UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    token_number          INTEGER NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'waiting'
+                              CHECK (status IN ('waiting', 'serving', 'completed', 'skipped', 'cancelled')),
+    service_id            UUID REFERENCES services(id) ON DELETE SET NULL,
+    service_ids           UUID[] NOT NULL DEFAULT '{}',
+    total_duration_minutes INTEGER,
+    coming_at             TIMESTAMPTZ,
+    joined_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    served_at             TIMESTAMPTZ,
     UNIQUE(shop_id, token_number)
 );
 
@@ -198,16 +201,19 @@ CREATE TRIGGER update_promotions_updated_at
 
 -- Atomic join — single FIFO queue per shop
 CREATE OR REPLACE FUNCTION join_queue_v2(
-    p_shop_id   UUID,
-    p_user_id   UUID,
-    p_staff_id  UUID DEFAULT NULL,    -- ignored, kept for API compatibility
-    p_service_id UUID DEFAULT NULL
+    p_shop_id                UUID,
+    p_user_id                UUID,
+    p_staff_id               UUID    DEFAULT NULL,
+    p_service_id             UUID    DEFAULT NULL,
+    p_service_ids            UUID[]  DEFAULT '{}',
+    p_total_duration_minutes INTEGER DEFAULT NULL
 )
 RETURNS queue_entries AS $$
 DECLARE
     v_shop  shops%ROWTYPE;
     v_token INTEGER;
     v_entry queue_entries%ROWTYPE;
+    v_sid   UUID;
 BEGIN
     SELECT * INTO v_shop FROM shops WHERE id = p_shop_id FOR UPDATE;
 
@@ -255,8 +261,19 @@ BEGIN
     FROM queue_entries
     WHERE shop_id = p_shop_id;
 
-    INSERT INTO queue_entries (shop_id, user_id, token_number, status, service_id)
-    VALUES (p_shop_id, p_user_id, v_token, 'waiting', p_service_id)
+    v_sid := COALESCE(
+        p_service_id,
+        CASE WHEN array_length(p_service_ids, 1) > 0 THEN p_service_ids[1] ELSE NULL END
+    );
+
+    INSERT INTO queue_entries (
+        shop_id, user_id, token_number, status,
+        service_id, service_ids, total_duration_minutes
+    )
+    VALUES (
+        p_shop_id, p_user_id, v_token, 'waiting',
+        v_sid, p_service_ids, p_total_duration_minutes
+    )
     RETURNING * INTO v_entry;
 
     RETURN v_entry;
