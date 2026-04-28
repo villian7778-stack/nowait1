@@ -27,7 +27,7 @@ flutter test --name "description text"          # Run tests matching a name
 
 Flutter widget tests only — no backend tests exist in `nowait_app/`.
 
-**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences` — no state management library, no DI framework.
+**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker` — no state management library, no DI framework.
 
 **To set the backend URL** (defaults to `http://localhost:8000`):
 ```bash
@@ -35,10 +35,13 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 # Android emulator default: http://10.0.2.2:8000
 ```
 
+**Root data:** `india_state_city.json` at the repo root provides the state→city mapping loaded by `searchable_picker_sheet.dart` for address fields. It is bundled into the Flutter app via `assets/data/`.
+
 **Architecture:**
 - `lib/main.dart` — entry point; loads `AuthService` and `LocaleService` from storage in parallel, routes to login/home/dashboard based on auth state; forces portrait; listens to `LocaleService` to rebuild the widget tree on language change
 - `lib/config/app_config.dart` — reads `BASE_URL` dart-define
 - `lib/theme/app_theme.dart` — single source of truth for `AppColors` and `AppTheme`; never hardcode colors in screens
+- `lib/theme/category_theme.dart` — per-category color/icon mappings used by category chips and list screens
 - `lib/models/models.dart` — all data models (`UserModel`, `ShopModel`, `ServiceModel`, `QueueEntry`, `NotificationModel`, `SchemeModel`, `StaffMember`, `StaffQueueGroup`, `AnalyticsSummary`, `VisitHistory`) and enums. `ShopModel.canAcceptQueue` (`isOpen && hasActiveSubscription && !queuePaused`) is the canonical gate before joining a queue. `SchemeModel` is populated from `active_promotions` in the shop JSON response.
 - `lib/data/mock_data.dart` — static `CategoryProduct` lists (salon, beauty, hospital, etc.) used only by the category chip row at the top of each category screen; not a fallback for API calls
 - `lib/services/` — all singletons; call the backend via `ApiClient`:
@@ -52,10 +55,13 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
   - `subscription_service.dart` — subscribe, renew, cancel
   - `staff_service.dart` — add/remove staff, view assignments
   - `analytics_service.dart` — summary, hourly, and per-staff stats
-- `lib/widgets/` — reusable components (three separate files):
+- `lib/widgets/` — reusable components:
   - `gradient_button.dart` — `GradientButton` (gradient fill, `AnimatedScale` press feedback) and `GhostButton` (10% primary opacity bg, no gradient) — use instead of `ElevatedButton`
   - `shop_card.dart` — `ShopCard`
   - `status_badge.dart` — `StatusBadge`
+  - `searchable_picker_sheet.dart` — bottom-sheet picker with search input; used for state/city selection
+  - `ping_dot.dart` — animated pulsing dot indicator (live/active status)
+  - `dashed_circle_painter.dart` — custom painter for dashed-circle decorations on token/queue screens
 - `lib/screens/auth/` — login, create account, OTP verification
 - `lib/screens/customer/` — `home_screen.dart`, `category_screen.dart` (category grid), `category_list_screen.dart` (shops within a category), `salon_list_screen.dart`, `shop_details_screen.dart`, `join_queue_sheet.dart` (bottom sheet), `queue_status_screen.dart`, `token_screen.dart` (large token number display after joining), `notifications_screen.dart`, `history_screen.dart` (past visits using `VisitHistory`)
 - `lib/screens/owner/` — `owner_dashboard_screen.dart`, `manage_shop_screen.dart`, `edit_shop_screen.dart`, `create_shop_screen.dart`, `subscription_screen.dart`, `promotion_screen.dart` (paid "Featured Promotion" visibility boosts), `scheme_screen.dart` (create/edit customer-facing offer/scheme via `PromotionService`), `staff_management_screen.dart` (add/remove staff by phone, view staff queue groups)
@@ -112,7 +118,7 @@ uvicorn app.main:app --reload  # http://localhost:8000
 
 Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `DEMO_MODE` (default `True`), `DEMO_OTP` (default `123456`), `DEMO_PASSWORD` (default `NowaitDemo#2024` — used by demo auth flow). **No `.env.example` is committed** — create `.env` from scratch using the variable names above.
 
-Run `sql/schema.sql` once in Supabase's SQL Editor to create all tables, indexes, RLS policies, and the atomic `join_queue` function. Interactive docs at `/docs`.
+Run `sql/schema.sql` once in Supabase's SQL Editor to create all tables, indexes, RLS policies, and the atomic `join_queue` function. Incremental migration scripts (`sql/migrate_*.sql`) and `sql/storage_setup.sql` (Supabase Storage bucket/policy setup) are applied separately as needed. Interactive docs at `/docs`.
 
 **Backend tests** (unit tests with mocked Supabase — no real DB needed):
 ```bash
@@ -122,6 +128,8 @@ pytest tests/                          # Run all backend tests
 pytest tests/test_queue_service.py     # Run a single test file
 pytest tests/ -k "test_join_queue"     # Run tests matching a name
 ```
+Test files: `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
+
 The `conftest.py` patches `supabase.create_client` before any imports, so no real Supabase credentials are needed. Each test module must patch its own local `supabase` binding (e.g. `patch("app.services.queue_service.supabase", ...)`), not just `app.database.supabase`.
 
 ```bash

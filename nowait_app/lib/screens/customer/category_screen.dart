@@ -632,8 +632,15 @@ class _PromotedShopCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
+                        gradient: AppColors.primaryGradient135,
                         borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -652,9 +659,16 @@ class _PromotedShopCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                       decoration: BoxDecoration(
                         color: shop.isOpen
-                            ? Colors.green.withValues(alpha: 0.3)
-                            : Colors.red.withValues(alpha: 0.3),
+                            ? const Color(0xFF006b2d)
+                            : const Color(0xFFba1a1a),
                         borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
                       child: Text(
                         shop.isOpen ? LocaleService.instance.tr('open') : LocaleService.instance.tr('closed'),
@@ -684,13 +698,6 @@ class _PromotedShopCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        shop.rating.toString(),
-                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
                       const Icon(Icons.location_on_outlined, size: 11, color: AppColors.onSurfaceVariant),
                       Text(
                         shop.distance,

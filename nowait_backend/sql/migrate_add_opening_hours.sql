@@ -1,1 +1,0 @@
-ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours TEXT;

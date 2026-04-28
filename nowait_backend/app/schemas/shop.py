@@ -6,6 +6,7 @@ class ServiceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     price: float = Field(ge=0)
+    duration_minutes: int = Field(default=15, ge=1, le=480)
 
 
 class ServiceResponse(BaseModel):
@@ -14,6 +15,7 @@ class ServiceResponse(BaseModel):
     name: str
     description: str
     price: float
+    duration_minutes: int = 15
 
 
 class ShopCreate(BaseModel):

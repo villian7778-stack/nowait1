@@ -252,7 +252,7 @@ def get_cities() -> List[str]:
     return sorted(seen.values())
 
 
-def add_service(shop_id: str, owner_id: str, name: str, description: str, price: float) -> dict:
+def add_service(shop_id: str, owner_id: str, name: str, description: str, price: float, duration_minutes: int = 15) -> dict:
     existing = execute_one(
         supabase.table("shops")
         .select("id")
@@ -266,6 +266,7 @@ def add_service(shop_id: str, owner_id: str, name: str, description: str, price:
         "name": name,
         "description": description,
         "price": price,
+        "duration_minutes": duration_minutes,
     }).execute()
     return result.data[0]
 

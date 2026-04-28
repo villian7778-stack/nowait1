@@ -123,12 +123,14 @@ class ServiceModel {
   final String name;
   final String description;
   final double price;
+  final int durationMinutes;
 
   const ServiceModel({
     required this.id,
     required this.name,
     required this.description,
     required this.price,
+    this.durationMinutes = 15,
   });
 
   factory ServiceModel.fromJson(Map<String, dynamic> json) {
@@ -137,6 +139,7 @@ class ServiceModel {
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       price: (json['price'] as num).toDouble(),
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 15,
     );
   }
 }
@@ -197,6 +200,9 @@ class QueueEntry {
   int nowServingToken;
   QueueStatus status;
   final bool queuePaused;
+  final List<String> serviceIds;
+  final List<String> selectedServiceNames;
+  final int? totalDurationMinutes;
 
   QueueEntry({
     required this.id,
@@ -210,6 +216,9 @@ class QueueEntry {
     required this.nowServingToken,
     required this.status,
     this.queuePaused = false,
+    this.serviceIds = const [],
+    this.selectedServiceNames = const [],
+    this.totalDurationMinutes,
   });
 
   factory QueueEntry.fromJson(Map<String, dynamic> json) {
@@ -230,6 +239,17 @@ class QueueEntry {
         status = QueueStatus.waiting;
     }
     final entryId = json['id'] ?? '';
+
+    final rawServiceIds = json['service_ids'] as List?;
+    final serviceIds = rawServiceIds != null
+        ? rawServiceIds.map((e) => e.toString()).toList()
+        : <String>[];
+
+    final rawSelected = json['selected_services'] as List?;
+    final serviceNames = rawSelected != null
+        ? rawSelected.map((s) => (s as Map)['name']?.toString() ?? '').where((n) => n.isNotEmpty).toList()
+        : <String>[];
+
     return QueueEntry(
       id: entryId,
       entryId: entryId,
@@ -241,6 +261,35 @@ class QueueEntry {
       estimatedWaitMinutes: json['estimated_wait_minutes'] ?? 0,
       nowServingToken: json['now_serving_token'] ?? 0,
       status: status,
+      serviceIds: serviceIds,
+      selectedServiceNames: serviceNames,
+      totalDurationMinutes: json['total_duration_minutes'] as int?,
+    );
+  }
+}
+
+class PublicQueueItem {
+  final int tokenNumber;
+  final String status;
+  final List<String> serviceNames;
+  final int totalDurationMinutes;
+  final int position;
+
+  const PublicQueueItem({
+    required this.tokenNumber,
+    required this.status,
+    required this.serviceNames,
+    required this.totalDurationMinutes,
+    required this.position,
+  });
+
+  factory PublicQueueItem.fromJson(Map<String, dynamic> json) {
+    return PublicQueueItem(
+      tokenNumber: json['token_number'] ?? 0,
+      status: json['status'] ?? 'waiting',
+      serviceNames: List<String>.from(json['service_names'] ?? []),
+      totalDurationMinutes: json['total_duration_minutes'] ?? 0,
+      position: json['position'] ?? 0,
     );
   }
 }

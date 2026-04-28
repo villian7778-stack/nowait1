@@ -88,6 +88,17 @@ def refresh_token(body: RefreshTokenRequest):
     return auth_service.refresh_session(body.refresh_token)
 
 
+@router.delete("/account", summary="Permanently delete user account and all associated data")
+def delete_account(current_user: dict = Depends(get_current_user)):
+    """
+    Permanently delete the authenticated user's account.
+    For shop owners, all shop images are removed from storage first.
+    Deleting the auth user cascades to: profiles → shops → services, subscriptions,
+    promotions, queue_entries, notifications, shop_staff.
+    """
+    return auth_service.delete_account(current_user["id"])
+
+
 @router.post("/fcm-token", summary="Save FCM push token for this user")
 def save_fcm_token(body: dict, current_user: dict = Depends(get_current_user)):
     """Save or update the Firebase Cloud Messaging token for push notifications."""

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
+import '../../services/locale_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
@@ -21,8 +22,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
+    LocaleService.instance.addListener(_onLocale);
     _load();
   }
+
+  @override
+  void dispose() {
+    LocaleService.instance.removeListener(_onLocale);
+    super.dispose();
+  }
+
+  void _onLocale() => setState(() {});
 
   Future<void> _load() async {
     setState(() { _isLoading = true; _error = null; });
@@ -32,12 +42,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } on ApiException catch (e) {
       if (mounted) setState(() { _error = e.message; _isLoading = false; });
     } catch (_) {
-      if (mounted) setState(() { _error = 'Failed to load history'; _isLoading = false; });
+      if (mounted) setState(() { _error = LocaleService.instance.tr('somethingWrong'); _isLoading = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = LocaleService.instance;
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: SafeArea(
@@ -49,9 +60,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Visit History', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
+                    Text(l.tr('visitHistory'), style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
                     const SizedBox(height: 4),
-                    Text('Your past queue visits', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
+                    Text(l.tr('visitHistorySubtitle'), style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -72,7 +83,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       const SizedBox(height: 12),
                       Text(_error!, style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant)),
                       const SizedBox(height: 16),
-                      TextButton(onPressed: _load, child: const Text('Retry')),
+                      TextButton(onPressed: _load, child: Text(l.tr('retry'))),
                     ],
                   ),
                 ),
@@ -87,9 +98,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       children: [
                         Icon(Icons.history_rounded, size: 64, color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
                         const SizedBox(height: 16),
-                        Text('No visits yet', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
+                        Text(l.tr('noVisitsYet'), style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
                         const SizedBox(height: 6),
-                        Text('Join a queue to see your visit history here', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant), textAlign: TextAlign.center),
+                        Text(l.tr('noVisitsMsg'), style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant), textAlign: TextAlign.center),
                         const SizedBox(height: 24),
                         GestureDetector(
                           onTap: () => Navigator.push(
@@ -108,7 +119,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               children: [
                                 const Icon(Icons.search_rounded, color: Colors.white, size: 18),
                                 const SizedBox(width: 8),
-                                Text('Find a Shop', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                                Text(l.tr('findShop'), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
                               ],
                             ),
                           ),
@@ -149,11 +160,11 @@ class _HistoryCard extends StatelessWidget {
     }
   }
 
-  String get _statusLabel {
+  String _statusLabel(LocaleService l) {
     switch (visit.status) {
-      case 'completed': return 'Served';
-      case 'skipped': return 'Skipped';
-      case 'cancelled': return 'Cancelled';
+      case 'completed': return l.tr('served');
+      case 'skipped': return l.tr('skipped');
+      case 'cancelled': return l.tr('cancelled');
       default: return visit.status;
     }
   }
@@ -167,12 +178,12 @@ class _HistoryCard extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime dt) {
+  String _formatDate(DateTime dt, LocaleService l) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    if (diff.inDays == 0) return l.tr('today');
+    if (diff.inDays == 1) return l.tr('yesterday');
+    if (diff.inDays < 7) return l.tr('daysAgo', params: {'n': diff.inDays.toString()});
     return '${dt.day}/${dt.month}/${dt.year}';
   }
 
@@ -185,6 +196,8 @@ class _HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = LocaleService.instance;
+    final tokenNum = visit.tokenNumber.toString().padLeft(2, '0');
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -197,10 +210,8 @@ class _HistoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row
             Row(
               children: [
-                // Category icon container
                 Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
@@ -224,7 +235,6 @@ class _HistoryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
@@ -236,7 +246,7 @@ class _HistoryCard extends StatelessWidget {
                     children: [
                       Icon(_statusIcon, size: 13, color: _statusColor),
                       const SizedBox(width: 4),
-                      Text(_statusLabel, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor)),
+                      Text(_statusLabel(l), style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: _statusColor)),
                     ],
                   ),
                 ),
@@ -245,17 +255,16 @@ class _HistoryCard extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // Details row
             Row(
               children: [
                 _DetailChip(
                   icon: Icons.confirmation_number_outlined,
-                  label: 'Token #${visit.tokenNumber.toString().padLeft(2, '0')}',
+                  label: l.tr('tokenLabel', params: {'num': tokenNum}),
                 ),
                 const SizedBox(width: 8),
                 _DetailChip(
                   icon: Icons.calendar_today_outlined,
-                  label: _formatDate(visit.joinedAt),
+                  label: _formatDate(visit.joinedAt, l),
                 ),
                 const SizedBox(width: 8),
                 _DetailChip(
@@ -274,7 +283,10 @@ class _HistoryCard extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   if (visit.actualServiceMinutes != null)
-                    _DetailChip(icon: Icons.timer_outlined, label: '${visit.actualServiceMinutes} min'),
+                    _DetailChip(
+                      icon: Icons.timer_outlined,
+                      label: l.tr('minLabel', params: {'n': visit.actualServiceMinutes.toString()}),
+                    ),
                 ],
               ),
             ],

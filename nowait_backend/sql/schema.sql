@@ -73,12 +73,13 @@ CREATE TABLE shops (
 );
 
 CREATE TABLE services (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id     UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    price       DECIMAL(10,2) NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id          UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    description      TEXT DEFAULT '',
+    price            DECIMAL(10,2) NOT NULL,
+    duration_minutes INTEGER NOT NULL DEFAULT 15,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE subscriptions (

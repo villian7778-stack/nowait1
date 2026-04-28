@@ -9,6 +9,7 @@ import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../auth/login_screen.dart';
+import '../help_support_screen.dart';
 import 'manage_shop_screen.dart';
 import 'create_shop_screen.dart';
 import 'staff_management_screen.dart';
@@ -413,7 +414,6 @@ class _OwnerShopCard extends StatelessWidget {
                           runSpacing: 4,
                           children: [
                             _metaBadge(Icons.group_outlined, '${shop.queueCount} ${LocaleService.instance.tr('inQueue')}'),
-                            _metaBadge(Icons.star_rounded, shop.rating.toString()),
                           ],
                         ),
                       ],
@@ -861,6 +861,120 @@ class _StaffTab extends StatelessWidget {
 
 // ─── Profile tab ──────────────────────────────────────────────────────────────
 
+Future<void> _showOwnerDeleteAccountFlow(BuildContext context) async {
+  final l = LocaleService.instance;
+  final controller = TextEditingController();
+
+  final typed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 22),
+          const SizedBox(width: 8),
+          Text(l.tr('deleteAccount'),
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AppColors.error)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.tr('deleteAccountWarning'),
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5)),
+            const SizedBox(height: 16),
+            Text(l.tr('typeDeleteConfirm'),
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              onChanged: (_) => setS(() {}),
+              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'DELETE',
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.4))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.error, width: 2)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.tr('cancel'),
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: controller.text.trim() == 'DELETE' ? () => Navigator.pop(ctx, true) : null,
+            child: Text(l.tr('confirmDelete'),
+                style: GoogleFonts.inter(
+                    color: controller.text.trim() == 'DELETE' ? AppColors.error : AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    ),
+  );
+  controller.dispose();
+  if (typed != true || !context.mounted) return;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(l.tr('deleteConfirmTitle'),
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18)),
+      content: Text(l.tr('deleteConfirmBody'),
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(l.tr('noKeep'),
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(l.tr('yesDelete'),
+              style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    await AuthService.instance.deleteAccount();
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (r) => false,
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(LocaleService.instance.tr('deleteAccountFailed'),
+            style: GoogleFonts.inter()),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+}
+
 class _OwnerProfileTab extends StatelessWidget {
   const _OwnerProfileTab();
 
@@ -937,6 +1051,13 @@ class _OwnerProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: LocaleService.instance,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l = LocaleService.instance;
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -967,7 +1088,10 @@ class _OwnerProfileTab extends StatelessWidget {
                 style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600),
               ),
             ),
-            _tile(context, Icons.help_outline_rounded, l.tr('helpSupport'), () {}),
+            _tile(context, Icons.help_outline_rounded, l.tr('helpSupport'), () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+            )),
             _tile(context, Icons.info_outline_rounded, l.tr('aboutNowait'), () {}),
             const SizedBox(height: 32),
             SizedBox(
@@ -988,6 +1112,22 @@ class _OwnerProfileTab extends StatelessWidget {
                   side: BorderSide(color: AppColors.error.withValues(alpha: 0.4)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showOwnerDeleteAccountFlow(context),
+                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                label: Text(l.tr('deleteAccount'),
+                    style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w500)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppColors.error.withValues(alpha: 0.25)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  minimumSize: const Size(double.infinity, 48),
+                  backgroundColor: AppColors.error.withValues(alpha: 0.03),
                 ),
               ),
             ),
