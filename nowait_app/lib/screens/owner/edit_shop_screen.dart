@@ -438,7 +438,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                                         children: [
                                           Text(svc.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
                                           const SizedBox(height: 2),
-                                          Text('₹${svc.price.toStringAsFixed(svc.price.truncateToDouble() == svc.price ? 0 : 2)}', style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                                          Text('₹${svc.price.toStringAsFixed(svc.price.truncateToDouble() == svc.price ? 0 : 2)}  ·  ${svc.durationMinutes} min', style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
                                         ],
                                       ),
                                     ),

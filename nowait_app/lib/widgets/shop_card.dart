@@ -267,8 +267,6 @@ class ShopCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            RatingBadge(rating: shop.rating),
           ],
         ),
       ),

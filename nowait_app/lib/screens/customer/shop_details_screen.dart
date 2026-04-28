@@ -5,11 +5,10 @@ import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../services/shop_service.dart';
-import '../../services/queue_service.dart';
 import '../../services/staff_service.dart';
-import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet;
+import 'join_queue_sheet.dart';
 import 'token_screen.dart';
 
 class ShopDetailsScreen extends StatefulWidget {
@@ -29,7 +28,6 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   final PageController _pageController = PageController();
   ShopModel? _shop;
   bool _isLoadingShop = false;
-  bool _isJoining = false;
   List<StaffMember> _staff = [];
   final _l = LocaleService.instance;
 
@@ -73,38 +71,27 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
   Future<void> _joinQueue() async {
     if (!(_shop?.canAcceptQueue ?? false)) return;
-    setState(() => _isJoining = true);
-    try {
-      final entry = await QueueService.instance.joinQueue(_shop!.id);
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TokenScreen(
-            shop: _shop!,
-            token: entry.token,
-            position: entry.position,
-            estimatedWait: entry.estimatedWaitMinutes,
-            entryId: entry.entryId,
-          ),
+    final entry = await showModalBottomSheet<QueueEntry>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => JoinQueueSheet(shop: _shop!),
+    );
+    if (entry == null || !mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TokenScreen(
+          shop: _shop!,
+          token: entry.token,
+          position: entry.position,
+          estimatedWait: entry.estimatedWaitMinutes,
+          entryId: entry.entryId,
         ),
-      );
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_l.tr('somethingWrong'))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isJoining = false);
-    }
+      ),
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -239,8 +226,6 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                         spacing: 12,
                         runSpacing: 4,
                         children: [
-                          _metaChip(Icons.star_rounded,
-                              shop.rating.toString(), const Color(0xFFFFB800)),
                           if (shop.ownerName.isNotEmpty)
                             _metaChip(Icons.person_outline_rounded,
                                 shop.ownerName, AppColors.onSurfaceVariant),
@@ -297,31 +282,10 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: _BentoCell(
-                                icon: Icons.confirmation_number_outlined,
-                                value:
-                                    '#${shop.currentToken.toString().padLeft(2, '0')}',
-                                label: _l.tr('servingNow'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _BentoCell(
                                 icon: Icons.access_time_rounded,
                                 value: shop.openingHours ?? '—',
                                 label: 'Opening Hours',
                                 valueSize: 13,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _BentoCell(
-                                icon: Icons.schedule_outlined,
-                                value: '~${shop.avgWaitMinutes}m',
-                                label: _l.tr('avgWait'),
                               ),
                             ),
                           ],
@@ -463,27 +427,11 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
               child: canJoin
                   ? SizedBox(
                       width: double.infinity,
-                      child: _isJoining
-                          ? Container(
-                              height: 52,
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient135,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: const Center(
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2.5),
-                                ),
-                              ),
-                            )
-                          : GradientButton(
-                              label: _l.tr('joinQueueGetToken'),
-                              onPressed: _joinQueue,
-                              icon: Icons.confirmation_number_outlined,
-                            ),
+                      child: GradientButton(
+                        label: _l.tr('joinQueueGetToken'),
+                        onPressed: _joinQueue,
+                        icon: Icons.confirmation_number_outlined,
+                      ),
                     )
                   : Container(
                       padding: const EdgeInsets.all(14),

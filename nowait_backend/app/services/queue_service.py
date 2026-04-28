@@ -45,6 +45,28 @@ def _get_avg_wait(shop_id: str) -> int:
     return shop.data["avg_wait_minutes"] if shop.data else 10
 
 
+def _fetch_services_by_ids(service_ids: list) -> list:
+    """Batch-fetch services by ID list. Returns list of dicts."""
+    if not service_ids:
+        return []
+    result = (
+        supabase.table("services")
+        .select("id, name, price, duration_minutes")
+        .in_("id", service_ids)
+        .execute()
+    )
+    return result.data or []
+
+
+def _calculate_total_duration(service_ids: list, avg_wait: int) -> int:
+    """Sum durations of selected services; fall back to avg_wait if none."""
+    if not service_ids:
+        return avg_wait
+    services = _fetch_services_by_ids(service_ids)
+    total = sum(s.get("duration_minutes") or 15 for s in services)
+    return total if total > 0 else avg_wait
+
+
 def _build_entry_response(entry: dict, shop_name: str, avg_wait: int) -> dict:
     if entry["status"] == "serving":
         position = 1
@@ -54,6 +76,19 @@ def _build_entry_response(entry: dict, shop_name: str, avg_wait: int) -> dict:
         position = 0
     now_serving = _get_now_serving_token(entry["shop_id"])
     display_status = _get_display_status(entry["status"], position)
+
+    service_ids = list(entry.get("service_ids") or [])
+    # Backward compat: single service_id with no array
+    if not service_ids and entry.get("service_id"):
+        service_ids = [entry["service_id"]]
+
+    selected_services = _fetch_services_by_ids(service_ids)
+    total_duration = entry.get("total_duration_minutes")
+    if total_duration is None and selected_services:
+        total_duration = sum(s.get("duration_minutes") or 15 for s in selected_services)
+
+    est_wait = max(0, (position - 1) * avg_wait) if not total_duration else max(0, position - 1) * (total_duration or avg_wait)
+
     return {
         **entry,
         "shop_name": shop_name,
@@ -62,17 +97,34 @@ def _build_entry_response(entry: dict, shop_name: str, avg_wait: int) -> dict:
         "people_ahead": max(0, position - 1),
         "estimated_wait_minutes": max(0, (position - 1) * avg_wait),
         "now_serving_token": now_serving,
+        "service_ids": service_ids,
+        "selected_services": selected_services,
+        "total_duration_minutes": total_duration,
     }
 
 
 # ── join queue ────────────────────────────────────────────────────────────────
 
-def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None) -> dict:
+def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, service_ids: Optional[list] = None) -> dict:
+    ids = service_ids or ([service_id] if service_id else [])
+    # Deduplicate preserving order
+    seen = set()
+    unique_ids = []
+    for sid in ids:
+        if sid and sid not in seen:
+            seen.add(sid)
+            unique_ids.append(sid)
+
+    avg_wait = _get_avg_wait(shop_id)
+    total_duration = _calculate_total_duration(unique_ids, avg_wait) if unique_ids else None
+
     try:
         result = supabase.rpc("join_queue_v2", {
             "p_shop_id": shop_id,
             "p_user_id": user_id,
-            "p_service_id": service_id,
+            "p_service_id": unique_ids[0] if unique_ids else service_id,
+            "p_service_ids": unique_ids,
+            "p_total_duration_minutes": total_duration,
         }).execute()
     except Exception as e:
         error_msg = str(e)
@@ -96,8 +148,7 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None) -> 
     entry = result.data if isinstance(result.data, dict) else result.data[0]
     shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes").eq("id", shop_id))
     shop_data = shop.data or {"name": "Unknown", "avg_wait_minutes": 10}
-    avg = _get_avg_wait(shop_id)
-    return _build_entry_response(entry, shop_data["name"], avg)
+    return _build_entry_response(entry, shop_data["name"], avg_wait)
 
 
 # ── customer status ───────────────────────────────────────────────────────────
@@ -118,7 +169,7 @@ def get_my_queue_status(user_id: str, shop_id: Optional[str] = None) -> list:
     for entry in result.data or []:
         shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes").eq("id", entry["shop_id"]))
         shop_data = shop.data or {"name": "Unknown", "avg_wait_minutes": 10}
-        avg = _get_avg_wait(entry["shop_id"])
+        avg = shop_data["avg_wait_minutes"]
         enriched.append(_build_entry_response(entry, shop_data["name"], avg))
     return enriched
 
@@ -194,15 +245,40 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
     )
     entries = result.data or []
 
+    # Collect all service IDs for a single batch fetch
+    all_service_ids = []
+    for entry in entries:
+        ids = list(entry.get("service_ids") or [])
+        if not ids and entry.get("service_id"):
+            ids = [entry["service_id"]]
+        all_service_ids.extend(ids)
+
+    services_map = {}
+    if all_service_ids:
+        svcs = _fetch_services_by_ids(list(set(all_service_ids)))
+        services_map = {s["id"]: s for s in svcs}
+
     queue_items = []
     for i, entry in enumerate(entries, 1):
         profile = execute_one(supabase.table("profiles").select("name, phone").eq("id", entry["user_id"]))
         customer = profile.data or {"name": "Unknown", "phone": ""}
+
+        ids = list(entry.get("service_ids") or [])
+        if not ids and entry.get("service_id"):
+            ids = [entry["service_id"]]
+        service_names = [services_map[sid]["name"] for sid in ids if sid in services_map]
+        total_dur = entry.get("total_duration_minutes")
+        if total_dur is None and ids:
+            total_dur = sum(services_map[sid].get("duration_minutes") or 15 for sid in ids if sid in services_map)
+
         queue_items.append({
             **entry,
             "customer_name": customer["name"],
             "customer_phone": customer["phone"],
             "position": i,
+            "service_ids": ids,
+            "service_names": service_names,
+            "total_duration_minutes": total_dur,
         })
 
     serving = next((e["token_number"] for e in entries if e["status"] == "serving"), None)
@@ -216,6 +292,69 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
         "max_queue_size": shop.data.get("max_queue_size"),
         "total_waiting": waiting_count,
         "now_serving_token": serving,
+        "queue": queue_items,
+    }
+
+
+# ── public queue view (no auth — customers polling) ───────────────────────────
+
+def get_public_shop_queue(shop_id: str) -> dict:
+    shop = execute_one(
+        supabase.table("shops").select("id, name, is_open, avg_wait_minutes").eq("id", shop_id)
+    )
+    if not shop.data:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    result = (
+        supabase.table("queue_entries")
+        .select("token_number, status, service_ids, service_id, total_duration_minutes")
+        .eq("shop_id", shop_id)
+        .in_("status", ["waiting", "serving"])
+        .order("token_number")
+        .execute()
+    )
+    entries = result.data or []
+
+    all_service_ids = []
+    for entry in entries:
+        ids = list(entry.get("service_ids") or [])
+        if not ids and entry.get("service_id"):
+            ids = [entry["service_id"]]
+        all_service_ids.extend(ids)
+
+    services_map = {}
+    if all_service_ids:
+        svcs = _fetch_services_by_ids(list(set(all_service_ids)))
+        services_map = {s["id"]: s for s in svcs}
+
+    avg_wait = shop.data["avg_wait_minutes"]
+    queue_items = []
+    for i, entry in enumerate(entries, 1):
+        ids = list(entry.get("service_ids") or [])
+        if not ids and entry.get("service_id"):
+            ids = [entry["service_id"]]
+        service_names = [services_map[sid]["name"] for sid in ids if sid in services_map]
+        total_dur = entry.get("total_duration_minutes")
+        if total_dur is None and ids:
+            total_dur = sum(services_map[sid].get("duration_minutes") or 15 for sid in ids if sid in services_map)
+
+        queue_items.append({
+            "token_number": entry["token_number"],
+            "status": entry["status"],
+            "service_names": service_names,
+            "total_duration_minutes": total_dur or avg_wait,
+            "position": i,
+        })
+
+    serving = next((e["token_number"] for e in entries if e["status"] == "serving"), None)
+    waiting_count = sum(1 for e in entries if e["status"] == "waiting")
+
+    return {
+        "shop_id": shop_id,
+        "shop_name": shop.data["name"],
+        "total_waiting": waiting_count,
+        "now_serving_token": serving,
+        "avg_wait_minutes": avg_wait,
         "queue": queue_items,
     }
 
@@ -378,9 +517,12 @@ def get_customer_history(user_id: str, limit: int = 30) -> list:
         shop = shop_r.data or {"name": "Unknown", "category": "", "city": ""}
 
         service_name = None
-        if entry.get("service_id"):
-            svc = execute_one(supabase.table("services").select("name").eq("id", entry["service_id"]))
-            service_name = svc.data["name"] if svc.data else None
+        ids = list(entry.get("service_ids") or [])
+        if not ids and entry.get("service_id"):
+            ids = [entry["service_id"]]
+        if ids:
+            svcs = _fetch_services_by_ids(ids)
+            service_name = ", ".join(s["name"] for s in svcs) if svcs else None
 
         enriched.append({
             **entry,

@@ -7,6 +7,7 @@ from app.schemas.queue import (
     AdvanceQueueResponse,
     CancelQueueResponse,
     JoinQueueRequest,
+    PublicQueueResponse,
     QueueEntryResponse,
     ShopQueueResponse,
 )
@@ -21,6 +22,7 @@ def join_queue(body: JoinQueueRequest, current_user: dict = Depends(get_current_
         body.shop_id,
         current_user["id"],
         service_id=body.service_id,
+        service_ids=body.service_ids,
     )
 
 
@@ -40,6 +42,11 @@ def cancel_queue(entry_id: str, current_user: dict = Depends(get_current_user)):
 @router.post("/{entry_id}/coming", summary="Notify shop that customer is on the way")
 def notify_coming(entry_id: str, current_user: dict = Depends(get_current_user)):
     return queue_service.notify_coming(entry_id, current_user["id"])
+
+
+@router.get("/shop/{shop_id}/public", response_model=PublicQueueResponse, summary="Public queue list (no auth)")
+def get_public_queue(shop_id: str):
+    return queue_service.get_public_shop_queue(shop_id)
 
 
 @router.get("/shop/{shop_id}", response_model=ShopQueueResponse, summary="Get shop queue (owner only)")

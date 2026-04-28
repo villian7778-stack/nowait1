@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/promotion_service.dart';
+import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
@@ -19,9 +20,8 @@ class _SchemeScreenState extends State<SchemeScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   int _durationDays = 7;
-  // ignore: unused_field
-  bool _saved = false;
   bool _isLoading = false;
+  bool _isCancelling = false;
   final _l = LocaleService.instance;
 
   @override
@@ -75,7 +75,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
         validUntil: validUntil,
       );
       if (!mounted) return;
-      setState(() { _saved = true; _isLoading = false; });
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✓  Scheme saved for $_durationDays days'),
@@ -99,6 +99,53 @@ class _SchemeScreenState extends State<SchemeScreen> {
         ),
       );
     }
+  }
+
+  void _cancelScheme() {
+    final schemeId = widget.shop.activeScheme?.id;
+    if (schemeId == null || schemeId.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Cancel Scheme?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Text(
+          'This will remove the scheme from your shop card immediately.',
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isCancelling = true);
+              try {
+                await PromotionService.instance.deletePromotion(schemeId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Scheme cancelled'), behavior: SnackBarBehavior.floating),
+                  );
+                  Navigator.pop(context);
+                }
+              } on ApiException catch (e) {
+                if (mounted) {
+                  setState(() => _isCancelling = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                  );
+                }
+              } catch (_) {
+                if (mounted) setState(() => _isCancelling = false);
+              }
+            },
+            child: Text('Cancel Scheme', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -292,15 +339,42 @@ class _SchemeScreenState extends State<SchemeScreen> {
                   end: Alignment.bottomCenter,
                 ),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : GradientButton(
-                        label: 'Save Scheme',
-                        onPressed: _save,
-                        icon: Icons.check_rounded,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: (_isLoading || _isCancelling)
+                        ? Container(
+                            height: 52,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient135,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: const Center(
+                              child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)),
+                            ),
+                          )
+                        : GradientButton(
+                            label: widget.shop.activeScheme != null ? 'Update Scheme' : 'Save Scheme',
+                            onPressed: _save,
+                            icon: Icons.check_rounded,
+                          ),
+                  ),
+                  if (widget.shop.activeScheme != null && !_isCancelling) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: _cancelScheme,
+                        child: Text(
+                          'Cancel Scheme',
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.error),
+                        ),
                       ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

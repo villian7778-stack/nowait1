@@ -5,9 +5,14 @@ class QueueService {
   static final QueueService instance = QueueService._();
   QueueService._();
 
-  Future<QueueEntry> joinQueue(String shopId, {String? serviceId}) async {
+  Future<QueueEntry> joinQueue(String shopId, {String? serviceId, List<String> serviceIds = const []}) async {
     final body = <String, dynamic>{'shop_id': shopId};
-    if (serviceId != null) body['service_id'] = serviceId;
+    if (serviceIds.isNotEmpty) {
+      body['service_ids'] = serviceIds;
+      body['service_id'] = serviceIds.first;
+    } else if (serviceId != null) {
+      body['service_id'] = serviceId;
+    }
     final res = await ApiClient.instance.post('/queues/join', body: body);
     return QueueEntry.fromJson(res);
   }
@@ -30,6 +35,10 @@ class QueueService {
 
   Future<Map<String, dynamic>> getShopQueue(String shopId) async {
     return await ApiClient.instance.get('/queues/shop/$shopId');
+  }
+
+  Future<Map<String, dynamic>> getPublicShopQueue(String shopId) async {
+    return await ApiClient.instance.get('/queues/shop/$shopId/public');
   }
 
   Future<Map<String, dynamic>> advanceQueue(String shopId) async {

@@ -93,6 +93,11 @@ class AuthService {
     await _saveToStorage();
   }
 
+  Future<void> deleteAccount() async {
+    await ApiClient.instance.delete('/auth/account');
+    await logout();
+  }
+
   Future<void> refreshProfile() async {
     final res = await ApiClient.instance.get('/auth/me');
     profile = Map<String, dynamic>.from(res);

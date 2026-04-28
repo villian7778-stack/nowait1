@@ -202,7 +202,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
     );
   }
 
-  bool get _hasActivePromotion => _activePromotion != null || widget.shop.isPromoted;
+  bool get _hasActivePromotion => _activePromotion != null;
 
   @override
   Widget build(BuildContext context) {

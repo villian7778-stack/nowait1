@@ -10,6 +10,7 @@ import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../auth/login_screen.dart';
+import '../help_support_screen.dart';
 import 'category_screen.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
@@ -174,6 +175,7 @@ class _HomeTabState extends State<_HomeTab> {
       subtitle: 'OPD · Dentist · Lab Tests',
       color: Color(0xFF059669),
       icon: Icons.local_hospital,
+      categoryKey: 'Hospital/Clinic',
     ),
     _CategoryInfo(
       name: 'Garage',
@@ -767,13 +769,17 @@ class _CategoryInfo {
   final String subtitle;
   final Color color;
   final IconData icon;
+  final String? categoryKey;
 
   const _CategoryInfo({
     required this.name,
     required this.subtitle,
     required this.color,
     required this.icon,
+    this.categoryKey,
   });
+
+  String get filterKey => categoryKey ?? name;
 }
 
 // ─── Category grid card (square, white, single-colour icon) ──────────────────
@@ -825,10 +831,10 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
     final c = widget.info.color;
     final s = widget.cardSize;
     final shopCount =
-        widget.allShops.where((e) => e.category == widget.info.name).length;
+        widget.allShops.where((e) => e.category == widget.info.filterKey).length;
     final openCount = widget.allShops
         .where((e) =>
-            e.category == widget.info.name &&
+            e.category == widget.info.filterKey &&
             e.isOpen &&
             e.hasActiveSubscription)
         .length;
@@ -851,7 +857,7 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
           context,
           MaterialPageRoute(
               builder: (_) => CategoryScreen(
-                    category: widget.info.name,
+                    category: widget.info.filterKey,
                     initialCity: widget.selectedCity,
                   )),
         );
@@ -1466,6 +1472,120 @@ class _HistoryTab extends StatelessWidget {
 
 // ─── Profile tab ──────────────────────────────────────────────────────────────
 
+Future<void> _showDeleteAccountFlow(BuildContext context) async {
+  final l = LocaleService.instance;
+  final controller = TextEditingController();
+
+  final typed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 22),
+          const SizedBox(width: 8),
+          Text(l.tr('deleteAccount'),
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AppColors.error)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.tr('deleteAccountWarning'),
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5)),
+            const SizedBox(height: 16),
+            Text(l.tr('typeDeleteConfirm'),
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              onChanged: (_) => setS(() {}),
+              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: 'DELETE',
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.4))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.error, width: 2)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.tr('cancel'),
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: controller.text.trim() == 'DELETE' ? () => Navigator.pop(ctx, true) : null,
+            child: Text(l.tr('confirmDelete'),
+                style: GoogleFonts.inter(
+                    color: controller.text.trim() == 'DELETE' ? AppColors.error : AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    ),
+  );
+  controller.dispose();
+  if (typed != true || !context.mounted) return;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(l.tr('deleteConfirmTitle'),
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18)),
+      content: Text(l.tr('deleteConfirmBody'),
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(l.tr('noKeep'),
+              style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(l.tr('yesDelete'),
+              style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    await AuthService.instance.deleteAccount();
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (r) => false,
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(LocaleService.instance.tr('deleteAccountFailed'),
+            style: GoogleFonts.inter()),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+}
+
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab();
 
@@ -1539,6 +1659,13 @@ class _ProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: LocaleService.instance,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l = LocaleService.instance;
     final profile = AuthService.instance.profile;
     final name = profile?['name'] as String? ?? 'User';
@@ -1699,7 +1826,10 @@ class _ProfileTab extends StatelessWidget {
                       _ProfileTile(
                         icon: Icons.help_outline_rounded,
                         label: l.tr('helpSupport'),
-                        onTap: () {},
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+                        ),
                       ),
                     ],
                   ),
@@ -1736,6 +1866,37 @@ class _ProfileTab extends StatelessWidget {
                               color: AppColors.error,
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Delete account button
+                  GestureDetector(
+                    onTap: () => _showDeleteAccountFlow(context),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: AppColors.error.withValues(alpha: 0.15)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.delete_outline_rounded,
+                              color: AppColors.error, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            l.tr('deleteAccount'),
+                            style: GoogleFonts.inter(
+                              color: AppColors.error,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],

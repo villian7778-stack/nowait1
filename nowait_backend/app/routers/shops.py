@@ -150,7 +150,7 @@ def delete_shop_image(
 @router.post("/{shop_id}/services", response_model=ServiceResponse, status_code=201, summary="Add a service to the shop")
 def add_service(shop_id: str, body: ServiceCreate, current_user: dict = Depends(get_current_owner)):
     """Add a new service (e.g. Haircut, Shave) to the owner's shop."""
-    return shop_service.add_service(shop_id, current_user["id"], body.name, body.description, body.price)
+    return shop_service.add_service(shop_id, current_user["id"], body.name, body.description, body.price, body.duration_minutes)
 
 
 @router.delete("/services/{service_id}", status_code=204, summary="Delete a service")

@@ -216,6 +216,44 @@ def get_profile(user_id: str) -> dict:
     return result.data
 
 
+def delete_account(user_id: str) -> dict:
+    """Delete user account: removes shop images from storage, then deletes auth user (cascades all DB data)."""
+    _STORAGE_BUCKET = "shop-images"
+    bucket_prefix = f"/storage/v1/object/public/{_STORAGE_BUCKET}/"
+
+    try:
+        shop_result = supabase.table("shops").select("id, images").eq("owner_id", user_id).execute()
+        for shop in (shop_result.data or []):
+            for image_url in (shop.get("images") or []):
+                idx = image_url.find(bucket_prefix)
+                if idx != -1:
+                    storage_path = image_url[idx + len(bucket_prefix):]
+                    try:
+                        supabase.storage.from_(_STORAGE_BUCKET).remove([storage_path])
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning("Could not clean shop images for user %s: %s", user_id, e)
+
+    url = f"{settings.SUPABASE_URL}/auth/v1/admin/users/{user_id}"
+    headers = {
+        "apikey": settings.SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+    }
+    try:
+        resp = httpx.delete(url, headers=headers, timeout=10.0)
+        logger.info("Delete auth user %s -> HTTP %s", user_id, resp.status_code)
+        if resp.status_code not in (200, 204):
+            raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Delete account error for %s: %s", user_id, e)
+        raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
+
+    return {"message": "Account deleted successfully"}
+
+
 def refresh_session(refresh_token: str) -> dict:
     try:
         result = supabase_auth.auth.refresh_session(refresh_token)

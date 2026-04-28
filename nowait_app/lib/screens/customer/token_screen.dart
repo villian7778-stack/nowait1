@@ -100,7 +100,10 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: entry!)),
+      MaterialPageRoute(builder: (_) => QueueStatusScreen(
+        entry: entry!,
+        shopCategory: widget.shop.category,
+      )),
     );
   }
 

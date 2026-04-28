@@ -454,34 +454,17 @@ class _PromotedShopCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.star_rounded,
-                              color: Color(0xFFFFB800), size: 14),
-                          const SizedBox(width: 3),
-                          Text(shop.rating.toString(),
-                              style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        shop.isOpen
-                            ? '~${shop.avgWaitMinutes} min'
-                            : LocaleService.instance.tr('closed'),
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: shop.isOpen
-                              ? AppColors.tertiary
-                              : AppColors.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    shop.isOpen
+                        ? '~${shop.avgWaitMinutes} min'
+                        : LocaleService.instance.tr('closed'),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: shop.isOpen
+                          ? AppColors.tertiary
+                          : AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
