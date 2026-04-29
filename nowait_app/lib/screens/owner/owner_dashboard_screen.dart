@@ -12,6 +12,9 @@ import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'manage_shop_screen.dart';
 import 'create_shop_screen.dart';
+import 'edit_shop_screen.dart';
+import 'promotion_screen.dart';
+import 'scheme_screen.dart';
 import 'staff_management_screen.dart';
 import 'subscription_screen.dart';
 
@@ -335,6 +338,72 @@ class _ShopsTabState extends State<_ShopsTab> {
                       MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop!)),
                     ).then((_) => _loadShop()),
                   ),
+                if (_shop != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    LocaleService.instance.tr('shopTools'),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+                  ),
+                  const SizedBox(height: 12),
+                  _DashActionTile(
+                    icon: Icons.edit_outlined,
+                    iconColor: const Color(0xFF7C3AED),
+                    iconBg: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                    title: LocaleService.instance.tr('editShopDetails'),
+                    subtitle: LocaleService.instance.tr('editShopSubtitle'),
+                    onTap: () async {
+                      final updated = await Navigator.push<ShopModel>(
+                        context,
+                        MaterialPageRoute(builder: (_) => EditShopScreen(shop: _shop!)),
+                      );
+                      if (updated != null && mounted) {
+                        setState(() => _shop = updated);
+                        widget.onShopLoaded(updated);
+                      }
+                    },
+                  ),
+                  _DashActionTile(
+                    icon: Icons.rocket_launch_outlined,
+                    iconColor: AppColors.primary,
+                    iconBg: AppColors.primary.withValues(alpha: 0.1),
+                    title: LocaleService.instance.tr('promoteShop'),
+                    subtitle: LocaleService.instance.tr('promoteSubtitle'),
+                    badge: _shop!.isPromoted ? 'Active' : '₹20/day',
+                    badgeColor: _shop!.isPromoted ? AppColors.tertiary : AppColors.primary,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => PromotionScreen(shop: _shop!)),
+                    ).then((_) => _loadShop()),
+                  ),
+                  _DashActionTile(
+                    icon: Icons.local_offer_outlined,
+                    iconColor: AppColors.secondary,
+                    iconBg: AppColors.secondary.withValues(alpha: 0.1),
+                    title: LocaleService.instance.tr('addEditScheme'),
+                    subtitle: LocaleService.instance.tr('addEditSchemeSubtitle'),
+                    badge: _shop!.activeScheme != null ? _shop!.activeScheme!.validityText : 'None',
+                    badgeColor: _shop!.activeScheme != null ? AppColors.secondary : AppColors.onSurfaceVariant,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => SchemeScreen(shop: _shop!)),
+                    ).then((_) => _loadShop()),
+                  ),
+                  _DashActionTile(
+                    icon: Icons.workspace_premium_outlined,
+                    iconColor: _shop!.hasActiveSubscription ? AppColors.tertiary : AppColors.error,
+                    iconBg: _shop!.hasActiveSubscription ? AppColors.tertiary.withValues(alpha: 0.1) : AppColors.errorContainer,
+                    title: LocaleService.instance.tr('subscription'),
+                    subtitle: _shop!.hasActiveSubscription
+                        ? LocaleService.instance.tr('subscriptionActiveMsg')
+                        : LocaleService.instance.tr('activateToOpen'),
+                    badge: _shop!.hasActiveSubscription ? LocaleService.instance.tr('activate') : LocaleService.instance.tr('inactive'),
+                    badgeColor: _shop!.hasActiveSubscription ? AppColors.tertiary : AppColors.error,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop!)),
+                    ).then((_) => _loadShop()),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1160,6 +1229,79 @@ class _OwnerProfileTab extends StatelessWidget {
 }
 
 // Item 18: Onboarding step widget used in _ShopsTab when no shop exists
+class _DashActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final String subtitle;
+  final String? badge;
+  final Color? badgeColor;
+  final VoidCallback onTap;
+
+  const _DashActionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.subtitle,
+    this.badge,
+    this.badgeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  Text(subtitle, style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (badgeColor ?? AppColors.primary).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  badge!,
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: badgeColor ?? AppColors.primary),
+                ),
+              ),
+            ],
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.onSurfaceVariant.withValues(alpha: 0.5)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _OnboardingStep extends StatelessWidget {
   final String number;
   final String title;

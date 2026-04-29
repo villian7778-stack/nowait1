@@ -1,3 +1,6 @@
+import time
+from typing import Optional
+
 import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,18 +11,21 @@ from app.database import execute_one, supabase
 
 security = HTTPBearer()
 
-_jwks_cache: list | None = None
+_JWKS_TTL = 1800  # 30 minutes — refresh after key rotation
+_jwks_cache: Optional[list] = None
+_jwks_fetched_at: float = 0.0
 
 
 def _get_jwks() -> list:
-    """Fetch and cache Supabase JWKS (public keys for ES256 token verification)."""
-    global _jwks_cache
-    if _jwks_cache is None:
+    """Fetch and cache Supabase JWKS with a 30-minute TTL."""
+    global _jwks_cache, _jwks_fetched_at
+    if _jwks_cache is None or (time.monotonic() - _jwks_fetched_at) > _JWKS_TTL:
         resp = httpx.get(
             f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json", timeout=5.0
         )
         resp.raise_for_status()
         _jwks_cache = resp.json().get("keys", [])
+        _jwks_fetched_at = time.monotonic()
     return _jwks_cache
 
 

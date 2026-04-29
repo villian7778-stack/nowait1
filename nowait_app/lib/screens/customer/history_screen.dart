@@ -5,10 +5,9 @@ import '../../services/locale_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
-import 'salon_list_screen.dart';
-
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final VoidCallback? onGoHome;
+  const HistoryScreen({super.key, this.onGoHome});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -103,10 +102,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         Text(l.tr('noVisitsMsg'), style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant), textAlign: TextAlign.center),
                         const SizedBox(height: 24),
                         GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SalonListScreen()),
-                          ),
+                          onTap: () => widget.onGoHome?.call(),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                             decoration: BoxDecoration(

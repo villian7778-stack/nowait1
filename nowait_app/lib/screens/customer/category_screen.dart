@@ -136,44 +136,44 @@ class _CategoryScreenState extends State<CategoryScreen> {
   List<CategoryProduct> get _products {
     switch (widget.category) {
       case 'Salon': return const [
-        CategoryProduct(name: 'Haircut', icon: '✂️', priceFrom: '₹149'),
-        CategoryProduct(name: 'Beard Trim', icon: '🪒', priceFrom: '₹99'),
-        CategoryProduct(name: 'Hair Color', icon: '🎨', priceFrom: '₹499'),
-        CategoryProduct(name: 'Head Massage', icon: '💆', priceFrom: '₹149'),
-        CategoryProduct(name: 'Threading', icon: '🧵', priceFrom: '₹50'),
-        CategoryProduct(name: 'Kids Cut', icon: '👶', priceFrom: '₹99'),
-        CategoryProduct(name: 'Shave', icon: '🪮', priceFrom: '₹80'),
-        CategoryProduct(name: 'Styling', icon: '💈', priceFrom: '₹199'),
+        CategoryProduct(name: 'Trimmer', icon: '🪒', priceFrom: '₹799'),
+        CategoryProduct(name: 'Hair Gel', icon: '💧', priceFrom: '₹149'),
+        CategoryProduct(name: 'Shaving Foam', icon: '🫧', priceFrom: '₹99'),
+        CategoryProduct(name: 'Beard Oil', icon: '🛢️', priceFrom: '₹199'),
+        CategoryProduct(name: 'Hair Color', icon: '🎨', priceFrom: '₹299'),
+        CategoryProduct(name: 'Hair Wax', icon: '🍯', priceFrom: '₹249'),
+        CategoryProduct(name: 'Face Wash', icon: '🧴', priceFrom: '₹129'),
+        CategoryProduct(name: 'Comb Set', icon: '🪮', priceFrom: '₹79'),
       ];
       case 'Beauty Parlour': return const [
-        CategoryProduct(name: 'Facial', icon: '🧖', priceFrom: '₹349'),
-        CategoryProduct(name: 'Waxing', icon: '💅', priceFrom: '₹199'),
-        CategoryProduct(name: 'Manicure', icon: '💅', priceFrom: '₹199'),
-        CategoryProduct(name: 'Pedicure', icon: '🦶', priceFrom: '₹249'),
-        CategoryProduct(name: 'Eyebrows', icon: '👁️', priceFrom: '₹60'),
-        CategoryProduct(name: 'Bleach', icon: '✨', priceFrom: '₹299'),
-        CategoryProduct(name: 'Cleanup', icon: '🧴', priceFrom: '₹199'),
-        CategoryProduct(name: 'Bridal', icon: '👰', priceFrom: '₹2999'),
+        CategoryProduct(name: 'Face Wash', icon: '🧴', priceFrom: '₹149'),
+        CategoryProduct(name: 'Moisturizer', icon: '💧', priceFrom: '₹299'),
+        CategoryProduct(name: 'Sunscreen', icon: '☀️', priceFrom: '₹199'),
+        CategoryProduct(name: 'Serum', icon: '✨', priceFrom: '₹499'),
+        CategoryProduct(name: 'Lip Balm', icon: '💄', priceFrom: '₹79'),
+        CategoryProduct(name: 'Face Mask', icon: '🎭', priceFrom: '₹99'),
+        CategoryProduct(name: 'Toner', icon: '🫙', priceFrom: '₹249'),
+        CategoryProduct(name: 'Eye Cream', icon: '👁️', priceFrom: '₹399'),
       ];
-      case 'Hospital': return const [
-        CategoryProduct(name: 'General OPD', icon: '🩺', priceFrom: '₹200'),
-        CategoryProduct(name: 'Emergency', icon: '🚨', priceFrom: 'Free'),
-        CategoryProduct(name: 'Dentist', icon: '🦷', priceFrom: '₹300'),
-        CategoryProduct(name: 'Blood Test', icon: '🩸', priceFrom: '₹150'),
-        CategoryProduct(name: 'X-Ray', icon: '🔬', priceFrom: '₹400'),
-        CategoryProduct(name: 'Eye Check', icon: '👁️', priceFrom: '₹250'),
-        CategoryProduct(name: 'Pediatric', icon: '👶', priceFrom: '₹300'),
-        CategoryProduct(name: 'Orthopedic', icon: '🦴', priceFrom: '₹500'),
+      case 'Hospital/Clinic': return const [
+        CategoryProduct(name: 'Thermometer', icon: '🌡️', priceFrom: '₹249'),
+        CategoryProduct(name: 'BP Monitor', icon: '💉', priceFrom: '₹899'),
+        CategoryProduct(name: 'Sanitizer', icon: '🧼', priceFrom: '₹89'),
+        CategoryProduct(name: 'Vitamins', icon: '💊', priceFrom: '₹199'),
+        CategoryProduct(name: 'First Aid', icon: '🩹', priceFrom: '₹149'),
+        CategoryProduct(name: 'Face Mask', icon: '😷', priceFrom: '₹49'),
+        CategoryProduct(name: 'Glucometer', icon: '🩸', priceFrom: '₹699'),
+        CategoryProduct(name: 'Protein', icon: '💪', priceFrom: '₹999'),
       ];
       default: return const [
-        CategoryProduct(name: 'Oil Change', icon: '🛢️', priceFrom: '₹399'),
-        CategoryProduct(name: 'Tyre Service', icon: '🔧', priceFrom: '₹199'),
-        CategoryProduct(name: 'AC Repair', icon: '❄️', priceFrom: '₹799'),
-        CategoryProduct(name: 'Brake Check', icon: '🛑', priceFrom: '₹299'),
-        CategoryProduct(name: 'Denting', icon: '🔨', priceFrom: '₹499'),
-        CategoryProduct(name: 'Wash & Clean', icon: '🚿', priceFrom: '₹149'),
-        CategoryProduct(name: 'Battery', icon: '🔋', priceFrom: '₹299'),
-        CategoryProduct(name: 'Alignment', icon: '⚙️', priceFrom: '₹599'),
+        CategoryProduct(name: 'Engine Oil', icon: '🛢️', priceFrom: '₹399'),
+        CategoryProduct(name: 'Helmet', icon: '⛑️', priceFrom: '₹899'),
+        CategoryProduct(name: 'Car Polish', icon: '✨', priceFrom: '₹249'),
+        CategoryProduct(name: 'Wiper Blade', icon: '🌧️', priceFrom: '₹199'),
+        CategoryProduct(name: 'Air Freshener', icon: '🌸', priceFrom: '₹99'),
+        CategoryProduct(name: 'Phone Mount', icon: '📱', priceFrom: '₹149'),
+        CategoryProduct(name: 'Jump Cable', icon: '⚡', priceFrom: '₹349'),
+        CategoryProduct(name: 'Tyre Gauge', icon: '🔧', priceFrom: '₹129'),
       ];
     }
   }
@@ -258,7 +258,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Text(
-                    'Popular Services',
+                    'Products',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -314,7 +314,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: ['Name', 'Address', 'City'].map((type) {
+                        children: ['Name', 'Address'].map((type) {
                           final selected = _filterType == type;
                           return GestureDetector(
                             onTap: () => setState(() {
@@ -430,7 +430,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 210,
+                    height: 240,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -699,10 +699,26 @@ class _PromotedShopCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.location_on_outlined, size: 11, color: AppColors.onSurfaceVariant),
-                      Text(
-                        shop.distance,
-                        style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                      Expanded(
+                        child: Text(
+                          shop.address.isNotEmpty ? '${shop.address}, ${shop.city}' : shop.city,
+                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 4,
+                    children: [
+                      _StatusPill(shop: shop),
+                      if (shop.canAcceptQueue) ...[
+                        _promoInfoBadge(Icons.group_outlined, '${shop.queueCount}'),
+                        _promoInfoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
+                      ],
                     ],
                   ),
                   // Scheme badge
@@ -750,6 +766,27 @@ class _PromotedShopCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _promoInfoBadge(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: AppColors.onSurfaceVariant),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
@@ -876,22 +913,10 @@ class _ShopListCard extends StatelessWidget {
                             _StatusPill(shop: shop),
                             if (canJoin) ...[
                               _infoBadge(Icons.group_outlined, '${shop.queueCount}'),
-                              _infoBadge(Icons.schedule_outlined, '~${shop.avgWaitMinutes}m'),
+                              _infoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
                             ],
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 12),
-                          const SizedBox(width: 2),
-                          Text(
-                            shop.rating.toStringAsFixed(1),
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700),
-                          ),
-                        ],
                       ),
                     ],
                   ),

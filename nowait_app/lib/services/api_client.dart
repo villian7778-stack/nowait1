@@ -61,7 +61,11 @@ class ApiClient {
         }
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Refresh HTTP call failed; fall through to logout
+    } finally {
+      _isRefreshing = false;
+    }
     await AuthService.instance.logout();
     return false;
   }
@@ -71,7 +75,6 @@ class ApiClient {
     var res = await makeRequest().timeout(_timeout);
     if (res.statusCode == 401) {
       final refreshed = await _tryRefresh();
-      _isRefreshing = false;
       if (refreshed) {
         res = await makeRequest().timeout(_timeout);
       }
@@ -147,10 +150,21 @@ class ApiClient {
       if (res.body.isEmpty) return null;
       return jsonDecode(utf8.decode(res.bodyBytes));
     }
-    String message = 'Request failed';
+    String message = 'Request failed (${res.statusCode})';
     try {
       final body = jsonDecode(utf8.decode(res.bodyBytes));
-      message = body['detail'] ?? message;
+      if (body is Map) {
+        final detail = body['detail'];
+        if (detail is String) {
+          message = detail;
+        } else if (detail is List && detail.isNotEmpty) {
+          // FastAPI 422 validation errors: [{loc, msg, type}]
+          final first = detail.first;
+          if (first is Map && first['msg'] is String) {
+            message = first['msg'] as String;
+          }
+        }
+      }
     } catch (_) {}
     throw ApiException(res.statusCode, message);
   }

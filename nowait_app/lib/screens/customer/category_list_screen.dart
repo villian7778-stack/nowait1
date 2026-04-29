@@ -7,7 +7,6 @@ import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 import '../../widgets/shop_card.dart' show ShopCard, showSchemeSheet;
-import 'salon_list_screen.dart';
 import 'notifications_screen.dart';
 import 'shop_details_screen.dart';
 
@@ -339,18 +338,6 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface),
                           overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.push(context,
-                            MaterialPageRoute(
-                                builder: (_) => const SalonListScreen())),
-                        child: Text(
-                          'Map View',
-                          style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary),
                         ),
                       ),
                     ],

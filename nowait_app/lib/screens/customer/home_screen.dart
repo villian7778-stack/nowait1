@@ -14,7 +14,6 @@ import '../help_support_screen.dart';
 import 'category_screen.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
-import 'salon_list_screen.dart';
 import 'shop_details_screen.dart';
 import 'queue_status_screen.dart';
 
@@ -46,9 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       const _HomeTab(),
-      const _SearchTab(),
-      const _QueueTab(),
-      const _HistoryTab(),
+      _QueueTab(onGoHome: () => setState(() => _currentIndex = 0)),
+      _HistoryTab(onGoHome: () => setState(() => _currentIndex = 0)),
       const _ProfileTab(),
     ];
 
@@ -76,7 +74,6 @@ class _BottomNav extends StatelessWidget {
     final l = LocaleService.instance;
     final items = [
       (Icons.home_rounded, Icons.home_outlined, l.tr('home')),
-      (Icons.search_rounded, Icons.search_outlined, l.tr('explore')),
       (Icons.confirmation_number_rounded, Icons.confirmation_number_outlined, l.tr('myQueue')),
       (Icons.history_rounded, Icons.history_outlined, 'History'),
       (Icons.person_rounded, Icons.person_outline_rounded, l.tr('profile')),
@@ -479,61 +476,6 @@ class _HomeTabState extends State<_HomeTab> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  // Search bar
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => SalonListScreen(
-                        initialCity: _selectedCity,
-                        autofocusSearch: true,
-                      )),
-                    ),
-                    child: Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.14),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded,
-                              color: AppColors.onSurfaceVariant, size: 22),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              LocaleService.instance.tr('searchByName'),
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(11),
-                            ),
-                            child: const Icon(
-                              Icons.tune_rounded,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -736,27 +678,6 @@ class _HomeTabState extends State<_HomeTab> {
           ),
         ],
         const Spacer(),
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => SalonListScreen(initialCity: _selectedCity)),
-          ),
-          child: Row(
-            children: [
-              Text(
-                LocaleService.instance.tr('seeAll'),
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: 2),
-              const Icon(Icons.arrow_forward_ios_rounded,
-                  size: 12, color: AppColors.primary),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -1098,7 +1019,7 @@ class _CompactShopCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${shop.queueCount} ${LocaleService.instance.tr('inQueue')} · ~${shop.avgWaitMinutes}m',
+              '${shop.queueCount} in queue · ~${shop.queueCount * shop.avgWaitMinutes}m',
               style: GoogleFonts.inter(
                 fontSize: 10,
                 color: AppColors.onSurfaceVariant,
@@ -1227,19 +1148,11 @@ class _PulsingDotState extends State<_PulsingDot>
 
 // ─── Search tab ───────────────────────────────────────────────────────────────
 
-class _SearchTab extends StatelessWidget {
-  const _SearchTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SalonListScreen();
-  }
-}
-
 // ─── Queue tab ────────────────────────────────────────────────────────────────
 
 class _QueueTab extends StatefulWidget {
-  const _QueueTab();
+  final VoidCallback? onGoHome;
+  const _QueueTab({this.onGoHome});
 
   @override
   State<_QueueTab> createState() => _QueueTabState();
@@ -1347,10 +1260,7 @@ class _QueueTabState extends State<_QueueTab> {
             ),
             const SizedBox(height: 28),
             GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SalonListScreen()),
-              ),
+              onTap: () => widget.onGoHome?.call(),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -1462,11 +1372,12 @@ class _QueueEntryCard extends StatelessWidget {
 // ─── History tab ─────────────────────────────────────────────────────────────
 
 class _HistoryTab extends StatelessWidget {
-  const _HistoryTab();
+  final VoidCallback? onGoHome;
+  const _HistoryTab({this.onGoHome});
 
   @override
   Widget build(BuildContext context) {
-    return const HistoryScreen();
+    return HistoryScreen(onGoHome: onGoHome);
   }
 }
 

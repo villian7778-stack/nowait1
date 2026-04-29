@@ -203,6 +203,7 @@ class QueueEntry {
   final List<String> serviceIds;
   final List<String> selectedServiceNames;
   final int? totalDurationMinutes;
+  final double? totalServiceCost;
 
   QueueEntry({
     required this.id,
@@ -219,6 +220,7 @@ class QueueEntry {
     this.serviceIds = const [],
     this.selectedServiceNames = const [],
     this.totalDurationMinutes,
+    this.totalServiceCost,
   });
 
   factory QueueEntry.fromJson(Map<String, dynamic> json) {
@@ -249,6 +251,15 @@ class QueueEntry {
     final serviceNames = rawSelected != null
         ? rawSelected.map((s) => (s as Map)['name']?.toString() ?? '').where((n) => n.isNotEmpty).toList()
         : <String>[];
+    double? totalCost;
+    if (rawSelected != null && rawSelected.isNotEmpty) {
+      double sum = 0;
+      for (final s in rawSelected) {
+        final price = (s as Map)['price'];
+        if (price != null) sum += (price as num).toDouble();
+      }
+      if (sum > 0) totalCost = sum;
+    }
 
     return QueueEntry(
       id: entryId,
@@ -264,6 +275,7 @@ class QueueEntry {
       serviceIds: serviceIds,
       selectedServiceNames: serviceNames,
       totalDurationMinutes: json['total_duration_minutes'] as int?,
+      totalServiceCost: totalCost,
     );
   }
 }

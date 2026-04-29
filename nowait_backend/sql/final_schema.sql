@@ -1,15 +1,27 @@
 -- ============================================================
--- NOWAIT — Clean Schema Reset
--- Run this in Supabase SQL Editor to get a fully clean database.
--- WARNING: This drops all existing tables and recreates them.
---          All existing data will be lost.
+-- NOWAIT — Final Complete Schema (Fresh Install)
+-- Run this ONCE on a brand new / empty Supabase database.
+-- WARNING: Drops all existing tables — all data will be lost.
+-- For an existing database use the safe migration block below.
+-- ============================================================
+
+-- ============================================================
+-- FOR EXISTING DATABASE (has data you want to keep)
+-- Comment out everything below and run only this block:
+--
+--   ALTER TABLE profiles      ADD COLUMN IF NOT EXISTS state TEXT DEFAULT '';
+--   ALTER TABLE shops         ADD COLUMN IF NOT EXISTS state TEXT DEFAULT '';
+--   ALTER TABLE shops         ADD COLUMN IF NOT EXISTS opening_hours TEXT;
+--   ALTER TABLE services      ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 15;
+--   ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS service_ids UUID[] NOT NULL DEFAULT '{}';
+--   ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER;
+--   (then run the CREATE OR REPLACE FUNCTION blocks below)
 -- ============================================================
 
 -- ============================================================
 -- DROP EVERYTHING (clean slate)
 -- ============================================================
 
--- Drop old functions (v1 and v2)
 DROP FUNCTION IF EXISTS join_queue(UUID, UUID, UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS join_queue_v2(UUID, UUID, UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS join_queue_v2(UUID, UUID, UUID, UUID, UUID[], INTEGER) CASCADE;
@@ -19,12 +31,11 @@ DROP FUNCTION IF EXISTS skip_customer(UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS skip_customer_v2(UUID, UUID) CASCADE;
 DROP FUNCTION IF EXISTS update_updated_at() CASCADE;
 
--- Drop all tables (order matters — dependents first)
 DROP TABLE IF EXISTS queue_events    CASCADE;
 DROP TABLE IF EXISTS notifications   CASCADE;
 DROP TABLE IF EXISTS queue_entries   CASCADE;
 DROP TABLE IF EXISTS staff_members   CASCADE;
-DROP TABLE IF EXISTS shop_staff      CASCADE;  -- old name, may exist
+DROP TABLE IF EXISTS shop_staff      CASCADE;
 DROP TABLE IF EXISTS promotions      CASCADE;
 DROP TABLE IF EXISTS subscriptions   CASCADE;
 DROP TABLE IF EXISTS services        CASCADE;
@@ -53,24 +64,24 @@ CREATE TABLE profiles (
 );
 
 CREATE TABLE shops (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    owner_id        UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    category        TEXT NOT NULL,
-    address         TEXT NOT NULL,
-    city            TEXT NOT NULL,
-    state           TEXT DEFAULT '',
-    is_open         BOOLEAN NOT NULL DEFAULT FALSE,
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    category         TEXT NOT NULL,
+    address          TEXT NOT NULL,
+    city             TEXT NOT NULL,
+    state            TEXT DEFAULT '',
+    is_open          BOOLEAN NOT NULL DEFAULT FALSE,
     avg_wait_minutes INTEGER NOT NULL DEFAULT 10,
-    opening_hours   TEXT,
-    images          TEXT[] DEFAULT '{}',
-    rating          DECIMAL(3,2) DEFAULT 0.0,
-    review_count    INTEGER DEFAULT 0,
-    description     TEXT DEFAULT '',
-    queue_paused    BOOLEAN NOT NULL DEFAULT FALSE,
-    max_queue_size  INTEGER,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    opening_hours    TEXT,
+    images           TEXT[] DEFAULT '{}',
+    rating           DECIMAL(3,2) DEFAULT 0.0,
+    review_count     INTEGER DEFAULT 0,
+    description      TEXT DEFAULT '',
+    queue_paused     BOOLEAN NOT NULL DEFAULT FALSE,
+    max_queue_size   INTEGER,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE services (
@@ -84,13 +95,13 @@ CREATE TABLE services (
 );
 
 CREATE TABLE subscriptions (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id     UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    plan        TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
-    status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled')),
-    started_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at  TIMESTAMPTZ NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id    UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    plan       TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
+    status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled')),
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(shop_id)
 );
 
@@ -105,71 +116,67 @@ CREATE TABLE promotions (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Staff members — informational only, shown to customers on shop page
 CREATE TABLE staff_members (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id         UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    user_id         UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    display_name    TEXT NOT NULL,
-    is_owner_staff  BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-    added_by        UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id        UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    user_id        UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    display_name   TEXT NOT NULL,
+    is_owner_staff BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    added_by       UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Single FIFO queue per shop — no staff routing
 CREATE TABLE queue_entries (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id               UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    user_id               UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    token_number          INTEGER NOT NULL,
-    status                TEXT NOT NULL DEFAULT 'waiting'
-                              CHECK (status IN ('waiting', 'serving', 'completed', 'skipped', 'cancelled')),
-    service_id            UUID REFERENCES services(id) ON DELETE SET NULL,
-    service_ids           UUID[] NOT NULL DEFAULT '{}',
+    id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id                UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    user_id                UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    token_number           INTEGER NOT NULL,
+    status                 TEXT NOT NULL DEFAULT 'waiting'
+                               CHECK (status IN ('waiting', 'serving', 'completed', 'skipped', 'cancelled')),
+    service_id             UUID REFERENCES services(id) ON DELETE SET NULL,
+    service_ids            UUID[] NOT NULL DEFAULT '{}',
     total_duration_minutes INTEGER,
-    coming_at             TIMESTAMPTZ,
-    joined_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    served_at             TIMESTAMPTZ,
+    coming_at              TIMESTAMPTZ,
+    joined_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    served_at              TIMESTAMPTZ,
     UNIQUE(shop_id, token_number)
 );
 
 CREATE TABLE notifications (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    type        TEXT NOT NULL CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'queue_update', 'coming')),
-    title       TEXT NOT NULL,
-    body        TEXT NOT NULL,
-    shop_name   TEXT NOT NULL,
-    shop_id     UUID REFERENCES shops(id) ON DELETE SET NULL,
-    is_read     BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    type       TEXT NOT NULL CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'queue_update', 'coming')),
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    shop_name  TEXT NOT NULL,
+    shop_id    UUID REFERENCES shops(id) ON DELETE SET NULL,
+    is_read    BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Queue events log (used by analytics)
 CREATE TABLE queue_events (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shop_id     UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    entry_id    UUID REFERENCES queue_entries(id) ON DELETE SET NULL,
-    event_type  TEXT NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id    UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    entry_id   UUID REFERENCES queue_entries(id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
 -- INDEXES
 -- ============================================================
 
--- Prevent duplicate active queue entry per user per shop
 CREATE UNIQUE INDEX idx_active_queue_per_user_shop
     ON queue_entries(shop_id, user_id)
     WHERE status IN ('waiting', 'serving');
 
-CREATE INDEX idx_queue_entries_shop_status  ON queue_entries(shop_id, status, token_number);
-CREATE INDEX idx_queue_entries_user         ON queue_entries(user_id, status);
-CREATE INDEX idx_shops_city_category        ON shops(city, category);
-CREATE INDEX idx_notifications_user         ON notifications(user_id, is_read, created_at DESC);
-CREATE INDEX idx_subscriptions_shop         ON subscriptions(shop_id, status, expires_at);
-CREATE INDEX idx_staff_members_shop         ON staff_members(shop_id, is_active);
+CREATE INDEX idx_queue_entries_shop_status ON queue_entries(shop_id, status, token_number);
+CREATE INDEX idx_queue_entries_user        ON queue_entries(user_id, status);
+CREATE INDEX idx_shops_city_category       ON shops(city, category);
+CREATE INDEX idx_notifications_user        ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX idx_subscriptions_shop        ON subscriptions(shop_id, status, expires_at);
+CREATE INDEX idx_staff_members_shop        ON staff_members(shop_id, is_active);
 
 -- ============================================================
 -- UPDATED_AT TRIGGER
@@ -199,7 +206,6 @@ CREATE TRIGGER update_promotions_updated_at
 -- QUEUE FUNCTIONS
 -- ============================================================
 
--- Atomic join — single FIFO queue per shop
 CREATE OR REPLACE FUNCTION join_queue_v2(
     p_shop_id                UUID,
     p_user_id                UUID,
@@ -281,10 +287,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- Advance queue — pure FIFO, no staff filtering
 CREATE OR REPLACE FUNCTION advance_queue_v2(
     p_shop_id  UUID,
-    p_staff_id UUID DEFAULT NULL    -- ignored, kept for API compatibility
+    p_staff_id UUID DEFAULT NULL
 )
 RETURNS TABLE(completed_entry queue_entries, next_entry queue_entries) AS $$
 DECLARE
@@ -315,10 +320,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
--- Skip a specific customer
 CREATE OR REPLACE FUNCTION skip_customer_v2(
     p_entry_id UUID,
-    p_staff_id UUID DEFAULT NULL    -- ignored, kept for API compatibility
+    p_staff_id UUID DEFAULT NULL
 )
 RETURNS queue_entries AS $$
 DECLARE
@@ -345,15 +349,15 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ROW LEVEL SECURITY
 -- ============================================================
 
-ALTER TABLE profiles        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE shops           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE services        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE subscriptions   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE promotions      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE queue_entries   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE staff_members   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE queue_events    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shops         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE promotions    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE queue_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE queue_events  ENABLE ROW LEVEL SECURITY;
 
 -- Profiles
 CREATE POLICY "profiles_read_all"   ON profiles FOR SELECT USING (true);
@@ -361,10 +365,10 @@ CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE USING (auth.uid() = i
 CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Shops
-CREATE POLICY "shops_read_all"    ON shops FOR SELECT USING (true);
-CREATE POLICY "shops_insert_owner" ON shops FOR INSERT WITH CHECK (auth.uid() = owner_id);
-CREATE POLICY "shops_update_owner" ON shops FOR UPDATE USING (auth.uid() = owner_id);
-CREATE POLICY "shops_delete_owner" ON shops FOR DELETE USING (auth.uid() = owner_id);
+CREATE POLICY "shops_read_all"      ON shops FOR SELECT USING (true);
+CREATE POLICY "shops_insert_owner"  ON shops FOR INSERT WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "shops_update_owner"  ON shops FOR UPDATE USING (auth.uid() = owner_id);
+CREATE POLICY "shops_delete_owner"  ON shops FOR DELETE USING (auth.uid() = owner_id);
 
 -- Services
 CREATE POLICY "services_read_all"     ON services FOR SELECT USING (true);
@@ -377,7 +381,7 @@ CREATE POLICY "queue_read_own" ON queue_entries FOR SELECT USING (
     auth.uid() = user_id OR
     auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
 );
-CREATE POLICY "queue_insert_customer"  ON queue_entries FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "queue_insert_customer"   ON queue_entries FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "queue_update_own_cancel" ON queue_entries FOR UPDATE USING (
     auth.uid() = user_id OR
     auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
@@ -399,18 +403,18 @@ CREATE POLICY "subscriptions_update_owner" ON subscriptions FOR UPDATE USING (
 );
 
 -- Promotions
-CREATE POLICY "promotions_read_all"    ON promotions FOR SELECT USING (true);
+CREATE POLICY "promotions_read_all"     ON promotions FOR SELECT USING (true);
 CREATE POLICY "promotions_modify_owner" ON promotions FOR ALL USING (
     auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
 );
 
--- Staff members — readable by everyone, writable by shop owner only
-CREATE POLICY "staff_read_all"    ON staff_members FOR SELECT USING (true);
+-- Staff members
+CREATE POLICY "staff_read_all"     ON staff_members FOR SELECT USING (true);
 CREATE POLICY "staff_modify_owner" ON staff_members FOR ALL USING (
     auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
 );
 
--- Queue events — readable by shop owner only
+-- Queue events
 CREATE POLICY "queue_events_read_owner" ON queue_events FOR SELECT USING (
     auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
 );

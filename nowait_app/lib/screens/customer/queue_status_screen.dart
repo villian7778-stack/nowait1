@@ -8,7 +8,6 @@ import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
-import '../../theme/category_theme.dart';
 import '../../widgets/ping_dot.dart';
 import '../../widgets/dashed_circle_painter.dart';
 import 'shop_details_screen.dart';
@@ -378,7 +377,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                   _buildTokenDisplay(),
                   const SizedBox(height: 20),
 
-                  // Selected services badge (if any)
+                  // Selected services card
                   if (_entry.selectedServiceNames.isNotEmpty) ...[
                     Container(
                       width: double.infinity,
@@ -410,18 +409,34 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                   letterSpacing: 0.5,
                                 ),
                               ),
-                              if (_entry.totalDurationMinutes != null) ...[
-                                const Spacer(),
+                              const Spacer(),
+                              if (_entry.totalServiceCost != null)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.08),
+                                    color: AppColors.tertiary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    '${_entry.totalDurationMinutes} min total',
+                                    '₹${_entry.totalServiceCost!.toStringAsFixed(0)}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.tertiary,
+                                    ),
+                                  ),
+                                )
+                              else if (_entry.totalDurationMinutes != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${_entry.totalDurationMinutes} min',
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -429,7 +444,6 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                     ),
                                   ),
                                 ),
-                              ],
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -625,8 +639,12 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
   }
 
   Widget _buildQueueList() {
-    // Parse the current user's token number from e.g. '#5' → 5
     final myTokenNum = int.tryParse(_entry.token.replaceAll('#', '')) ?? -1;
+    // Show only people ahead of the user (token <= mine) — this includes serving and the user's own row
+    final visible = _queueList
+        .where((item) => item.tokenNumber <= myTokenNum)
+        .toList();
+    final totalInLine = _queueList.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -643,14 +661,13 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '${_queueList.length} in line',
+                '$totalInLine in line',
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -672,16 +689,29 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
           ],
         ),
         const SizedBox(height: 10),
-        for (int i = 0; i < _queueList.length; i++) ...[
-          _QueueListRow(
-            item: _queueList[i],
-            isMe: _queueList[i].tokenNumber == myTokenNum,
-            isServing: _queueList[i].status == 'serving',
-            position: i + 1,
-            waitSeconds: _waitSecondsFor(_queueList[i]),
-            shopCategory: _shopCategory,
+        SizedBox(
+          height: (visible.length * 72.0).clamp(72.0, 280.0),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                for (int i = 0; i < visible.length; i++) ...[
+                  _QueueListRow(
+                    item: visible[i],
+                    isMe: visible[i].tokenNumber == myTokenNum,
+                    isServing: visible[i].status == 'serving',
+                    position: visible[i].position > 0 ? visible[i].position : i + 1,
+                    waitSeconds: _waitSecondsFor(visible[i]),
+                    shopCategory: _shopCategory,
+                  ),
+                  // Extra breathing room after the user's own row
+                  if (visible[i].tokenNumber == myTokenNum)
+                    const SizedBox(height: 20),
+                ],
+              ],
+            ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -804,28 +834,6 @@ class _QueueListRow extends StatelessWidget {
   }
 
   /// Category icon takes priority; falls back to service-name heuristic.
-  IconData get _rowIcon {
-    if (shopCategory.isNotEmpty) return CategoryTheme.icon(shopCategory);
-    final joined = item.serviceNames.join(' ').toLowerCase();
-    if (joined.contains('hair') || joined.contains('cut') || joined.contains('trim')) {
-      return Icons.content_cut_rounded;
-    }
-    if (joined.contains('beard') || joined.contains('shave')) {
-      return Icons.face_retouching_natural_rounded;
-    }
-    if (joined.contains('massage') || joined.contains('spa')) return Icons.spa_rounded;
-    if (joined.contains('colour') || joined.contains('color') || joined.contains('dye')) {
-      return Icons.palette_rounded;
-    }
-    if (joined.contains('nail') || joined.contains('manicure') || joined.contains('pedicure')) {
-      return Icons.back_hand_outlined;
-    }
-    if (joined.contains('consult') || joined.contains('doctor') || joined.contains('check')) {
-      return Icons.medical_services_outlined;
-    }
-    return Icons.design_services_rounded;
-  }
-
   @override
   Widget build(BuildContext context) {
     final Color accentColor;
@@ -834,44 +842,43 @@ class _QueueListRow extends StatelessWidget {
 
     if (isServing) {
       accentColor = AppColors.tertiary;
-      bgColor = AppColors.tertiary.withValues(alpha: 0.07);
-      borderColor = AppColors.tertiary.withValues(alpha: 0.3);
+      bgColor = AppColors.tertiary.withValues(alpha: 0.14);
+      borderColor = AppColors.tertiary.withValues(alpha: 0.4);
     } else if (isMe) {
       accentColor = AppColors.error;
-      bgColor = AppColors.error.withValues(alpha: 0.07);
-      borderColor = AppColors.error.withValues(alpha: 0.35);
+      bgColor = AppColors.error.withValues(alpha: 0.12);
+      borderColor = AppColors.error.withValues(alpha: 0.45);
     } else {
-      accentColor = AppColors.tertiary;
-      bgColor = AppColors.tertiary.withValues(alpha: 0.04);
-      borderColor = AppColors.tertiary.withValues(alpha: 0.15);
+      accentColor = AppColors.primary;
+      bgColor = AppColors.primary.withValues(alpha: 0.06);
+      borderColor = AppColors.primary.withValues(alpha: 0.18);
     }
 
     final hasCountdown = waitSeconds > 0;
-    final serviceIcon = _rowIcon;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor, width: isMe ? 1.5 : 1),
         boxShadow: isMe || isServing
-            ? [BoxShadow(color: accentColor.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]
+            ? [BoxShadow(color: accentColor.withValues(alpha: 0.10), blurRadius: 6, offset: const Offset(0, 2))]
             : null,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Row(
           children: [
             // ── Left: token + position ──
             Column(
               children: [
                 Container(
-                  width: 46,
-                  height: 46,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(13),
+                    color: accentColor.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(11),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -879,7 +886,7 @@ class _QueueListRow extends StatelessWidget {
                       Text(
                         '#${item.tokenNumber}',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
                           color: accentColor,
                           letterSpacing: -0.5,
@@ -888,7 +895,7 @@ class _QueueListRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   _ordinal(position),
                   style: GoogleFonts.inter(
@@ -907,13 +914,15 @@ class _QueueListRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
                       color: accentColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(serviceIcon, size: 16, color: accentColor),
+                    child: const Center(
+                      child: Text('👤', style: TextStyle(fontSize: 13)),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -921,9 +930,11 @@ class _QueueListRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          item.serviceNames.isNotEmpty
-                              ? item.serviceNames.join(', ')
-                              : 'No service',
+                          item.serviceNames.isEmpty
+                              ? 'No service'
+                              : item.serviceNames.length == 1
+                                  ? item.serviceNames[0]
+                                  : '${item.serviceNames.length} services selected',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
