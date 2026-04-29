@@ -170,8 +170,7 @@ class ShopCard extends StatelessWidget {
                       StatusBadge(isOpen: shop.isOpen),
                       if (shop.isOpen) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(8),
@@ -179,9 +178,7 @@ class ShopCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.group_outlined,
-                                  size: 12,
-                                  color: AppColors.onSurfaceVariant),
+                              const Icon(Icons.group_outlined, size: 12, color: AppColors.onSurfaceVariant),
                               const SizedBox(width: 4),
                               Text(
                                 '${shop.queueCount} in queue',
@@ -195,7 +192,7 @@ class ShopCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        WaitTimeBadge(minutes: shop.avgWaitMinutes),
+                        WaitTimeBadge(minutes: shop.queueCount * shop.avgWaitMinutes),
                       ],
                     ],
                   ),

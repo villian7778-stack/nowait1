@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import analytics, auth, notifications, promotions, queues, shops, staff, subscriptions
+from app.config import settings
+from app.routers import admin, analytics, auth, notifications, promotions, queues, shops, staff, subscriptions
 
 app = FastAPI(
     title="NOWAIT API",
@@ -36,12 +37,13 @@ All protected endpoints require a Bearer token obtained via `POST /auth/verify-o
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to your app's origin in production
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(shops.router)
 app.include_router(queues.router)

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -6,6 +7,8 @@ from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.schemas.shop import ShopCreate, ShopUpdate
+
+logger = logging.getLogger(__name__)
 
 MAX_SHOP_IMAGES = 10
 _STORAGE_BUCKET = "shop-images"
@@ -315,8 +318,8 @@ def delete_shop_image(shop_id: str, owner_id: str, image_url: str) -> dict:
         storage_path = image_url[idx + len(bucket_prefix):]
         try:
             supabase.storage.from_(_STORAGE_BUCKET).remove([storage_path])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to delete image from storage (path=%s): %s", storage_path, e)
 
     new_images = [u for u in current_images if u != image_url]
     supabase.table("shops").update({"images": new_images}).eq("id", shop_id).execute()

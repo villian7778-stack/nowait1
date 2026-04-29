@@ -23,7 +23,6 @@ class CreateShopScreen extends StatefulWidget {
 class _CreateShopScreenState extends State<CreateShopScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
-  final _avgWaitController = TextEditingController(text: '10');
   String? _selectedCategory;
   String _selectedState = '';
   String _selectedCity = '';
@@ -69,7 +68,6 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     _l.removeListener(_onLocale);
     _nameController.dispose();
     _addressController.dispose();
-    _avgWaitController.dispose();
     for (final s in _services) {
       s['name']?.dispose();
       s['price']?.dispose();
@@ -186,7 +184,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
         address: _addressController.text.trim(),
         state: _selectedState,
         city: _selectedCity,
-        avgWaitMinutes: int.tryParse(_avgWaitController.text) ?? 10,
+        avgWaitMinutes: 10,
         services: servicesList,
         openingHours: _openingHoursString,
       );
@@ -382,19 +380,6 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 16),
-                          _underlineField(
-                            _avgWaitController,
-                            'AVG. WAIT TIME PER CUSTOMER (MINUTES)',
-                            '10',
-                            TextCapitalization.none,
-                            TextInputType.number,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Estimated time each customer spends. Helps customers see expected wait.',
-                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                           ),
                         ]),
                         const SizedBox(height: 24),

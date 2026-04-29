@@ -29,6 +29,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   Map<String, List<String>> _stateCityData = {};
   String _selectedRole = '';
   bool _isLoading = false;
+  bool _agreedToTerms = false;
 
   LocaleService get _l => LocaleService.instance;
 
@@ -77,13 +78,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       return _nameController.text.trim().isNotEmpty &&
           _selectedState.isNotEmpty &&
           _selectedCity.isNotEmpty &&
-          _selectedRole.isNotEmpty;
+          _selectedRole.isNotEmpty &&
+          _agreedToTerms;
     }
     return _nameController.text.trim().isNotEmpty &&
         _phoneController.text.length == 10 &&
         _selectedState.isNotEmpty &&
         _selectedCity.isNotEmpty &&
-        _selectedRole.isNotEmpty;
+        _selectedRole.isNotEmpty &&
+        _agreedToTerms;
   }
 
   void _createAccount() async {
@@ -291,6 +294,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         _sectionLabel(_l.tr('preferredLanguage')),
                         const SizedBox(height: 16),
                         _buildSection([_buildLanguageSelector()]),
+                        const SizedBox(height: 20),
+                        _buildTermsCheckbox(),
                       ],
                     ),
                   ),
@@ -660,6 +665,177 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTermsCheckbox() {
+    return GestureDetector(
+      onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              gradient: _agreedToTerms ? AppColors.primaryGradient135 : null,
+              color: _agreedToTerms ? null : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _agreedToTerms
+                    ? AppColors.primary
+                    : AppColors.outline.withValues(alpha: 0.5),
+                width: 1.5,
+              ),
+            ),
+            child: _agreedToTerms
+                ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                children: [
+                  const TextSpan(text: 'I agree to the '),
+                  WidgetSpan(
+                    child: GestureDetector(
+                      onTap: _showTermsSheet,
+                      child: Text(
+                        'Terms & Privacy Policy',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTermsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.82,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(color: AppColors.shadowPrimary, blurRadius: 32, offset: const Offset(0, -8)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.outline.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient135,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.policy_outlined, color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Terms & Privacy Policy',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.surfaceContainerLow,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _termsSection('1. Acceptance of Terms',
+                        'By creating an account on NOWAIT, you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree, please do not use our services.'),
+                    _termsSection('2. Use of Service',
+                        'NOWAIT provides a queue management platform connecting customers with service providers. You may use this service only for lawful purposes and in accordance with these Terms.'),
+                    _termsSection('3. Account Responsibility',
+                        'You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately of any unauthorized use of your account.'),
+                    _termsSection('4. Queue & Booking',
+                        'Joining a queue is a commitment to avail the service. Repeated no-shows or cancellations may result in temporary restrictions on your account.'),
+                    _termsSection('5. Shop Owners',
+                        'Shop owners are responsible for accurately representing their services, maintaining fair queue practices, and complying with all applicable local laws and regulations.'),
+                    _termsSection('6. Privacy Policy',
+                        'We collect your name, phone number, and city to provide our services. Your data is stored securely and is never sold to third parties. We may use your contact information to send service-related notifications.'),
+                    _termsSection('7. Data Retention',
+                        'Your account data is retained as long as your account is active. You may request deletion of your data by contacting our support team.'),
+                    _termsSection('8. Changes to Terms',
+                        'We reserve the right to modify these terms at any time. Continued use of the service after changes constitutes acceptance of the new terms.'),
+                    _termsSection('9. Contact',
+                        'For any questions regarding these terms, please contact us through the app\'s support section.'),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                      ),
+                      child: Text(
+                        'Last updated: April 2026',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _termsSection(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+          const SizedBox(height: 6),
+          Text(body, style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.6)),
+        ],
       ),
     );
   }

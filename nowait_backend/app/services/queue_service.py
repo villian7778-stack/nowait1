@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -6,6 +7,8 @@ from fastapi import HTTPException
 from app.database import execute_one, supabase
 from app.services.notification_service import create_notification
 from app.services.staff_service import _is_owner
+
+logger = logging.getLogger(__name__)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -140,7 +143,8 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
             raise HTTPException(status_code=400, detail="Shop does not have an active subscription")
         if "ALREADY_IN_QUEUE" in error_msg:
             raise HTTPException(status_code=409, detail="You are already in this shop's queue")
-        raise HTTPException(status_code=400, detail=f"Failed to join queue: {error_msg}")
+        logger.error("join_queue RPC unexpected error (shop=%s user=%s): %s", shop_id, user_id, e)
+        raise HTTPException(status_code=400, detail="Failed to join queue")
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to join queue")
@@ -258,18 +262,23 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
         svcs = _fetch_services_by_ids(list(set(all_service_ids)))
         services_map = {s["id"]: s for s in svcs}
 
+    # Batch-fetch all customer profiles in one query (avoids N+1)
+    user_ids = list({entry["user_id"] for entry in entries})
+    profiles_result = supabase.table("profiles").select("id, name, phone").in_("id", user_ids).execute()
+    profiles_map = {p["id"]: p for p in (profiles_result.data or [])}
+
     queue_items = []
     for i, entry in enumerate(entries, 1):
-        profile = execute_one(supabase.table("profiles").select("name, phone").eq("id", entry["user_id"]))
-        customer = profile.data or {"name": "Unknown", "phone": ""}
+        customer = profiles_map.get(entry["user_id"], {"name": "Unknown", "phone": ""})
 
         ids = list(entry.get("service_ids") or [])
         if not ids and entry.get("service_id"):
             ids = [entry["service_id"]]
-        service_names = [services_map[sid]["name"] for sid in ids if sid in services_map]
+        selected_services = [services_map[sid] for sid in ids if sid in services_map]
+        service_names = [s["name"] for s in selected_services]
         total_dur = entry.get("total_duration_minutes")
-        if total_dur is None and ids:
-            total_dur = sum(services_map[sid].get("duration_minutes") or 15 for sid in ids if sid in services_map)
+        if total_dur is None and selected_services:
+            total_dur = sum(s.get("duration_minutes") or 15 for s in selected_services)
 
         queue_items.append({
             **entry,
@@ -278,6 +287,7 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
             "position": i,
             "service_ids": ids,
             "service_names": service_names,
+            "selected_services": selected_services,
             "total_duration_minutes": total_dur,
         })
 
@@ -370,7 +380,8 @@ def advance_queue(shop_id: str, owner_id: str) -> dict:
             "p_shop_id": shop_id,
         }).execute()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to advance queue: {e}")
+        logger.error("advance_queue RPC error (shop=%s owner=%s): %s", shop_id, owner_id, e)
+        raise HTTPException(status_code=400, detail="Failed to advance queue")
 
     data = result.data or []
     completed_token = None
@@ -454,7 +465,8 @@ def skip_customer(entry_id: str, owner_id: str) -> dict:
         error_msg = str(e)
         if "NOT_FOUND" in error_msg:
             raise HTTPException(status_code=404, detail="Entry not found or not skippable")
-        raise HTTPException(status_code=400, detail=f"Failed to skip: {error_msg}")
+        logger.error("skip_customer RPC unexpected error (entry=%s): %s", entry_id, e)
+        raise HTTPException(status_code=400, detail="Failed to skip customer")
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Entry not found")

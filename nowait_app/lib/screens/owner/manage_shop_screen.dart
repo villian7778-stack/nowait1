@@ -10,9 +10,6 @@ import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import 'subscription_screen.dart';
-import 'promotion_screen.dart';
-import 'scheme_screen.dart';
-import 'edit_shop_screen.dart';
 import '../../services/notification_service.dart';
 import '../customer/notifications_screen.dart';
 
@@ -158,7 +155,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
           ),
         ),
       ),
-    );
+    ).whenComplete(ctrl.dispose);
   }
 
   /// Shows skip dialog with optional reason, then calls the API.
@@ -207,6 +204,136 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
           ),
         ],
       ),
+    ).whenComplete(noteCtrl.dispose);
+  }
+
+  /// Returns service details for a queue entry.
+  /// Prefers `selected_services` from the API (contains name/price/duration).
+  /// Falls back to cross-referencing `_shop.services` by ID for older API responses.
+  List<Map<String, dynamic>> _resolveServices(Map<String, dynamic> entry) {
+    final raw = entry['selected_services'] as List?;
+    if (raw != null && raw.isNotEmpty) {
+      return raw.map((s) => Map<String, dynamic>.from(s as Map)).toList();
+    }
+    final ids = entry['service_ids'] as List? ?? [];
+    if (ids.isEmpty) return const [];
+    final shopServicesMap = {for (final s in _shop.services) s.id: s};
+    final result = <Map<String, dynamic>>[];
+    for (final id in ids) {
+      final svc = shopServicesMap[id.toString()];
+      if (svc != null) {
+        result.add({'name': svc.name, 'price': svc.price, 'duration_minutes': svc.durationMinutes});
+      }
+    }
+    return result;
+  }
+
+  void _showServiceDetailsPopup(String customerName, List<Map<String, dynamic>> services) {
+    double total = 0;
+    for (final s in services) {
+      final price = s['price'];
+      if (price != null) total += (price as num).toDouble();
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: AppColors.surfaceContainerLowest,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient135,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Selected Services', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                        Text(customerName, style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (services.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('No services selected', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
+                )
+              else
+                ...services.map((s) {
+                  final sName = s['name']?.toString() ?? 'Service';
+                  final price = s['price'] != null ? (s['price'] as num).toDouble() : 0.0;
+                  final dur = s['duration_minutes'] as int?;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 6, height: 6,
+                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(sName, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                              if (dur != null)
+                                Text('~$dur min', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '₹${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(1)}',
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              if (services.length > 1) ...[
+                Container(height: 1, color: AppColors.outline.withValues(alpha: 0.15)),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                    Text(
+                      '₹${total % 1 == 0 ? total.toInt() : total.toStringAsFixed(1)}',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: GradientButton(
+                  label: 'Done',
+                  onPressed: () => Navigator.pop(context),
+                  height: 46,
+                  borderRadius: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -238,111 +365,220 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
       final isServing = status == 'serving';
       final isComing = entry['coming_at'] != null;
 
-      return Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isServing
-              ? AppColors.primary.withValues(alpha: 0.06)
-              : isComing
-                  ? AppColors.tertiary.withValues(alpha: 0.04)
-                  : AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(12),
-          border: isServing
-              ? Border.all(color: AppColors.primary.withValues(alpha: 0.25))
-              : isComing
-                  ? Border.all(color: AppColors.tertiary.withValues(alpha: 0.25))
-                  : null,
-          boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 6, offset: const Offset(0, 2))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                gradient: isServing ? AppColors.primaryGradient135 : null,
-                color: isServing ? null : AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  '#${token.toString().padLeft(2, '0')}',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13, fontWeight: FontWeight.w800,
-                    color: isServing ? Colors.white : AppColors.onSurface,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                  Text(
-                    isServing ? 'Now serving' : 'Position $pos',
-                    style: GoogleFonts.inter(fontSize: 11, color: isServing ? AppColors.primary : AppColors.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-            if (isComing) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(color: AppColors.tertiary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+      // Resolve service details — uses selected_services from API when present, falls back to service_ids
+      final resolvedServices = _resolveServices(entry);
+      final hasServices = resolvedServices.isNotEmpty;
+
+      double serviceTotal = 0;
+      for (final s in resolvedServices) {
+        final price = s['price'];
+        if (price != null) serviceTotal += (price as num).toDouble();
+      }
+      final serviceNames = resolvedServices.map((s) => s['name']?.toString() ?? '').where((n) => n.isNotEmpty).toList();
+
+      return GestureDetector(
+        onTap: () => _showServiceDetailsPopup(name, resolvedServices),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: isServing
+                ? AppColors.primary.withValues(alpha: 0.06)
+                : isComing
+                    ? AppColors.tertiary.withValues(alpha: 0.04)
+                    : AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+            border: isServing
+                ? Border.all(color: AppColors.primary.withValues(alpha: 0.25))
+                : isComing
+                    ? Border.all(color: AppColors.tertiary.withValues(alpha: 0.25))
+                    : null,
+            boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 6, offset: const Offset(0, 2))],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.directions_walk_rounded, size: 12, color: AppColors.tertiary),
-                    const SizedBox(width: 3),
-                    Text('Coming', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.tertiary)),
+                    Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        gradient: isServing ? AppColors.primaryGradient135 : null,
+                        color: isServing ? null : AppColors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '#${token.toString().padLeft(2, '0')}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13, fontWeight: FontWeight.w800,
+                            color: isServing ? Colors.white : AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                          Text(
+                            isServing ? 'Now serving' : 'Position $pos',
+                            style: GoogleFonts.inter(fontSize: 11, color: isServing ? AppColors.primary : AppColors.onSurfaceVariant),
+                          ),
+                          if (hasServices && !isServing) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(Icons.receipt_long_rounded, size: 10, color: AppColors.onSurfaceVariant),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    serviceNames.join(', '),
+                                    style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '₹${serviceTotal % 1 == 0 ? serviceTotal.toInt() : serviceTotal.toStringAsFixed(1)}',
+                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Receipt icon — always visible so owner knows to tap for details
+                    Container(
+                      width: 28, height: 28,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        color: hasServices
+                            ? AppColors.primary.withValues(alpha: 0.1)
+                            : AppColors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Icon(
+                        Icons.receipt_long_rounded,
+                        size: 14,
+                        color: hasServices ? AppColors.primary : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    if (isComing) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.tertiary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.directions_walk_rounded, size: 12, color: AppColors.tertiary),
+                            const SizedBox(width: 3),
+                            Text('Coming', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.tertiary)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    // Skip / Serving badge
+                    if (!isServing && entryId.isNotEmpty)
+                      GestureDetector(
+                        onTap: hasSubscription
+                            ? () => _showSkipDialog(entryId, name)
+                            : () => ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Activate a subscription to manage your queue')),
+                                ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: hasSubscription ? AppColors.errorContainer : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Skip',
+                            style: GoogleFonts.inter(
+                              fontSize: 11, fontWeight: FontWeight.w600,
+                              color: hasSubscription ? AppColors.error : AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isServing ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          isServing ? 'Serving' : 'Waiting',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600,
+                            color: isServing ? AppColors.primary : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-            ],
-            // Skip button — only for waiting customers
-            if (!isServing && entryId.isNotEmpty)
-              GestureDetector(
-                onTap: hasSubscription
-                    ? () => _showSkipDialog(entryId, name)
-                    : () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Activate a subscription to manage your queue')),
-                        ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              // Inline service breakdown for the currently serving customer
+              if (isServing && hasServices) ...[
+                Container(
+                  margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: hasSubscription
-                        ? AppColors.errorContainer
-                        : AppColors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(8),
+                    color: AppColors.primary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
                   ),
-                  child: Text(
-                    'Skip',
-                    style: GoogleFonts.inter(
-                      fontSize: 11, fontWeight: FontWeight.w600,
-                      color: hasSubscription ? AppColors.error : AppColors.onSurfaceVariant,
-                    ),
+                  child: Column(
+                    children: [
+                      ...resolvedServices.map((s) {
+                        final sName = s['name']?.toString() ?? '';
+                        final price = s['price'] != null ? (s['price'] as num).toDouble() : 0.0;
+                        final dur = s['duration_minutes'] as int?;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Container(width: 5, height: 5, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  sName + (dur != null ? '  (~$dur min)' : ''),
+                                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurface),
+                                ),
+                              ),
+                              Text(
+                                '₹${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(1)}',
+                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      if (resolvedServices.length > 1) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Total', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                            Text(
+                              '₹${serviceTotal % 1 == 0 ? serviceTotal.toInt() : serviceTotal.toStringAsFixed(1)}',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.primary),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isServing ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  isServing ? 'Serving' : 'Waiting',
-                  style: GoogleFonts.inter(
-                    fontSize: 11, fontWeight: FontWeight.w600,
-                    color: isServing ? AppColors.primary : AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-          ],
+              ],
+            ],
+          ),
         ),
       );
     }).toList();
@@ -486,39 +722,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                         ),
                       ),
                   ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop)),
-                ).then((_) => setState(() {})),
-                child: Container(
-                  margin: const EdgeInsets.only(right: 16),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: hasSubscription ? AppColors.primaryGradient135 : null,
-                    color: hasSubscription ? null : AppColors.errorContainer,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.workspace_premium_rounded,
-                        size: 14,
-                        color: hasSubscription ? Colors.white : AppColors.onErrorContainer,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        hasSubscription ? _l.tr('premium') : _l.tr('subscribe'),
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: hasSubscription ? Colors.white : AppColors.onErrorContainer,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ],
@@ -837,76 +1040,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                   const SizedBox(height: 12),
                   ..._buildQueueList(),
 
-                  const SizedBox(height: 24),
-
-                  // ── Action menu ───────────────────────────────────────────
-                  Text(
-                    _l.tr('shopTools'),
-                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface),
-                  ),
-                  const SizedBox(height: 14),
-
-                  _ActionTile(
-                    icon: Icons.edit_outlined,
-                    iconColor: const Color(0xFF7C3AED),
-                    iconBg: const Color(0xFF7C3AED).withValues(alpha: 0.1),
-                    title: _l.tr('editShopDetails'),
-                    subtitle: _l.tr('editShopSubtitle'),
-                    onTap: () async {
-                      final updated = await Navigator.push<ShopModel>(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => EditShopScreen(shop: _shop)),
-                      );
-                      if (updated != null && mounted) {
-                        setState(() => _shop = updated);
-                      }
-                    },
-                  ),
-
-                  _ActionTile(
-                    icon: Icons.rocket_launch_outlined,
-                    iconColor: AppColors.primary,
-                    iconBg: AppColors.primary.withValues(alpha: 0.1),
-                    title: _l.tr('promoteShop'),
-                    subtitle: _l.tr('promoteSubtitle'),
-                    badge: _shop.isPromoted ? 'Active' : '₹20/day',
-                    badgeColor: _shop.isPromoted ? AppColors.tertiary : AppColors.primary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => PromotionScreen(shop: _shop)),
-                    ).then((_) => setState(() {})),
-                  ),
-
-                  _ActionTile(
-                    icon: Icons.local_offer_outlined,
-                    iconColor: AppColors.secondary,
-                    iconBg: AppColors.secondary.withValues(alpha: 0.1),
-                    title: _l.tr('addEditScheme'),
-                    subtitle: _l.tr('addEditSchemeSubtitle'),
-                    badge: _shop.activeScheme != null ? _shop.activeScheme!.validityText : 'None',
-                    badgeColor: _shop.activeScheme != null ? AppColors.secondary : AppColors.onSurfaceVariant,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => SchemeScreen(shop: _shop)),
-                    ).then((_) => setState(() {})),
-                  ),
-
-                  _ActionTile(
-                    icon: Icons.workspace_premium_outlined,
-                    iconColor: hasSubscription ? AppColors.tertiary : AppColors.error,
-                    iconBg: hasSubscription ? AppColors.tertiary.withValues(alpha: 0.1) : AppColors.errorContainer,
-                    title: _l.tr('subscription'),
-                    subtitle: hasSubscription
-                        ? _l.tr('subscriptionActiveMsg')
-                        : _l.tr('activateToOpen'),
-                    badge: hasSubscription ? _l.tr('activate') : _l.tr('inactive'),
-                    badgeColor: hasSubscription ? AppColors.tertiary : AppColors.error,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop)),
-                    ).then((_) => setState(() {})),
-                  ),
                 ],
               ),
             ),
@@ -952,73 +1085,3 @@ class _MetricCell extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBg;
-  final String title;
-  final String subtitle;
-  final String? badge;
-  final Color? badgeColor;
-  final VoidCallback onTap;
-
-  const _ActionTile({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBg,
-    required this.title,
-    required this.subtitle,
-    this.badge,
-    this.badgeColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10, offset: const Offset(0, 2))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                  Text(subtitle, style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
-                ],
-              ),
-            ),
-            if (badge != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (badgeColor ?? AppColors.primary).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  badge!,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: badgeColor ?? AppColors.primary),
-                ),
-              ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.onSurfaceVariant, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-}
