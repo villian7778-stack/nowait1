@@ -270,25 +270,28 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
                       // ── Queue bento (only if open + subscribed) ───────────
                       if (canJoin) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _BentoCell(
-                                icon: Icons.group_outlined,
-                                value: '${shop.queueCount}',
-                                label: _l.tr('inQueueLabel'),
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: _BentoCell(
+                                  icon: Icons.group_outlined,
+                                  value: '${shop.queueCount}',
+                                  label: _l.tr('inQueueLabel'),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _BentoCell(
-                                icon: Icons.access_time_rounded,
-                                value: shop.openingHours ?? '—',
-                                label: 'Opening Hours',
-                                valueSize: 13,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _BentoCell(
+                                  icon: Icons.access_time_rounded,
+                                  value: shop.openingHours ?? '—',
+                                  label: 'Opening Hours',
+                                  valueSize: 13,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 24),
                       ],
@@ -705,6 +708,7 @@ class _BentoCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final cell = Container(
       width: fullWidth ? double.infinity : null,
+      height: fullWidth ? null : double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,

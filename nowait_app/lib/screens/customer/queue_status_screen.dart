@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
@@ -23,7 +24,7 @@ class QueueStatusScreen extends StatefulWidget {
 }
 
 class _QueueStatusScreenState extends State<QueueStatusScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _spinController;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -59,13 +60,22 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    WidgetsBinding.instance.addObserver(this);
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refresh());
     _refreshPublicQueue();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _l.removeListener(_onLocale);
     _spinController.dispose();
     _pulseController.dispose();
@@ -109,27 +119,60 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
           .toList();
       if (!mounted) return;
       setState(() => _queueList = items);
-      _updateCountdown(items);
+      await _updateCountdown(items);
     } catch (_) {}
   }
 
-  void _updateCountdown(List<PublicQueueItem> items) {
+  Future<void> _updateCountdown(List<PublicQueueItem> items) async {
     final serving = items.where((i) => i.status == 'serving').firstOrNull;
     if (serving == null) {
       _countdownTimer?.cancel();
-      setState(() { _countdownSeconds = 0; _lastServingToken = null; });
+      if (mounted) setState(() { _countdownSeconds = 0; _lastServingToken = null; });
+      _clearCountdownStorage();
       return;
     }
-    // Only reset when a NEW customer starts being served
     if (serving.tokenNumber != _lastServingToken) {
       _lastServingToken = serving.tokenNumber;
-      _countdownTimer?.cancel();
-      setState(() => _countdownSeconds = serving.totalDurationMinutes * 60);
-      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) return;
-        setState(() { if (_countdownSeconds > 0) _countdownSeconds--; });
-      });
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getInt('cntdwn_token_${_entry.shopId}');
+      final startMs = prefs.getInt('cntdwn_start_${_entry.shopId}');
+      final durSecs = prefs.getInt('cntdwn_dur_${_entry.shopId}');
+      int initialSecs;
+      if (savedToken == serving.tokenNumber && startMs != null && durSecs != null) {
+        // App was backgrounded/killed — compute remaining from wall-clock elapsed
+        final elapsed = (DateTime.now().millisecondsSinceEpoch - startMs) ~/ 1000;
+        initialSecs = (durSecs - elapsed).clamp(0, durSecs);
+      } else {
+        // Truly new serving token
+        initialSecs = serving.totalDurationMinutes * 60;
+        _saveCountdownToStorage(serving.tokenNumber, initialSecs);
+      }
+      _startCountdown(initialSecs);
     }
+  }
+
+  void _startCountdown(int seconds) {
+    _countdownTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _countdownSeconds = seconds);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() { if (_countdownSeconds > 0) _countdownSeconds--; });
+    });
+  }
+
+  void _saveCountdownToStorage(int token, int durationSecs) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('cntdwn_token_${_entry.shopId}', token);
+    await prefs.setInt('cntdwn_start_${_entry.shopId}', DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt('cntdwn_dur_${_entry.shopId}', durationSecs);
+  }
+
+  void _clearCountdownStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('cntdwn_token_${_entry.shopId}');
+    await prefs.remove('cntdwn_start_${_entry.shopId}');
+    await prefs.remove('cntdwn_dur_${_entry.shopId}');
   }
 
   /// Remaining wait seconds for a given queue item, based on live countdown.

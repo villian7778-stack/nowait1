@@ -1,0 +1,5 @@
+Run below file in sql in given arrangement
+
+0. schema
+1. migrate_all
+2. migrate_service_queue
