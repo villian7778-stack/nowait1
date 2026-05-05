@@ -310,7 +310,7 @@ class DirectionsChip extends StatefulWidget {
   const DirectionsChip({super.key, required this.lat, required this.lng});
 
   @override
-  State<_DirectionsChip> createState() => _DirectionsChipState();
+  State<DirectionsChip> createState() => _DirectionsChipState();
 }
 
 class _DirectionsChipState extends State<DirectionsChip> {
