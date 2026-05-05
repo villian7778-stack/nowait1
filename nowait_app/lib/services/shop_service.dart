@@ -75,6 +75,8 @@ class ShopService {
     String? state,
     int? avgWaitMinutes,
     String? openingHours,
+    double? latitude,
+    double? longitude,
   }) async {
     final body = <String, dynamic>{
       if (name != null) 'name': name,
@@ -84,6 +86,8 @@ class ShopService {
       if (state != null) 'state': state,
       if (avgWaitMinutes != null) 'avg_wait_minutes': avgWaitMinutes,
       if (openingHours != null) 'opening_hours': openingHours,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
     final res = await ApiClient.instance.put('/shops/$shopId', body: body);
     return ShopModel.fromJson(res);

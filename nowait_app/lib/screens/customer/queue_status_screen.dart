@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
+import '../../services/location_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
@@ -431,6 +432,11 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                               ],
                             ),
                           ),
+                          if (_entry.shopLatitude != null && _entry.shopLongitude != null)
+                            _QueueDirectionsButton(
+                              lat: _entry.shopLatitude!,
+                              lng: _entry.shopLongitude!,
+                            ),
                           const Icon(Icons.chevron_right_rounded,
                               color: AppColors.onSurfaceVariant),
                         ],
@@ -1090,6 +1096,62 @@ class _QueueListRow extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Small directions icon button for the shop header card on queue status screen.
+// Uses GestureDetector so taps are absorbed before reaching the parent card tap.
+class _QueueDirectionsButton extends StatefulWidget {
+  final double lat;
+  final double lng;
+
+  const _QueueDirectionsButton({required this.lat, required this.lng});
+
+  @override
+  State<_QueueDirectionsButton> createState() => _QueueDirectionsButtonState();
+}
+
+class _QueueDirectionsButtonState extends State<_QueueDirectionsButton> {
+  bool _launching = false;
+
+  Future<void> _launch() async {
+    if (_launching) return;
+    setState(() => _launching = true);
+    await LocationService.instance.launchDirections(widget.lat, widget.lng);
+    if (mounted) setState(() => _launching = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _launch,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 34,
+        height: 34,
+        margin: const EdgeInsets.only(right: 4),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: _launching
+            ? const Center(
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: AppColors.primary,
+                  ),
+                ),
+              )
+            : const Icon(
+                Icons.directions_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
       ),
     );
   }

@@ -36,9 +36,9 @@ class LocationService {
   static final LocationService instance = LocationService._();
   LocationService._();
 
-  static String get _apiKey => AppConfig.googleMapsApiKey;
-  static const _geocodeBase = 'maps.googleapis.com';
-  static const _placesBase = 'maps.googleapis.com';
+  // All Google API calls are proxied through the backend so the API key
+  // never needs to be enabled for direct mobile client access.
+  static String get _backendBase => AppConfig.baseUrl;
 
   /// Requests permission and fetches the device's current GPS location.
   /// Returns null if permission is denied or GPS unavailable.
@@ -74,13 +74,11 @@ class LocationService {
     }
   }
 
-  /// Reverse geocodes lat/lng to a human-readable address via Geocoding API.
+  /// Reverse geocodes lat/lng to a human-readable address via the backend proxy.
   Future<String?> getAddressFromCoords(double lat, double lng) async {
     try {
-      final uri = Uri.https(_geocodeBase, '/maps/api/geocode/json', {
-        'latlng': '$lat,$lng',
-        'key': _apiKey,
-      });
+      final uri = Uri.parse('$_backendBase/maps/geocode')
+          .replace(queryParameters: {'latlng': '$lat,$lng'});
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -93,15 +91,15 @@ class LocationService {
     return null;
   }
 
-  /// Returns Places Autocomplete suggestions for [query].
+  /// Returns Places Autocomplete suggestions for [query] via the backend proxy.
   /// Debouncing is the caller's responsibility.
   Future<List<PlacePrediction>> searchPlaces(String query) async {
     final trimmed = query.trim();
     if (trimmed.length < 2) return [];
     try {
-      final uri = Uri.https(_placesBase, '/maps/api/place/autocomplete/json', {
+      final uri = Uri.parse('$_backendBase/maps/places/autocomplete')
+          .replace(queryParameters: {
         'input': trimmed,
-        'key': _apiKey,
         'types': 'establishment|geocode',
         'components': 'country:in',
       });
@@ -123,13 +121,13 @@ class LocationService {
     return [];
   }
 
-  /// Fetches lat/lng and formatted address for a Place ID.
+  /// Fetches lat/lng and formatted address for a Place ID via the backend proxy.
   Future<LocationResult?> getPlaceDetails(String placeId) async {
     try {
-      final uri = Uri.https(_placesBase, '/maps/api/place/details/json', {
+      final uri = Uri.parse('$_backendBase/maps/place/details')
+          .replace(queryParameters: {
         'place_id': placeId,
         'fields': 'geometry,formatted_address',
-        'key': _apiKey,
       });
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
@@ -148,29 +146,63 @@ class LocationService {
     return null;
   }
 
-  /// Opens Google Maps navigation to [lat],[lng] in the device's map app.
+  /// Opens navigation to [lat],[lng] in the best available map app.
+  ///
+  /// Android priority:
+  ///   1. google.navigation: — Google Maps turn-by-turn (declared in AndroidManifest queries)
+  ///   2. geo: — default map app intent
+  ///   3. https://maps.google.com — browser fallback
+  ///
+  /// iOS priority:
+  ///   1. comgooglemaps:// — Google Maps app (declared in LSApplicationQueriesSchemes)
+  ///   2. maps:// — Apple Maps
+  ///   3. https://maps.apple.com — Apple Maps web fallback
   Future<bool> launchDirections(double lat, double lng) async {
-    // Android: uses Google Maps intent; iOS: same URL works or falls back to Apple Maps
-    final gMapsUri = Uri.parse(
+    if (kIsWeb) {
+      return _tryLaunch(Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+      ));
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // 1. Google Maps app on iOS
+      final googleMapsUri = Uri.parse(
+        'comgooglemaps://?daddr=$lat,$lng&directionsmode=driving',
+      );
+      if (await _tryLaunch(googleMapsUri)) return true;
+
+      // 2. Apple Maps
+      final appleMapsUri = Uri.parse('maps://?daddr=$lat,$lng');
+      if (await _tryLaunch(appleMapsUri)) return true;
+
+      // 3. Apple Maps web (always works on iOS Safari)
+      return _tryLaunch(Uri.parse(
+        'https://maps.apple.com/?daddr=$lat,$lng&dirflg=d',
+      ));
+    }
+
+    // Android
+    // 1. Google Maps turn-by-turn navigation
+    final navUri = Uri.parse('google.navigation:q=$lat,$lng&mode=d');
+    if (await _tryLaunch(navUri)) return true;
+
+    // 2. geo: URI — any installed map app
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Shop)');
+    if (await _tryLaunch(geoUri)) return true;
+
+    // 3. Google Maps web
+    return _tryLaunch(Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-    );
+    ));
+  }
+
+  Future<bool> _tryLaunch(Uri uri) async {
     try {
-      if (await canLaunchUrl(gMapsUri)) {
-        await launchUrl(gMapsUri, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
         return true;
       }
     } catch (_) {}
-
-    // Fallback: geo URI (works on most Android devices)
-    if (!kIsWeb) {
-      final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
-      try {
-        if (await canLaunchUrl(geoUri)) {
-          await launchUrl(geoUri, mode: LaunchMode.externalApplication);
-          return true;
-        }
-      } catch (_) {}
-    }
     return false;
   }
 }

@@ -210,6 +210,8 @@ class QueueEntry {
   final List<String> selectedServiceNames;
   final int? totalDurationMinutes;
   final double? totalServiceCost;
+  final double? shopLatitude;
+  final double? shopLongitude;
 
   QueueEntry({
     required this.id,
@@ -227,6 +229,8 @@ class QueueEntry {
     this.selectedServiceNames = const [],
     this.totalDurationMinutes,
     this.totalServiceCost,
+    this.shopLatitude,
+    this.shopLongitude,
   });
 
   factory QueueEntry.fromJson(Map<String, dynamic> json) {
@@ -282,6 +286,8 @@ class QueueEntry {
       selectedServiceNames: serviceNames,
       totalDurationMinutes: json['total_duration_minutes'] as int?,
       totalServiceCost: totalCost,
+      shopLatitude: (json['shop_latitude'] as num?)?.toDouble(),
+      shopLongitude: (json['shop_longitude'] as num?)?.toDouble(),
     );
   }
 }

@@ -231,10 +231,13 @@ def get_my_queue_status(user_id: str, shop_id: Optional[str] = None) -> list:
     result = query.execute()
     enriched = []
     for entry in result.data or []:
-        shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes").eq("id", entry["shop_id"]))
+        shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes, latitude, longitude").eq("id", entry["shop_id"]))
         shop_data = shop.data or {"name": "Unknown", "avg_wait_minutes": 10}
         avg = shop_data["avg_wait_minutes"]
-        enriched.append(_build_entry_response(entry, shop_data["name"], avg))
+        response = _build_entry_response(entry, shop_data["name"], avg)
+        response["shop_latitude"] = shop_data.get("latitude")
+        response["shop_longitude"] = shop_data.get("longitude")
+        enriched.append(response)
     return enriched
 
 
