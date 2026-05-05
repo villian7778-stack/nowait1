@@ -104,27 +104,14 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     _searchFocusNode.unfocus();
     setState(() {
       _showSuggestions = false;
-      _searchController.text = prediction.mainText;
-      _isGeocoding = false;
+      _searchController.text =
+          prediction.mainText.isNotEmpty ? prediction.mainText : prediction.description;
+      _isGeocoding = true;
       _isLoadingGPS = false;
       _hasConfirmed = false;
     });
 
-    // Nominatim results already carry lat/lng — navigate instantly, no extra call.
-    if (prediction.lat != null && prediction.lng != null) {
-      final latlng = LatLng(prediction.lat!, prediction.lng!);
-      _mapController.move(latlng, _selectedZoom);
-      setState(() {
-        _center = latlng;
-        _address = prediction.description.isNotEmpty
-            ? prediction.description
-            : prediction.mainText;
-      });
-      return;
-    }
-
-    // Fallback for any non-Nominatim predictions that only carry a placeId.
-    setState(() => _isGeocoding = true);
+    // Fetch lat/lng for the selected place via Google Place Details.
     final result =
         await LocationService.instance.getPlaceDetails(prediction.placeId);
     if (!mounted) return;
@@ -136,12 +123,14 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         _center = latlng;
         _address = result.address.isNotEmpty
             ? result.address
-            : _coordFallback(result.lat, result.lng);
+            : prediction.description.isNotEmpty
+                ? prediction.description
+                : _coordFallback(result.lat, result.lng);
         _isGeocoding = false;
       });
     } else {
       setState(() => _isGeocoding = false);
-      _showError('Could not load location details. Try again.');
+      _showError('Could not load location details. Check your connection and try again.');
     }
   }
 

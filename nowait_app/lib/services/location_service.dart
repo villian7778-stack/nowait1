@@ -4,29 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-
-// Nominatim (OpenStreetMap) is used for search and reverse-geocoding so the
-// feature works without a Google Maps API key on the backend.
-// Terms: max 1 req/s, must send a descriptive User-Agent.
-const _kNominatim = 'https://nominatim.openstreetmap.org';
-const _kUserAgent = 'NowaitApp/1.0 (contact@nowait.app)';
+import '../config/app_config.dart';
 
 class PlacePrediction {
   final String placeId;
   final String description;
   final String mainText;
   final String secondaryText;
-  // Populated by Nominatim search so no second API call is needed on tap.
-  final double? lat;
-  final double? lng;
 
   const PlacePrediction({
     required this.placeId,
     required this.description,
     required this.mainText,
     required this.secondaryText,
-    this.lat,
-    this.lng,
   });
 }
 
@@ -46,10 +36,10 @@ class LocationService {
   static final LocationService instance = LocationService._();
   LocationService._();
 
+  static String get _base => AppConfig.baseUrl;
+
   // ── GPS ────────────────────────────────────────────────────────────────────
 
-  /// Requests permission and fetches the device's current GPS location.
-  /// Returns null if permission is denied or GPS unavailable.
   Future<LocationResult?> getCurrentLocation() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return null;
@@ -80,67 +70,61 @@ class LocationService {
     }
   }
 
-  // ── Nominatim: reverse geocode ──────────────────────────────────────────────
+  // ── Reverse geocode ─────────────────────────────────────────────────────────
 
-  /// Returns a human-readable address for [lat]/[lng] via Nominatim.
+  /// Returns a human-readable address via the backend → Google Geocoding proxy.
   Future<String?> getAddressFromCoords(double lat, double lng) async {
     try {
-      final uri = Uri.parse('$_kNominatim/reverse').replace(queryParameters: {
-        'lat': '$lat',
-        'lon': '$lng',
-        'format': 'json',
-        'zoom': '16', // street-level detail
-      });
-      final response = await http
-          .get(uri, headers: {'User-Agent': _kUserAgent}).timeout(
-        const Duration(seconds: 10),
-      );
+      final uri = Uri.parse('$_base/maps/geocode')
+          .replace(queryParameters: {'latlng': '$lat,$lng'});
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final displayName = data['display_name'] as String?;
-        if (displayName != null && displayName.isNotEmpty) {
-          return _shortenAddress(displayName);
+        // Google Geocoding returns status + results[].formatted_address
+        if (data['status'] == 'OK') {
+          final results = data['results'] as List?;
+          if (results != null && results.isNotEmpty) {
+            return results.first['formatted_address'] as String?;
+          }
         }
       }
     } catch (_) {}
     return null;
   }
 
-  // ── Nominatim: forward search ───────────────────────────────────────────────
+  // ── Places Autocomplete ─────────────────────────────────────────────────────
 
-  /// Returns up to 5 place predictions for [query] via Nominatim.
-  /// Each result already carries lat/lng so no second round-trip is needed.
+  /// Returns up to 5 place predictions via the backend → Google Places proxy.
+  /// Caller is responsible for debouncing.
   Future<List<PlacePrediction>> searchPlaces(String query) async {
     final trimmed = query.trim();
     if (trimmed.length < 2) return [];
     try {
-      final uri = Uri.parse('$_kNominatim/search').replace(queryParameters: {
-        'q': trimmed,
-        'format': 'json',
-        'limit': '5',
-        'countrycodes': 'in',
-        'addressdetails': '0',
-        'dedupe': '1',
+      final uri = Uri.parse('$_base/maps/places/autocomplete')
+          .replace(queryParameters: {
+        'input': trimmed,
+        // 'geocode' returns cities, regions and addresses; no pipe needed.
+        'types': 'geocode',
+        'components': 'country:in',
       });
-      final response = await http
-          .get(uri, headers: {'User-Agent': _kUserAgent}).timeout(
-        const Duration(seconds: 10),
-      );
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final list = jsonDecode(response.body) as List;
-        return list.map((p) {
-          final displayName = (p['display_name'] as String?) ?? '';
-          final parts = displayName.split(', ');
-          final mainText = parts.isNotEmpty ? parts.first : displayName;
-          final secondaryText =
-              parts.length > 1 ? parts.skip(1).join(', ') : '';
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // Surface a useful exception when the key is wrong / quota exceeded.
+        final status = data['status'] as String? ?? '';
+        if (status != 'OK' && status != 'ZERO_RESULTS') {
+          throw Exception('Places API: $status');
+        }
+        final predictions = data['predictions'] as List? ?? [];
+        return predictions.map((p) {
+          final fmt = (p['structured_formatting'] as Map?) ?? {};
           return PlacePrediction(
-            placeId: p['place_id']?.toString() ?? '',
-            description: displayName,
-            mainText: mainText,
-            secondaryText: secondaryText,
-            lat: double.tryParse(p['lat'] as String? ?? ''),
-            lng: double.tryParse(p['lon'] as String? ?? ''),
+            placeId: p['place_id'] as String? ?? '',
+            description: p['description'] as String? ?? '',
+            mainText: fmt['main_text'] as String? ?? '',
+            secondaryText: fmt['secondary_text'] as String? ?? '',
           );
         }).toList();
       }
@@ -148,25 +132,40 @@ class LocationService {
     return [];
   }
 
-  /// No-op for Nominatim predictions (lat/lng already in PlacePrediction).
-  /// Kept for compatibility if Google-style placeIds are ever used.
+  // ── Place Details ───────────────────────────────────────────────────────────
+
+  /// Resolves a Google place_id to lat/lng + address via the backend proxy.
   Future<LocationResult?> getPlaceDetails(String placeId) async {
+    if (placeId.isEmpty) return null;
+    try {
+      final uri =
+          Uri.parse('$_base/maps/place/details').replace(queryParameters: {
+        'place_id': placeId,
+        'fields': 'geometry,formatted_address',
+      });
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final status = data['status'] as String? ?? '';
+        if (status != 'OK') return null;
+        final result = data['result'] as Map?;
+        if (result != null) {
+          final loc =
+              (result['geometry'] as Map)['location'] as Map;
+          return LocationResult(
+            lat: (loc['lat'] as num).toDouble(),
+            lng: (loc['lng'] as num).toDouble(),
+            address: result['formatted_address'] as String? ?? '',
+          );
+        }
+      }
+    } catch (_) {}
     return null;
   }
 
   // ── Directions ──────────────────────────────────────────────────────────────
 
-  /// Opens navigation to [lat],[lng] in the best available map app.
-  ///
-  /// Android priority:
-  ///   1. google.navigation: — Google Maps turn-by-turn
-  ///   2. geo: — default map app
-  ///   3. https://maps.google.com — browser fallback
-  ///
-  /// iOS priority:
-  ///   1. comgooglemaps:// — Google Maps app
-  ///   2. maps:// — Apple Maps
-  ///   3. https://maps.apple.com — web fallback
   Future<bool> launchDirections(double lat, double lng) async {
     if (kIsWeb) {
       return _tryLaunch(Uri.parse(
@@ -208,15 +207,5 @@ class LocationService {
       }
     } catch (_) {}
     return false;
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  // Nominatim returns very long comma-separated strings; keep a readable slice.
-  String _shortenAddress(String full) {
-    final parts = full.split(', ');
-    // Drop the last part if it's just "India" and keep up to 5 segments.
-    final filtered = parts.where((p) => p != 'India').take(5).toList();
-    return filtered.join(', ');
   }
 }
