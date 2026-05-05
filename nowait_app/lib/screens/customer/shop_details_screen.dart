@@ -7,7 +7,8 @@ import '../../widgets/gradient_button.dart';
 import '../../services/shop_service.dart';
 import '../../services/staff_service.dart';
 import '../../services/locale_service.dart';
-import '../../widgets/shop_card.dart' show showSchemeSheet;
+import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip;
+import '../../services/location_service.dart';
 import 'join_queue_sheet.dart';
 import 'token_screen.dart';
 
@@ -235,6 +236,12 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                               AppColors.onSurfaceVariant),
                         ],
                       ),
+                      // Directions button — shown when shop has saved coordinates
+                      if (shop.latitude != null && shop.longitude != null) ...[
+                        const SizedBox(height: 12),
+                        _DirectionsButton(
+                            lat: shop.latitude!, lng: shop.longitude!),
+                      ],
                       const SizedBox(height: 20),
 
                       // ── Subscription not active warning ───────────────────
@@ -837,3 +844,65 @@ class _ServiceTile extends StatelessWidget {
   }
 }
 
+// ── Directions button for shop detail page ────────────────────────────────────
+
+class _DirectionsButton extends StatefulWidget {
+  final double lat;
+  final double lng;
+
+  const _DirectionsButton({required this.lat, required this.lng});
+
+  @override
+  State<_DirectionsButton> createState() => _DirectionsButtonState();
+}
+
+class _DirectionsButtonState extends State<_DirectionsButton> {
+  bool _loading = false;
+
+  Future<void> _launch() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    await LocationService.instance.launchDirections(widget.lat, widget.lng);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _launch,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _loading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : const Icon(Icons.directions_rounded,
+                    size: 16, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              'Get Directions',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -202,7 +202,7 @@ class ShopCard extends StatelessWidget {
                       if (!hideDirections &&
                           shop.latitude != null &&
                           shop.longitude != null)
-                        _DirectionsChip(
+                        DirectionsChip(
                           lat: shop.latitude!,
                           lng: shop.longitude!,
                         ),
@@ -301,18 +301,19 @@ class ShopCard extends StatelessWidget {
   }
 }
 
-/// Tappable chip that opens Google Maps navigation for the shop.
-class _DirectionsChip extends StatefulWidget {
+/// Tappable chip that opens Google Maps navigation for a location.
+/// Public so ShopDetailsScreen and compact cards can reuse it.
+class DirectionsChip extends StatefulWidget {
   final double lat;
   final double lng;
 
-  const _DirectionsChip({required this.lat, required this.lng});
+  const DirectionsChip({super.key, required this.lat, required this.lng});
 
   @override
   State<_DirectionsChip> createState() => _DirectionsChipState();
 }
 
-class _DirectionsChipState extends State<_DirectionsChip> {
+class _DirectionsChipState extends State<DirectionsChip> {
   bool _launching = false;
 
   Future<void> _launch() async {

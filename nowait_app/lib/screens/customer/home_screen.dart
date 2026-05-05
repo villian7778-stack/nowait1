@@ -9,6 +9,7 @@ import '../../services/locale_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/shop_card.dart' show DirectionsChip;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
@@ -1027,6 +1028,11 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            // Directions chip — only when shop has saved coordinates
+            if (shop.latitude != null && shop.longitude != null) ...[
+              const SizedBox(height: 6),
+              DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
+            ],
           ],
         ),
       ),

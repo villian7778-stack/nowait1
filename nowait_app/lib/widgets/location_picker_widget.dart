@@ -42,6 +42,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   final _searchFocusNode = FocusNode();
   List<PlacePrediction> _suggestions = [];
   bool _showSuggestions = false;
+  bool _isSearching = false;   // true while the Places API call is in-flight
+  bool _searchReturnedEmpty = false; // true when query had results but none came back
   Timer? _searchDebounce;
   Timer? _geocodeDebounce;
   Timer? _suggestionHideTimer;
@@ -81,15 +83,26 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
     if (value.trim().length < 2) {
-      if (mounted) setState(() { _suggestions = []; _showSuggestions = false; });
+      if (mounted) {
+        setState(() {
+          _suggestions = [];
+          _showSuggestions = false;
+          _isSearching = false;
+          _searchReturnedEmpty = false;
+        });
+      }
       return;
     }
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
+    // Show spinner immediately so the user knows something is happening.
+    if (mounted) setState(() { _isSearching = true; _searchReturnedEmpty = false; });
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
       final results = await LocationService.instance.searchPlaces(value);
       if (mounted) {
         setState(() {
           _suggestions = results;
           _showSuggestions = results.isNotEmpty;
+          _isSearching = false;
+          _searchReturnedEmpty = results.isEmpty;
         });
       }
     });
@@ -104,6 +117,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     _searchFocusNode.unfocus();
     setState(() {
       _showSuggestions = false;
+      _isSearching = false;
+      _searchReturnedEmpty = false;
       _searchController.text =
           prediction.mainText.isNotEmpty ? prediction.mainText : prediction.description;
       _isGeocoding = true;
@@ -534,13 +549,22 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           ),
                           child: Row(
                             children: [
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                child: Icon(
-                                  Icons.search_rounded,
-                                  size: 18,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: _isSearching
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.primary,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.search_rounded,
+                                        size: 18,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
                               ),
                               Expanded(
                                 child: TextField(
@@ -577,9 +601,12 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                   ),
                                   onPressed: () {
                                     _searchController.clear();
+                                    _searchDebounce?.cancel();
                                     setState(() {
                                       _suggestions = [];
                                       _showSuggestions = false;
+                                      _isSearching = false;
+                                      _searchReturnedEmpty = false;
                                     });
                                   },
                                   padding: EdgeInsets.zero,
@@ -648,6 +675,47 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+
+                // "No results" feedback
+                if (_searchReturnedEmpty &&
+                    !_isSearching &&
+                    _searchController.text.trim().length >= 2)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_off_rounded,
+                              size: 16, color: AppColors.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'No results for "${_searchController.text.trim()}"',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
