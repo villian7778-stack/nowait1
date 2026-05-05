@@ -73,7 +73,16 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     return _stateCityData[_selectedState] ?? [];
   }
 
+  String? get _nameError {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return null;
+    if (name.contains(RegExp(r'\d'))) return 'Name cannot contain numbers';
+    if (name.length < 2) return 'Name must be at least 2 characters';
+    return null;
+  }
+
   bool get _isValid {
+    if (_nameError != null) return false;
     if (widget.isCompletingProfile) {
       return _nameController.text.trim().isNotEmpty &&
           _selectedState.isNotEmpty &&
@@ -81,8 +90,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           _selectedRole.isNotEmpty &&
           _agreedToTerms;
     }
+    final phoneLen = _phoneController.text.length;
     return _nameController.text.trim().isNotEmpty &&
-        _phoneController.text.length == 10 &&
+        phoneLen >= 10 &&
+        phoneLen <= 11 &&
         _selectedState.isNotEmpty &&
         _selectedCity.isNotEmpty &&
         _selectedRole.isNotEmpty &&
@@ -233,6 +244,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             hint: _l.tr('fullNameHint'),
                             icon: Icons.person_outline_rounded,
                             textCapitalization: TextCapitalization.words,
+                            errorText: _nameError,
                           ),
                           if (!widget.isCompletingProfile) ...[
                             const SizedBox(height: 14),
@@ -388,6 +400,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     required String hint,
     required IconData icon,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    String? errorText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,6 +422,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, size: 20, color: AppColors.onSurfaceVariant),
+            errorText: errorText,
+            errorStyle: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppColors.error,
+            ),
           ),
         ),
       ],
@@ -584,7 +602,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
+                    LengthLimitingTextInputFormatter(11),
                   ],
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(

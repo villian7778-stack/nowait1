@@ -48,6 +48,8 @@ class ShopService {
     int avgWaitMinutes = 10,
     List<Map<String, dynamic>> services = const [],
     String? openingHours,
+    double? latitude,
+    double? longitude,
   }) async {
     final res = await ApiClient.instance.post('/shops', body: {
       'name': name,
@@ -58,6 +60,8 @@ class ShopService {
       'avg_wait_minutes': avgWaitMinutes,
       'services': services,
       if (openingHours != null) 'opening_hours': openingHours,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     });
     return ShopModel.fromJson(res);
   }

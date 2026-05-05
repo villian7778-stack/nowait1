@@ -63,7 +63,14 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
       if (!mounted) return;
       setState(() => _isJoining = false);
       if (e.statusCode == 409) {
-        _showAlreadyInQueueDialog();
+        // Distinguish same-shop vs cross-shop 409
+        if (e.message.contains('another shop')) {
+          _showCrossShopDialog(e.message);
+        } else {
+          _showAlreadyInQueueDialog();
+        }
+      } else if (e.statusCode == 403) {
+        _showBanDialog(e.message);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
@@ -74,6 +81,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
     }
   }
 
+  // Same-shop duplicate: offer to navigate to existing queue status
   Future<void> _showAlreadyInQueueDialog() async {
     final goToQueue = await showDialog<bool>(
       context: context,
@@ -106,13 +114,12 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
     );
 
     if (goToQueue == true && mounted) {
-      // Fetch the existing entry and navigate to QueueStatusScreen
       try {
         final entries = await QueueService.instance
             .getMyStatus(shopId: widget.shop.id);
         final existing = entries.isNotEmpty ? entries.first : null;
         if (existing != null && mounted) {
-          Navigator.pop(context); // close sheet
+          Navigator.pop(context);
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -123,6 +130,73 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
         if (mounted) Navigator.pop(context);
       }
     }
+  }
+
+  // Cross-shop duplicate: user is in a queue at a different shop
+  void _showCrossShopDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Already in a Queue',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK',
+                style: GoogleFonts.inter(
+                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 2-hour cancellation cooldown is active
+  void _showBanDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.timer_off_outlined,
+                  color: AppColors.error, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Queue Join Restricted',
+              style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK',
+                style: GoogleFonts.inter(
+                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

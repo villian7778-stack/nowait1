@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/locale_service.dart';
@@ -9,6 +10,8 @@ import 'screens/owner/owner_dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load .env before anything else; mergeWith keeps dart-define values as fallback
+  await dotenv.load(fileName: '.env', mergeWith: {});
   await Future.wait([
     AuthService.instance.loadFromStorage(),
     LocaleService.instance.loadFromStorage(),

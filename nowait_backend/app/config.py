@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # silently drop unknown keys (e.g. GOOGLE_MAP_KEY used by Flutter)
 
 
 settings = Settings()

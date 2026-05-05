@@ -29,6 +29,8 @@ class ShopCreate(BaseModel):
     images: List[str] = Field(default=[], max_length=10)
     description: str = Field(default="", max_length=1000)
     services: List[ServiceCreate] = []
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class ShopUpdate(BaseModel):
@@ -41,6 +43,8 @@ class ShopUpdate(BaseModel):
     opening_hours: Optional[str] = Field(default=None, max_length=100)
     images: Optional[List[str]] = Field(default=None, max_length=10)
     description: Optional[str] = Field(default=None, max_length=1000)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class PromotionInShop(BaseModel):
@@ -70,6 +74,8 @@ class ShopSummary(BaseModel):
     description: str
     is_promoted: bool = False
     active_promotions: List[PromotionInShop] = []
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class ShopDetail(ShopSummary):

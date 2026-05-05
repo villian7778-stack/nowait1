@@ -26,7 +26,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _phoneController.addListener(() {
-      setState(() => _isValid = _phoneController.text.length == 10);
+      final len = _phoneController.text.length;
+      setState(() => _isValid = len >= 10 && len <= 11);
     });
     _l.addListener(_onLocale);
   }
@@ -249,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 keyboardType: TextInputType.phone,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(10),
+                                  LengthLimitingTextInputFormatter(11),
                                 ],
                                 style: GoogleFonts.inter(
                                   fontSize: 16,

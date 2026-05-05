@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException
@@ -70,6 +70,61 @@ def _calculate_total_duration(service_ids: list, avg_wait: int) -> int:
     return total if total > 0 else avg_wait
 
 
+def _check_queue_ban(user_id: str) -> None:
+    """Raise 403 if user is within the 2-hour cancellation cooldown period."""
+    try:
+        profile = execute_one(
+            supabase.table("profiles").select("queue_ban_until").eq("id", user_id)
+        )
+        if not profile.data:
+            return
+        ban_until_str = profile.data.get("queue_ban_until")
+        if not ban_until_str:
+            return
+        ban_until = datetime.fromisoformat(ban_until_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        if ban_until > now:
+            remaining_mins = max(1, int((ban_until - now).total_seconds() / 60))
+            unit = "minute" if remaining_mins == 1 else "minutes"
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"You cannot join any queue for another {remaining_mins} {unit} "
+                    "due to a recent cancellation."
+                ),
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # If column missing (pre-migration) or parse fails, allow join
+
+
+def _check_existing_active_queue(user_id: str, current_shop_id: str) -> None:
+    """Raise 409 if user is already active in a queue at a *different* shop.
+
+    Same-shop duplicate detection is handled by the join_queue_v2 RPC and the
+    per-(shop, user) unique index, so we exclude the current shop here to
+    preserve the existing error message for that case.
+    """
+    existing = (
+        supabase.table("queue_entries")
+        .select("id, shop_id")
+        .eq("user_id", user_id)
+        .in_("status", ["waiting", "serving"])
+        .neq("shop_id", current_shop_id)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "You are already in a queue at another shop. "
+                "Please cancel or complete that queue first."
+            ),
+        )
+
+
 def _build_entry_response(entry: dict, shop_name: str, avg_wait: int) -> dict:
     if entry["status"] == "serving":
         position = 1
@@ -120,6 +175,11 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
 
     avg_wait = _get_avg_wait(shop_id)
     total_duration = _calculate_total_duration(unique_ids, avg_wait) if unique_ids else None
+
+    # Enforce cancellation cooldown before hitting the DB
+    _check_queue_ban(user_id)
+    # Enforce one active queue per user across all shops
+    _check_existing_active_queue(user_id, shop_id)
 
     try:
         result = supabase.rpc("join_queue_v2", {
@@ -193,6 +253,14 @@ def cancel_queue(entry_id: str, user_id: str) -> dict:
         "entry_id": entry_id,
         "event_type": "cancelled",
     }).execute()
+
+    # Apply 2-hour cooldown: user cannot join any queue until ban_until
+    try:
+        ban_until = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+        supabase.table("profiles").update({"queue_ban_until": ban_until}).eq("id", user_id).execute()
+    except Exception as ban_err:
+        logger.warning("Failed to apply queue ban for user %s: %s", user_id, ban_err)
+
     return {"message": "Queue entry cancelled successfully", "entry_id": entry_id}
 
 

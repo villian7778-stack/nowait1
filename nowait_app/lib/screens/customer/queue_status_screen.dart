@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
@@ -23,7 +24,7 @@ class QueueStatusScreen extends StatefulWidget {
 }
 
 class _QueueStatusScreenState extends State<QueueStatusScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _spinController;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -59,13 +60,22 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    WidgetsBinding.instance.addObserver(this);
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refresh());
     _refreshPublicQueue();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _l.removeListener(_onLocale);
     _spinController.dispose();
     _pulseController.dispose();
@@ -109,27 +119,60 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
           .toList();
       if (!mounted) return;
       setState(() => _queueList = items);
-      _updateCountdown(items);
+      await _updateCountdown(items);
     } catch (_) {}
   }
 
-  void _updateCountdown(List<PublicQueueItem> items) {
+  Future<void> _updateCountdown(List<PublicQueueItem> items) async {
     final serving = items.where((i) => i.status == 'serving').firstOrNull;
     if (serving == null) {
       _countdownTimer?.cancel();
-      setState(() { _countdownSeconds = 0; _lastServingToken = null; });
+      if (mounted) setState(() { _countdownSeconds = 0; _lastServingToken = null; });
+      _clearCountdownStorage();
       return;
     }
-    // Only reset when a NEW customer starts being served
     if (serving.tokenNumber != _lastServingToken) {
       _lastServingToken = serving.tokenNumber;
-      _countdownTimer?.cancel();
-      setState(() => _countdownSeconds = serving.totalDurationMinutes * 60);
-      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) return;
-        setState(() { if (_countdownSeconds > 0) _countdownSeconds--; });
-      });
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getInt('cntdwn_token_${_entry.shopId}');
+      final startMs = prefs.getInt('cntdwn_start_${_entry.shopId}');
+      final durSecs = prefs.getInt('cntdwn_dur_${_entry.shopId}');
+      int initialSecs;
+      if (savedToken == serving.tokenNumber && startMs != null && durSecs != null) {
+        // App was backgrounded/killed — compute remaining from wall-clock elapsed
+        final elapsed = (DateTime.now().millisecondsSinceEpoch - startMs) ~/ 1000;
+        initialSecs = (durSecs - elapsed).clamp(0, durSecs);
+      } else {
+        // Truly new serving token
+        initialSecs = serving.totalDurationMinutes * 60;
+        _saveCountdownToStorage(serving.tokenNumber, initialSecs);
+      }
+      _startCountdown(initialSecs);
     }
+  }
+
+  void _startCountdown(int seconds) {
+    _countdownTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _countdownSeconds = seconds);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() { if (_countdownSeconds > 0) _countdownSeconds--; });
+    });
+  }
+
+  void _saveCountdownToStorage(int token, int durationSecs) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('cntdwn_token_${_entry.shopId}', token);
+    await prefs.setInt('cntdwn_start_${_entry.shopId}', DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt('cntdwn_dur_${_entry.shopId}', durationSecs);
+  }
+
+  void _clearCountdownStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('cntdwn_token_${_entry.shopId}');
+    await prefs.remove('cntdwn_start_${_entry.shopId}');
+    await prefs.remove('cntdwn_dur_${_entry.shopId}');
   }
 
   /// Remaining wait seconds for a given queue item, based on live countdown.
@@ -150,9 +193,42 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(_l.tr('leaveQueue'),
             style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-        content: Text(
-          _l.tr('loseSpot', params: {'shop': _entry.shopName}),
-          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _l.tr('loseSpot', params: {'shop': _entry.shopName}),
+              style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.errorContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      color: AppColors.error, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'After cancelling, you will not be able to join any queue at any shop for 2 hours.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -173,9 +249,10 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                   Navigator.pop(context);
                   messenger.showSnackBar(
                     SnackBar(
-                      content: const Text('Queue cancelled successfully'),
-                      backgroundColor: AppColors.tertiary,
+                      content: const Text('Queue cancelled. You cannot join any queue for 2 hours.'),
+                      backgroundColor: AppColors.onSurfaceVariant,
                       behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 5),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
@@ -232,17 +309,6 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
         return _l.tr('almostThere');
       default:
         return _l.tr('aheadCount', params: {'n': '${_entry.peopleAhead}'});
-    }
-  }
-
-  String get _statusBadgeText {
-    switch (_entry.status) {
-      case QueueStatus.yourTurn:
-        return _l.tr('yourTurnBadge');
-      case QueueStatus.almostThere:
-        return _l.tr('top3');
-      default:
-        return _l.tr('waiting');
     }
   }
 
@@ -753,7 +819,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      _l.tr('yourToken'),
+                      'QUEUE POSITION',
                       style: GoogleFonts.inter(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
@@ -763,7 +829,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _entry.token,
+                    '${_entry.position}',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 48,
                       fontWeight: FontWeight.w800,
@@ -771,6 +837,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                       letterSpacing: -2,
                     ),
                   ),
+                  const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 3),
@@ -780,7 +847,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      _statusBadgeText,
+                      'Token ${_entry.token}',
                       style: GoogleFonts.inter(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,

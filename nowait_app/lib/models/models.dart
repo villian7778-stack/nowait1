@@ -48,6 +48,8 @@ class ShopModel {
   final bool queuePaused;
   final int? maxQueueSize;
   final String? openingHours;
+  final double? latitude;
+  final double? longitude;
 
   ShopModel({
     required this.id,
@@ -71,6 +73,8 @@ class ShopModel {
     this.queuePaused = false,
     this.maxQueueSize,
     this.openingHours,
+    this.latitude,
+    this.longitude,
   });
 
   bool get canAcceptQueue => isOpen && hasActiveSubscription && !queuePaused;
@@ -114,6 +118,8 @@ class ShopModel {
       queuePaused: json['queue_paused'] as bool? ?? false,
       maxQueueSize: json['max_queue_size'] as int?,
       openingHours: json['opening_hours'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
     );
   }
 }

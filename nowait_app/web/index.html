@@ -31,16 +31,16 @@
 
   <title>nowait_app</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JavaScript API — required by google_maps_flutter_web.
+    Must load synchronously BEFORE Flutter bootstraps so the map widget
+    can find the global `google.maps` object on first render.
+    Restrict this key to your domain in Google Cloud Console.
+  -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDIkgkZpGRx4Um-W_YULlZYr2QOUJaB"></script>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
