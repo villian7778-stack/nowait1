@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins.
     # Default "*" is safe for a mobile-only API; restrict to your domain in web deployments.
     ALLOWED_ORIGINS: str = "*"
+    GOOGLE_MAP_KEY: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
-        extra = "ignore"  # silently drop unknown keys (e.g. GOOGLE_MAP_KEY used by Flutter)
+        extra = "ignore"
 
 
 settings = Settings()

@@ -10,7 +10,9 @@ import '../../services/shop_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
+import '../../services/location_service.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/location_picker_widget.dart';
 import '../../widgets/searchable_picker_sheet.dart';
 
 class EditShopScreen extends StatefulWidget {
@@ -44,6 +46,10 @@ class _EditShopScreenState extends State<EditShopScreen> {
   final List<XFile> _newImages = [];
   bool _isUploadingImages = false;
 
+  double? _latitude;
+  double? _longitude;
+  String _locationAddress = '';
+
   final _categories = [
     'Salon',
     'Beauty Parlour',
@@ -64,6 +70,9 @@ class _EditShopScreenState extends State<EditShopScreen> {
     _selectedCity = widget.shop.city;
     _existingImages = List<String>.from(widget.shop.images);
     _existingServices = List<ServiceModel>.from(widget.shop.services);
+    _latitude = widget.shop.latitude;
+    _longitude = widget.shop.longitude;
+    _locationAddress = widget.shop.address;
     _loadStateCityData();
   }
 
@@ -140,7 +149,9 @@ class _EditShopScreenState extends State<EditShopScreen> {
       (int.tryParse(_avgWaitController.text) ?? widget.shop.avgWaitMinutes) !=
           widget.shop.avgWaitMinutes ||
       _openingHoursController.text.trim() !=
-          (widget.shop.openingHours ?? '9:00 AM - 8:00 PM');
+          (widget.shop.openingHours ?? '9:00 AM - 8:00 PM') ||
+      _latitude != widget.shop.latitude ||
+      _longitude != widget.shop.longitude;
 
   bool get _hasImageChanges => _removedUrls.isNotEmpty || _newImages.isNotEmpty;
 
@@ -240,6 +251,8 @@ class _EditShopScreenState extends State<EditShopScreen> {
           openingHours: _openingHoursController.text.trim().isNotEmpty
               ? _openingHoursController.text.trim()
               : null,
+          latitude: _latitude,
+          longitude: _longitude,
         );
       } else {
         updated = await ShopService.instance.getShop(widget.shop.id);
@@ -510,6 +523,38 @@ class _EditShopScreenState extends State<EditShopScreen> {
                               child: Text('No services yet. Tap + Add to add one.', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
                             ),
                         ]),
+                        const SizedBox(height: 24),
+                        _sectionTitle('Shop Location'),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Pin your exact location so customers can get directions.',
+                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 14),
+                        LocationPreviewCard(
+                          lat: _latitude,
+                          lng: _longitude,
+                          address: _locationAddress,
+                          onTap: () async {
+                            final result = await Navigator.push<LocationResult>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => LocationPickerPage(
+                                  initialLat: _latitude,
+                                  initialLng: _longitude,
+                                  initialAddress: _locationAddress.isNotEmpty ? _locationAddress : null,
+                                ),
+                              ),
+                            );
+                            if (result != null && mounted) {
+                              setState(() {
+                                _latitude = result.lat;
+                                _longitude = result.lng;
+                                _locationAddress = result.address;
+                              });
+                            }
+                          },
+                        ),
                         const SizedBox(height: 24),
                         _sectionTitle('Gallery'),
                         const SizedBox(height: 6),

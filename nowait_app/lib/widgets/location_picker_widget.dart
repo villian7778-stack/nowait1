@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import '../services/location_service.dart';
 import '../theme/app_theme.dart';
 
@@ -31,7 +30,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   static const _defaultZoom = 4.5;
   static const _selectedZoom = 15.0;
 
-  GoogleMapController? _mapController;
+  late final MapController _mapController;
   LatLng _center = _indiaCenter;
   String _address = '';
   bool _isGeocoding = false;
@@ -42,11 +41,13 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   final _searchFocusNode = FocusNode();
   List<PlacePrediction> _suggestions = [];
   bool _showSuggestions = false;
-  Timer? _debounce;
+  Timer? _searchDebounce;
+  Timer? _geocodeDebounce;
 
   @override
   void initState() {
     super.initState();
+    _mapController = MapController();
     if (widget.initialLat != null && widget.initialLng != null) {
       _center = LatLng(widget.initialLat!, widget.initialLng!);
       _address = widget.initialAddress ?? '';
@@ -60,22 +61,23 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _searchDebounce?.cancel();
+    _geocodeDebounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _mapController?.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
   void _onSearchChanged(String value) {
-    _debounce?.cancel();
+    _searchDebounce?.cancel();
     if (value.trim().length < 2) {
       if (mounted) setState(() { _suggestions = []; _showSuggestions = false; });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
       final results = await LocationService.instance.searchPlaces(value);
       if (mounted) {
         setState(() {
@@ -100,11 +102,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
     if (result != null) {
       final latlng = LatLng(result.lat, result.lng);
-      await _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: latlng, zoom: _selectedZoom),
-        ),
-      );
+      _mapController.move(latlng, _selectedZoom);
       setState(() {
         _center = latlng;
         _address = result.address;
@@ -114,6 +112,34 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       setState(() => _isGeocoding = false);
       _showError('Could not load location details. Try again.');
     }
+  }
+
+  // ── Camera move → debounced reverse geocode ─────────────────────────────────
+
+  void _onPositionChanged(MapCamera camera, bool hasGesture) {
+    if (_hasConfirmed) return;
+    if (!hasGesture) return; // ignore programmatic moves that already set _address
+
+    final newCenter = camera.center;
+    setState(() {
+      _center = newCenter;
+      _address = '';
+      _isGeocoding = true;
+    });
+
+    _geocodeDebounce?.cancel();
+    _geocodeDebounce = Timer(const Duration(milliseconds: 600), () async {
+      final addr = await LocationService.instance.getAddressFromCoords(
+        newCenter.latitude,
+        newCenter.longitude,
+      );
+      if (mounted) {
+        setState(() {
+          _address = addr ?? '';
+          _isGeocoding = false;
+        });
+      }
+    });
   }
 
   // ── GPS ─────────────────────────────────────────────────────────────────────
@@ -126,11 +152,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
     if (result != null) {
       final latlng = LatLng(result.lat, result.lng);
-      await _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: latlng, zoom: _selectedZoom),
-        ),
-      );
+      _mapController.move(latlng, _selectedZoom);
       setState(() {
         _center = latlng;
         _address = result.address;
@@ -139,24 +161,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     } else {
       setState(() => _isLoadingGPS = false);
       _showError('Could not get location. Check that GPS is enabled and permission is granted.');
-    }
-  }
-
-  // ── Camera idle → reverse geocode ───────────────────────────────────────────
-
-  Future<void> _onCameraIdle() async {
-    if (_hasConfirmed) return;
-    setState(() { _isGeocoding = true; _address = ''; });
-
-    final addr = await LocationService.instance.getAddressFromCoords(
-      _center.latitude,
-      _center.longitude,
-    );
-    if (mounted) {
-      setState(() {
-        _address = addr ?? '';
-        _isGeocoding = false;
-      });
     }
   }
 
@@ -193,28 +197,25 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       backgroundColor: AppColors.surface,
       body: Stack(
         children: [
-          // ── Full-screen map ────────────────────────────────────────────────
+          // ── Full-screen OpenStreetMap (no API key required) ────────────────
           Positioned.fill(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: _center,
-                zoom: widget.initialLat != null ? _selectedZoom : _defaultZoom,
-              ),
-              onMapCreated: (c) => _mapController = c,
-              onCameraMove: (pos) {
-                if (mounted) setState(() => _center = pos.target);
-              },
-              onCameraIdle: _onCameraIdle,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
-              compassEnabled: false,
-              // Allow the map to capture gestures inside any scroll view
-              gestureRecognizers: {
-                Factory<OneSequenceGestureRecognizer>(
-                  () => EagerGestureRecognizer(),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _center,
+                initialZoom: widget.initialLat != null ? _selectedZoom : _defaultZoom,
+                onPositionChanged: _onPositionChanged,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
-              },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.nowait.nowait_app',
+                  maxZoom: 19,
+                ),
+              ],
             ),
           ),
 
@@ -224,7 +225,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Offset slightly above center to match the pin tip
                   Transform.translate(
                     offset: const Offset(0, -20),
                     child: Column(
@@ -278,7 +278,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                 ),
                         ),
                         const SizedBox(height: 2),
-                        // Arrow connecting bubble to pin
                         Container(
                           width: 2,
                           height: 8,
@@ -301,7 +300,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: Row(
                     children: [
-                      // Back button
                       _MapButton(
                         onTap: () => Navigator.pop(context, null),
                         child: const Icon(
@@ -311,7 +309,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Search field
                       Expanded(
                         child: Container(
                           height: 46,
@@ -483,7 +480,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             ),
           ),
 
-          // ── GPS button (right side, middle) ───────────────────────────────
+          // ── GPS button (right side) ───────────────────────────────────────
           Positioned(
             right: 12,
             bottom: 200,
@@ -533,7 +530,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Address row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -619,7 +615,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Confirm button
                   SizedBox(
                     width: double.infinity,
                     height: 50,

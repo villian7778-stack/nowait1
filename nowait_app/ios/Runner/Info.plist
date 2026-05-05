@@ -4,6 +4,19 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- geolocator: location permission strings (required on iOS, app crashes without them) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NOWAIT uses your location to help you find nearby shops and set your shop's location on the map.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NOWAIT uses your location to help you find nearby shops and set your shop's location on the map.</string>
+	<!-- url_launcher: schemes that canLaunchUrl is allowed to query on iOS 9+ -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>googlemaps</string>
+		<string>maps</string>
+		<string>https</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

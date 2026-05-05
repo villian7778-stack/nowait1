@@ -27,7 +27,7 @@ flutter test --name "description text"          # Run tests matching a name
 
 Flutter widget tests only — no backend tests exist in `nowait_app/`.
 
-**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker` — no state management library, no DI framework.
+**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker`, `flutter_map`, `latlong2`, `geolocator`, `url_launcher` — no state management library, no DI framework. Map rendering uses OpenStreetMap via `flutter_map` (no API key required). Geocoding and Places search are proxied through the backend (`/maps/*` endpoints) using the server's `GOOGLE_MAP_KEY`.
 
 **To set the backend URL** (defaults to `http://localhost:8000`):
 ```bash
@@ -238,6 +238,9 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/analytics/shops/{id}/summary` | Owner/Staff | Summary stats (`period`: today/week/month) |
 | GET | `/analytics/shops/{id}/hourly` | Owner/Staff | Hourly customer counts (`days`: 1–30) |
 | GET | `/analytics/shops/{id}/staff` | Owner | Per-staff performance metrics |
+| GET | `/maps/geocode` | — | Reverse-geocode `latlng=lat,lng` → address (proxies Google Geocoding API using server `GOOGLE_MAP_KEY`) |
+| GET | `/maps/places/autocomplete` | — | Places autocomplete `input=query` → predictions |
+| GET | `/maps/place/details` | — | Place details `place_id=...` → lat/lng + address |
 
 ### Database Tables
 
