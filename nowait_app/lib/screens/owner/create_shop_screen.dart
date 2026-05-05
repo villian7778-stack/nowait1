@@ -12,6 +12,8 @@ import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/searchable_picker_sheet.dart';
+import '../../widgets/location_picker_widget.dart';
+import '../../services/location_service.dart';
 
 class CreateShopScreen extends StatefulWidget {
   const CreateShopScreen({super.key});
@@ -27,6 +29,11 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
   String _selectedState = '';
   String _selectedCity = '';
   Map<String, List<String>> _stateCityData = {};
+
+  // Location (optional — enables "Get Directions" for customers)
+  double? _latitude;
+  double? _longitude;
+  String _locationAddress = '';
 
   // Item 9: Time pickers replace text field for opening hours
   TimeOfDay _openTime = const TimeOfDay(hour: 9, minute: 0);
@@ -152,8 +159,24 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     if (picked != null) setState(() => _closeTime = picked);
   }
 
+  String? get _shopNameError {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return null;
+    if (!name.contains(RegExp(r'[a-zA-Z]'))) return 'Shop name must contain letters';
+    if (name.length < 2) return 'Shop name must be at least 2 characters';
+    return null;
+  }
+
+  String? get _staffInputError {
+    final v = _staffInputController.text.trim();
+    if (v.isEmpty) return null;
+    if (v.contains(RegExp(r'\d'))) return 'Staff name cannot contain numbers';
+    return null;
+  }
+
   bool get _isValid =>
       _nameController.text.trim().isNotEmpty &&
+      _shopNameError == null &&
       _selectedCategory != null &&
       _addressController.text.trim().isNotEmpty &&
       _selectedState.isNotEmpty &&
@@ -187,6 +210,8 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
         avgWaitMinutes: 10,
         services: servicesList,
         openingHours: _openingHoursString,
+        latitude: _latitude,
+        longitude: _longitude,
       );
 
       // Upload selected images to Supabase Storage
@@ -287,7 +312,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                         _sectionTitle('General Details'),
                         const SizedBox(height: 14),
                         _buildSection([
-                          _underlineField(_nameController, 'SHOP NAME', 'e.g. Luxe Cuts Studio'),
+                          _underlineField(_nameController, 'SHOP NAME', 'e.g. Luxe Cuts Studio', TextCapitalization.sentences, TextInputType.text, _shopNameError),
                           const SizedBox(height: 16),
                           _categoryDropdown(),
                           const SizedBox(height: 16),
@@ -380,6 +405,22 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                        ]),
+                        const SizedBox(height: 24),
+                        _sectionTitle('Shop Location'),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Optional — lets customers get directions to your shop.',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 14),
+                        _buildSection([
+                          LocationPreviewCard(
+                            lat: _latitude,
+                            lng: _longitude,
+                            address: _locationAddress,
+                            onTap: _openLocationPicker,
                           ),
                         ]),
                         const SizedBox(height: 24),
@@ -561,11 +602,13 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                   'STAFF NAME',
                                   'e.g. Rahul',
                                   TextCapitalization.words,
+                                  TextInputType.text,
+                                  _staffInputError,
                                 ),
                               ),
                               const SizedBox(width: 10),
                               GestureDetector(
-                                onTap: () => _addStaffEntry(_staffInputController.text),
+                                onTap: _staffInputError == null ? () => _addStaffEntry(_staffInputController.text) : null,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
@@ -664,6 +707,30 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     );
   }
 
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<LocationResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          initialLat: _latitude,
+          initialLng: _longitude,
+          initialAddress: _locationAddress.isNotEmpty ? _locationAddress : null,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _latitude = result.lat;
+        _longitude = result.lng;
+        _locationAddress = result.address;
+        // Auto-fill address field if empty
+        if (_addressController.text.trim().isEmpty) {
+          _addressController.text = result.address;
+        }
+      });
+    }
+  }
+
   Widget _buildLabel(String text) {
     return Text(
       text,
@@ -709,6 +776,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     String hint, [
     TextCapitalization cap = TextCapitalization.sentences,
     TextInputType keyboard = TextInputType.text,
+    String? errorText,
   ]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -730,7 +798,11 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
             border: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.outline, width: 0.5)),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.4), width: 0.8)),
             focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary, width: 1.5)),
+            errorBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.error, width: 1.5)),
+            focusedErrorBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.error, width: 1.5)),
             contentPadding: const EdgeInsets.only(bottom: 6),
+            errorText: errorText,
+            errorStyle: GoogleFonts.inter(fontSize: 11, color: AppColors.error),
           ),
           style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
         ),

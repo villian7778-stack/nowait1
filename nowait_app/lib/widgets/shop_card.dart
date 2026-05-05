@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
+import '../services/location_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/category_theme.dart';
 import 'status_badge.dart';
@@ -9,12 +10,15 @@ class ShopCard extends StatelessWidget {
   final ShopModel shop;
   final VoidCallback onTap;
   final VoidCallback? onSchemeTap;
+  /// When true, suppress the Directions button (e.g. on owner dashboard).
+  final bool hideDirections;
 
   const ShopCard({
     super.key,
     required this.shop,
     required this.onTap,
     this.onSchemeTap,
+    this.hideDirections = false,
   });
 
   @override
@@ -194,6 +198,14 @@ class ShopCard extends StatelessWidget {
                         ),
                         WaitTimeBadge(minutes: shop.queueCount * shop.avgWaitMinutes),
                       ],
+                      // Directions button — only when shop has saved coordinates
+                      if (!hideDirections &&
+                          shop.latitude != null &&
+                          shop.longitude != null)
+                        _DirectionsChip(
+                          lat: shop.latitude!,
+                          lng: shop.longitude!,
+                        ),
                     ],
                   ),
                   if (shop.activeScheme != null &&
@@ -284,6 +296,69 @@ class ShopCard extends StatelessWidget {
       ),
       child: Center(
         child: Icon(CategoryTheme.icon(shop.category), color: color, size: 32),
+      ),
+    );
+  }
+}
+
+/// Tappable chip that opens Google Maps navigation for the shop.
+class _DirectionsChip extends StatefulWidget {
+  final double lat;
+  final double lng;
+
+  const _DirectionsChip({required this.lat, required this.lng});
+
+  @override
+  State<_DirectionsChip> createState() => _DirectionsChipState();
+}
+
+class _DirectionsChipState extends State<_DirectionsChip> {
+  bool _launching = false;
+
+  Future<void> _launch() async {
+    if (_launching) return;
+    setState(() => _launching = true);
+    await LocationService.instance.launchDirections(widget.lat, widget.lng);
+    if (mounted) setState(() => _launching = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _launch,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _launching
+                ? const SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : const Icon(Icons.directions_rounded, size: 11, color: AppColors.primary),
+            const SizedBox(width: 4),
+            const Text(
+              'Directions',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

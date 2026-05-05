@@ -116,8 +116,17 @@ class _EditShopScreenState extends State<EditShopScreen> {
     super.dispose();
   }
 
+  String? get _shopNameError {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return null;
+    if (!name.contains(RegExp(r'[a-zA-Z]'))) return 'Shop name must contain letters';
+    if (name.length < 2) return 'Shop name must be at least 2 characters';
+    return null;
+  }
+
   bool get _isValid =>
       _nameController.text.trim().isNotEmpty &&
+      _shopNameError == null &&
       _addressController.text.trim().isNotEmpty &&
       _selectedState.isNotEmpty &&
       _selectedCity.isNotEmpty;
@@ -328,7 +337,8 @@ class _EditShopScreenState extends State<EditShopScreen> {
                         const SizedBox(height: 14),
                         _buildSection([
                           _field(_nameController, 'SHOP NAME',
-                              'e.g. Luxe Cuts Studio'),
+                              'e.g. Luxe Cuts Studio',
+                              errorText: _shopNameError),
                           const SizedBox(height: 16),
                           _categoryDropdown(),
                           const SizedBox(height: 16),
@@ -747,6 +757,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
     String hint, {
     TextCapitalization cap = TextCapitalization.sentences,
     TextInputType keyboard = TextInputType.text,
+    String? errorText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -781,7 +792,15 @@ class _EditShopScreenState extends State<EditShopScreen> {
             focusedBorder: const UnderlineInputBorder(
                 borderSide:
                     BorderSide(color: AppColors.primary, width: 1.5)),
+            errorBorder: const UnderlineInputBorder(
+                borderSide:
+                    BorderSide(color: AppColors.error, width: 1.5)),
+            focusedErrorBorder: const UnderlineInputBorder(
+                borderSide:
+                    BorderSide(color: AppColors.error, width: 1.5)),
             contentPadding: const EdgeInsets.only(bottom: 6),
+            errorText: errorText,
+            errorStyle: GoogleFonts.inter(fontSize: 11, color: AppColors.error),
           ),
           style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
         ),

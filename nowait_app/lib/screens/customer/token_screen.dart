@@ -278,7 +278,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    _l.tr('yourToken'),
+                                    'QUEUE POSITION',
                                     style: GoogleFonts.inter(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w800,
@@ -289,7 +289,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  widget.token,
+                                  '${widget.position}',
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 52,
                                     fontWeight: FontWeight.w800,
@@ -304,7 +304,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    _l.tr('positionLabel', params: {'n': '${widget.position}'}),
+                                    'Token ${widget.token}',
                                     style: GoogleFonts.inter(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w700,
