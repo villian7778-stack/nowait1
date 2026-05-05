@@ -640,67 +640,69 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     const SizedBox(height: 20),
                   ],
 
-                  // Coming / cancel buttons
-                  SizedBox(
-                    width: double.infinity,
-                    child: _comingNotified
-                        ? Container(
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color:
-                                  AppColors.tertiary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle_rounded,
-                                      color: AppColors.tertiary, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text('Shop notified — on your way!',
-                                      style: GoogleFonts.inter(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.tertiary)),
-                                ],
+                  // Coming / cancel buttons — hidden when customer is being served
+                  if (_entry.status != QueueStatus.yourTurn) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: _comingNotified
+                          ? Container(
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.tertiary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                            ),
-                          )
-                        : _isComing
-                            ? Container(
-                                height: 52,
-                                decoration: BoxDecoration(
-                                    gradient: AppColors.primaryGradient135,
-                                    borderRadius:
-                                        BorderRadius.circular(16)),
-                                child: const Center(
-                                    child: SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2))),
-                              )
-                            : GradientButton(
-                                label: _l.tr('imComing'),
-                                onPressed: _notifyComing,
-                                icon: Icons.directions_walk_rounded,
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_rounded,
+                                        color: AppColors.tertiary, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text('Shop notified — on your way!',
+                                        style: GoogleFonts.inter(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.tertiary)),
+                                  ],
+                                ),
                               ),
-                  ),
-                  const SizedBox(height: 10),
-                  _isCancelling
-                      ? const Center(child: CircularProgressIndicator())
-                      : TextButton(
-                          onPressed: _cancelQueue,
-                          child: Text(
-                            _l.tr('cancelQueue'),
-                            style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.error),
+                            )
+                          : _isComing
+                              ? Container(
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                      gradient: AppColors.primaryGradient135,
+                                      borderRadius:
+                                          BorderRadius.circular(16)),
+                                  child: const Center(
+                                      child: SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2))),
+                                )
+                              : GradientButton(
+                                  label: _l.tr('imComing'),
+                                  onPressed: _notifyComing,
+                                  icon: Icons.directions_walk_rounded,
+                                ),
+                    ),
+                    const SizedBox(height: 10),
+                    _isCancelling
+                        ? const Center(child: CircularProgressIndicator())
+                        : TextButton(
+                            onPressed: _cancelQueue,
+                            child: Text(
+                              _l.tr('cancelQueue'),
+                              style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.error),
+                            ),
                           ),
-                        ),
+                  ],
                 ],
               ),
             ),

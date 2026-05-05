@@ -6,7 +6,7 @@ import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
-import '../../widgets/shop_card.dart' show showSchemeSheet;
+import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip;
 import 'shop_details_screen.dart';
 
 IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
@@ -719,6 +719,8 @@ class _PromotedShopCard extends StatelessWidget {
                         _promoInfoBadge(Icons.group_outlined, '${shop.queueCount}'),
                         _promoInfoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
                       ],
+                      if (shop.latitude != null && shop.longitude != null)
+                        DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
                     ],
                   ),
                   // Scheme badge
@@ -902,22 +904,18 @@ class _ShopListCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 7),
-                  Row(
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 4,
                     children: [
-                      Expanded(
-                        child: Wrap(
-                          spacing: 5,
-                          runSpacing: 4,
-                          children: [
-                            // Open / Closed / Subscription required
-                            _StatusPill(shop: shop),
-                            if (canJoin) ...[
-                              _infoBadge(Icons.group_outlined, '${shop.queueCount}'),
-                              _infoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
-                            ],
-                          ],
-                        ),
-                      ),
+                      // Open / Closed / Subscription required
+                      _StatusPill(shop: shop),
+                      if (canJoin) ...[
+                        _infoBadge(Icons.group_outlined, '${shop.queueCount}'),
+                        _infoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
+                      ],
+                      if (shop.latitude != null && shop.longitude != null)
+                        DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
                     ],
                   ),
                   if (shop.activeScheme != null &&
