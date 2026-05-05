@@ -93,8 +93,55 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       final profileComplete =
           await AuthService.instance.verifyOtp(widget.phone, _otp);
       if (!mounted) return;
+
+      if (profileComplete && widget.isNewUser) {
+        // Phone is already registered — warn the user and go back to create account
+        _clearOtp();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'This mobile number is already registered. Please use Login instead.',
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        // Log out the session we just created — user should log in explicitly
+        await AuthService.instance.logout();
+        if (!mounted) return;
+        Navigator.of(context).pop(); // back to CreateAccountScreen
+        return;
+      }
+
       if (!profileComplete) {
-        // New user - need to complete profile
+        // New user verified — if we have pending data from the create-account
+        // form, complete the profile automatically without showing the form again.
+        final auth = AuthService.instance;
+        if (auth.pendingName != null &&
+            auth.pendingState != null &&
+            auth.pendingCity != null &&
+            auth.pendingRole != null) {
+          await auth.completeProfile(
+            auth.pendingName!,
+            auth.pendingState!,
+            auth.pendingCity!,
+            auth.pendingRole!,
+          );
+          if (!mounted) return;
+          final isOwner = AuthService.instance.isOwner;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) =>
+                  isOwner ? const OwnerDashboardScreen() : const HomeScreen(),
+            ),
+            (route) => false,
+          );
+          return;
+        }
+        // No pending data (e.g. user came from login flow) — show the form
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) =>
@@ -104,7 +151,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         );
         return;
       }
-      // Existing user - go to appropriate home
+
+      // Existing user logging in normally — go to appropriate home
       final isOwner = AuthService.instance.isOwner;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
@@ -130,6 +178,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
     } finally {
       if (mounted) setState(() => _isVerifying = false);
+    }
+  }
+
+  void _clearOtp() {
+    for (final c in _controllers) {
+      c.clear();
+    }
+    if (mounted) {
+      _focusNodes[0].requestFocus();
+      setState(() {});
     }
   }
 
