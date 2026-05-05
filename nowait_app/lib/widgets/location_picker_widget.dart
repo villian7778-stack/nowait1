@@ -105,12 +105,28 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     setState(() {
       _showSuggestions = false;
       _searchController.text = prediction.mainText;
-      _isGeocoding = true;
+      _isGeocoding = false;
       _isLoadingGPS = false;
       _hasConfirmed = false;
     });
 
-    final result = await LocationService.instance.getPlaceDetails(prediction.placeId);
+    // Nominatim results already carry lat/lng — navigate instantly, no extra call.
+    if (prediction.lat != null && prediction.lng != null) {
+      final latlng = LatLng(prediction.lat!, prediction.lng!);
+      _mapController.move(latlng, _selectedZoom);
+      setState(() {
+        _center = latlng;
+        _address = prediction.description.isNotEmpty
+            ? prediction.description
+            : prediction.mainText;
+      });
+      return;
+    }
+
+    // Fallback for any non-Nominatim predictions that only carry a placeId.
+    setState(() => _isGeocoding = true);
+    final result =
+        await LocationService.instance.getPlaceDetails(prediction.placeId);
     if (!mounted) return;
 
     if (result != null) {
