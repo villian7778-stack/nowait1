@@ -124,20 +124,16 @@ def get_batch_review_summaries(shop_ids: list[str]) -> dict[str, dict]:
     """Batch-fetch review summaries for a list of shop IDs (used in list_shops)."""
     if not shop_ids:
         return {}
-    try:
-        result = (
-            supabase.table("shop_reviews")
-            .select("shop_id, rating")
-            .in_("shop_id", shop_ids)
-            .execute()
-        )
-        by_shop: dict[str, list[int]] = {}
-        for r in (result.data or []):
-            # Skip null ratings
-            if r.get("rating") is not None:
-                by_shop.setdefault(r["shop_id"], []).append(int(r["rating"]))
-    except Exception:
-        by_shop = {}
+    result = (
+        supabase.table("shop_reviews")
+        .select("shop_id, rating")
+        .in_("shop_id", shop_ids)
+        .execute()
+    )
+    by_shop: dict[str, list[int]] = {}
+    for r in (result.data or []):
+        if r.get("rating") is not None:
+            by_shop.setdefault(r["shop_id"], []).append(int(r["rating"]))
 
     summaries: dict[str, dict] = {}
     for sid in shop_ids:

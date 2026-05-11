@@ -126,7 +126,12 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
         queue_by_shop.setdefault(e["shop_id"], []).append(e)
 
     # Batch query 4: review summaries
-    review_summaries = review_service.get_batch_review_summaries(shop_ids)
+    try:
+        review_summaries = review_service.get_batch_review_summaries(shop_ids)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("get_batch_review_summaries failed: %s", e)
+        review_summaries = {}
 
     shops = []
     for shop in raw_shops:

@@ -16,6 +16,7 @@ class ReviewsScreen extends StatefulWidget {
 class _ReviewsScreenState extends State<ReviewsScreen> {
   List<ReviewModel> _reviews = [];
   int _total = 0;
+  double _avgRating = 0.0;
   int _page = 1;
   bool _loading = true;
   bool _loadingMore = false;
@@ -48,6 +49,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         setState(() {
           _reviews = data['reviews'] as List<ReviewModel>;
           _total = data['total'] as int;
+          _avgRating = (data['avg_rating'] as num?)?.toDouble() ?? 0.0;
           _hasMore = data['has_more'] as bool;
           _loading = false;
         });
@@ -123,7 +125,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                         Column(
                           children: [
                             Text(
-                              widget.shop.avgReviewRating.toStringAsFixed(1),
+                              _fmtRating(_avgRating),
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 48,
                                 fontWeight: FontWeight.w800,
@@ -132,10 +134,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            _StarRow(rating: widget.shop.avgReviewRating, size: 18),
+                            _StarRow(rating: _avgRating, size: 18),
                             const SizedBox(height: 4),
                             Text(
-                              '${_total > 0 ? _total : widget.shop.reviewCount} review${widget.shop.reviewCount == 1 ? '' : 's'}',
+                              '$_total review${_total == 1 ? '' : 's'}',
                               style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
                             ),
                           ],
@@ -306,6 +308,8 @@ class _ReviewTile extends StatelessWidget {
     );
   }
 }
+
+String _fmtRating(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
 
 /// Renders 5 stars filled/half/outline based on [rating].
 class _StarRow extends StatelessWidget {

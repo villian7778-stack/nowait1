@@ -147,7 +147,7 @@ class ShopCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (shop.reviewCount > 0) ...[
+                  if (shop.reviewCount > 0 || shop.avgReviewRating > 0) ...[
                     const SizedBox(height: 4),
                     GestureDetector(
                       onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -161,21 +161,23 @@ class ShopCard extends StatelessWidget {
                           _starRow(shop.avgReviewRating, size: 13),
                           const SizedBox(width: 4),
                           Text(
-                            shop.avgReviewRating.toStringAsFixed(1),
+                            _fmtRating(shop.avgReviewRating),
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface,
                             ),
                           ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '(${shop.reviewCount})',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.onSurfaceVariant,
+                          if (shop.reviewCount > 0) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '(${shop.reviewCount})',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: AppColors.onSurfaceVariant,
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(width: 5),
                           Text(
                             'View',
@@ -346,6 +348,8 @@ class ShopCard extends StatelessWidget {
       ),
     );
   }
+
+  String _fmtRating(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
 
   Widget _starRow(double rating, {double size = 13}) {
     return Row(

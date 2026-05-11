@@ -904,7 +904,7 @@ class _RatingRow extends StatelessWidget {
         }),
         const SizedBox(width: 6),
         Text(
-          rating.toStringAsFixed(1),
+          rating % 1 == 0 ? rating.toInt().toString() : rating.toStringAsFixed(1),
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w700,

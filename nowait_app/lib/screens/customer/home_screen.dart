@@ -1000,7 +1000,7 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            if (shop.reviewCount > 0) ...[
+            if (shop.reviewCount > 0 || shop.avgReviewRating > 0) ...[
               const SizedBox(height: 4),
               GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -1013,7 +1013,7 @@ class _CompactShopCard extends StatelessWidget {
                     ..._compactStars(shop.avgReviewRating),
                     const SizedBox(width: 3),
                     Text(
-                      shop.avgReviewRating.toStringAsFixed(1),
+                      _fmtRating(shop.avgReviewRating),
                       style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.onSurface),
                     ),
                   ],
@@ -1080,6 +1080,8 @@ class _CompactShopCard extends StatelessWidget {
       child: Icon(CategoryTheme.icon(shop.category), color: color, size: 22),
     );
   }
+
+  String _fmtRating(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
 
   List<Widget> _compactStars(double rating) {
     return List.generate(5, (i) {
