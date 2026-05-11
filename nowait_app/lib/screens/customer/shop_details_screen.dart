@@ -8,7 +8,7 @@ import '../../services/shop_service.dart';
 import '../../services/staff_service.dart';
 import '../../services/review_service.dart';
 import '../../services/locale_service.dart';
-import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip;
+import '../../widgets/shop_card.dart' show showSchemeSheet;
 import '../../services/location_service.dart';
 import 'join_queue_sheet.dart';
 import 'token_screen.dart';
