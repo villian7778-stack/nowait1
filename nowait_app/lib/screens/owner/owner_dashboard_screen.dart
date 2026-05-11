@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
@@ -140,11 +141,20 @@ class _ShopsTab extends StatefulWidget {
 class _ShopsTabState extends State<_ShopsTab> {
   ShopModel? _shop;
   bool _isLoading = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadShop();
+    // Refresh shop queue count every 10 seconds so the card stays live
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadShop());
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadShop() async {

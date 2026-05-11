@@ -11,6 +11,7 @@ import '../../services/locale_service.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet;
 import '../../services/location_service.dart';
 import 'join_queue_sheet.dart';
+import 'reviews_screen.dart';
 import 'token_screen.dart';
 
 class ShopDetailsScreen extends StatefulWidget {
@@ -31,10 +32,8 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   ShopModel? _shop;
   bool _isLoadingShop = false;
   List<StaffMember> _staff = [];
-  List<ReviewModel> _reviews = [];
   int _reviewTotal = 0;
-  bool _reviewsLoading = false;
-  bool _showAllReviews = false;
+  double _reviewAvg = 0.0;
   final _l = LocaleService.instance;
 
   @override
@@ -69,19 +68,15 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
   Future<void> _loadReviews() async {
     if (_shop == null) return;
-    setState(() => _reviewsLoading = true);
     try {
-      final data = await ReviewService.instance.getReviews(_shop!.id, limit: 5);
+      final s = await ReviewService.instance.getReviewSummary(_shop!.id);
       if (mounted) {
         setState(() {
-          _reviews = data['reviews'] as List<ReviewModel>;
-          _reviewTotal = data['total'] as int;
-          _reviewsLoading = false;
+          _reviewTotal = (s['total_reviews'] as num?)?.toInt() ?? 0;
+          _reviewAvg = (s['average_rating'] as num?)?.toDouble() ?? 0.0;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _reviewsLoading = false);
-    }
+    } catch (_) {}
   }
 
   @override
@@ -246,15 +241,17 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      // Star rating row
-                      if (shop.reviewCount > 0)
+                      // Star rating row — uses live avg from loaded reviews
+                      if (_reviewTotal > 0 || shop.reviewCount > 0)
                         GestureDetector(
-                          onTap: () => setState(() => _showAllReviews = !_showAllReviews),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ReviewsScreen(shop: shop),
+                          )),
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 6),
                             child: _RatingRow(
-                              rating: shop.avgReviewRating,
-                              count: shop.reviewCount,
+                              rating: _reviewTotal > 0 ? _reviewAvg : shop.avgReviewRating,
+                              count: _reviewTotal > 0 ? _reviewTotal : shop.reviewCount,
                             ),
                           ),
                         ),
@@ -432,17 +429,6 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                         ),
                         const SizedBox(height: 20),
                       ],
-
-                      // ── Reviews section ───────────────────────────────────
-                      _ReviewsSection(
-                        reviews: _reviews,
-                        total: _reviewTotal,
-                        isLoading: _reviewsLoading,
-                        shopId: shop.id,
-                        avgRating: shop.avgReviewRating,
-                      ),
-                      if (_reviews.isNotEmpty || _reviewsLoading)
-                        const SizedBox(height: 24),
 
                       // ── Services ──────────────────────────────────────────
                       Text(
@@ -918,7 +904,7 @@ class _RatingRow extends StatelessWidget {
         }),
         const SizedBox(width: 6),
         Text(
-          rating.toStringAsFixed(1),
+          rating % 1 == 0 ? rating.toInt().toString() : rating.toStringAsFixed(1),
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -935,296 +921,6 @@ class _RatingRow extends StatelessWidget {
             size: 14, color: AppColors.onSurfaceVariant),
       ],
     );
-  }
-}
-
-// ── Reviews section ───────────────────────────────────────────────────────────
-
-class _ReviewsSection extends StatefulWidget {
-  final List<ReviewModel> reviews;
-  final int total;
-  final bool isLoading;
-  final String shopId;
-  final double avgRating;
-
-  const _ReviewsSection({
-    required this.reviews,
-    required this.total,
-    required this.isLoading,
-    required this.shopId,
-    required this.avgRating,
-  });
-
-  @override
-  State<_ReviewsSection> createState() => _ReviewsSectionState();
-}
-
-class _ReviewsSectionState extends State<_ReviewsSection> {
-  List<ReviewModel> _allReviews = [];
-  int _page = 1;
-  bool _loadingMore = false;
-  bool _hasMore = false;
-  bool _expanded = false;
-
-  @override
-  void didUpdateWidget(_ReviewsSection old) {
-    super.didUpdateWidget(old);
-    if (old.reviews != widget.reviews) {
-      _allReviews = List.from(widget.reviews);
-      _hasMore = widget.total > widget.reviews.length;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _allReviews = List.from(widget.reviews);
-    _hasMore = widget.total > widget.reviews.length;
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final data = await ReviewService.instance.getReviews(
-        widget.shopId,
-        page: _page + 1,
-        limit: 10,
-      );
-      final more = data['reviews'] as List<ReviewModel>;
-      setState(() {
-        _page++;
-        _allReviews.addAll(more);
-        _hasMore = data['has_more'] as bool;
-        _loadingMore = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.isLoading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionHeader(),
-          const SizedBox(height: 12),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-            ),
-          ),
-        ],
-      );
-    }
-    if (widget.total == 0) return const SizedBox.shrink();
-
-    final displayed = _expanded ? _allReviews : _allReviews.take(3).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionHeader(),
-        const SizedBox(height: 12),
-        ...displayed.map((r) => _ReviewCard(review: r)),
-        if (_hasMore || (!_expanded && _allReviews.length > 3)) ...[
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () {
-              setState(() => _expanded = true);
-              if (_hasMore) _loadMore();
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_loadingMore)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                    )
-                  else
-                    const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    _loadingMore
-                        ? 'Loading…'
-                        : 'See all ${widget.total} reviews',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _sectionHeader() {
-    return Row(
-      children: [
-        Text(
-          'Reviews',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
-              const SizedBox(width: 3),
-              Text(
-                '${widget.avgRating.toStringAsFixed(1)} · ${widget.total}',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReviewCard extends StatelessWidget {
-  final ReviewModel review;
-
-  const _ReviewCard({required this.review});
-
-  @override
-  Widget build(BuildContext context) {
-    // Show first name only for privacy
-    final firstName = review.userName.trim().split(' ').first;
-    final displayName = firstName.isNotEmpty ? firstName : 'Customer';
-    final initial = displayName[0].toUpperCase();
-    final ago = _timeAgo(review.createdAt);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.shadowPrimary,
-              blurRadius: 8,
-              offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Avatar
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient135,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.onSurface),
-                    ),
-                    Text(
-                      ago,
-                      style: GoogleFonts.inter(
-                          fontSize: 11, color: AppColors.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              // Star rating
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(5, (i) {
-                  return Icon(
-                    i < review.rating
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    size: 14,
-                    color: i < review.rating
-                        ? const Color(0xFFFFC107)
-                        : AppColors.outline,
-                  );
-                }),
-              ),
-            ],
-          ),
-          if (review.review != null && review.review!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              review.review!,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppColors.onSurface,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays >= 365) return '${diff.inDays ~/ 365}y ago';
-    if (diff.inDays >= 30) return '${diff.inDays ~/ 30}mo ago';
-    if (diff.inDays >= 1) return '${diff.inDays}d ago';
-    if (diff.inHours >= 1) return '${diff.inHours}h ago';
-    return 'Just now';
   }
 }
 

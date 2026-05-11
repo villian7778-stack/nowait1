@@ -5,6 +5,7 @@ import '../services/location_service.dart';
 import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/category_theme.dart';
+import '../screens/customer/reviews_screen.dart';
 import 'status_badge.dart';
 
 class ShopCard extends StatelessWidget {
@@ -147,50 +148,8 @@ class ShopCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (shop.reviewCount > 0) ...[
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: () => showReviewsSheet(context, shop: shop),
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.star_rounded,
-                              size: 14, color: Color(0xFFFFC107)),
-                          const SizedBox(width: 3),
-                          Text(
-                            shop.avgReviewRating.toStringAsFixed(1),
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '(${shop.reviewCount})',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '· ${shop.reviewCount} review${shop.reviewCount == 1 ? '' : 's'}',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(Icons.chevron_right_rounded,
-                              size: 13, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ],
+                  const SizedBox(height: 4),
+                  ShopRatingRow(shop: shop, starSize: 13),
                   if (shop.address.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Row(
@@ -346,6 +305,104 @@ class ShopCard extends StatelessWidget {
       ),
     );
   }
+
+}
+
+// ── Shared rating row — fetches summary lazily so it works even when the shop
+// list API returned 0 for avg/count (e.g. batch summary failed on backend). ───
+
+class ShopRatingRow extends StatefulWidget {
+  final ShopModel shop;
+  final double starSize;
+
+  const ShopRatingRow({super.key, required this.shop, this.starSize = 13});
+
+  @override
+  State<ShopRatingRow> createState() => _ShopRatingRowState();
+}
+
+class _ShopRatingRowState extends State<ShopRatingRow> {
+  double _avg = 0.0;
+  int _count = 0;
+  bool _fetched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _avg = widget.shop.avgReviewRating;
+    _count = widget.shop.reviewCount;
+    if (_avg == 0.0 && _count == 0) _fetchSummary();
+  }
+
+  Future<void> _fetchSummary() async {
+    if (_fetched) return;
+    _fetched = true;
+    try {
+      final s = await ReviewService.instance.getReviewSummary(widget.shop.id);
+      if (mounted) {
+        setState(() {
+          _avg = (s['average_rating'] as num?)?.toDouble() ?? 0.0;
+          _count = (s['total_reviews'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_avg == 0.0 && _count == 0) return const SizedBox.shrink();
+    final sz = widget.starSize;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ReviewsScreen(shop: widget.shop),
+      )),
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ..._stars(_avg, sz),
+          const SizedBox(width: 4),
+          Text(
+            _fmt(_avg),
+            style: GoogleFonts.inter(
+              fontSize: sz - 1,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          if (_count > 0) ...[
+            const SizedBox(width: 3),
+            Text(
+              '($_count)',
+              style: GoogleFonts.inter(
+                fontSize: sz - 2,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(width: 5),
+          Text(
+            'View',
+            style: GoogleFonts.inter(
+              fontSize: sz - 2,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, size: sz - 1, color: AppColors.primary),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _stars(double r, double sz) => List.generate(5, (i) {
+    if (r >= i + 1) return Icon(Icons.star_rounded, size: sz, color: const Color(0xFFFFC107));
+    if (r >= i + 0.5) return Icon(Icons.star_half_rounded, size: sz, color: const Color(0xFFFFC107));
+    return Icon(Icons.star_outline_rounded, size: sz, color: AppColors.outline);
+  });
+
+  String _fmt(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
 }
 
 /// Tappable chip that opens Google Maps navigation for a location.
@@ -412,276 +469,6 @@ class _DirectionsChipState extends State<DirectionsChip> {
   }
 }
 
-/// Opens a bottom sheet showing all reviews for [shop].
-void showReviewsSheet(BuildContext context, {required ShopModel shop}) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _ReviewsBottomSheet(shop: shop),
-  );
-}
-
-class _ReviewsBottomSheet extends StatefulWidget {
-  final ShopModel shop;
-  const _ReviewsBottomSheet({required this.shop});
-
-  @override
-  State<_ReviewsBottomSheet> createState() => _ReviewsBottomSheetState();
-}
-
-class _ReviewsBottomSheetState extends State<_ReviewsBottomSheet> {
-  List<ReviewModel> _reviews = [];
-  int _total = 0;
-  int _page = 1;
-  bool _loading = true;
-  bool _loadingMore = false;
-  bool _hasMore = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadReviews();
-  }
-
-  Future<void> _loadReviews() async {
-    try {
-      final data = await ReviewService.instance.getReviews(widget.shop.id, page: 1, limit: 15);
-      if (mounted) {
-        setState(() {
-          _reviews = data['reviews'] as List<ReviewModel>;
-          _total = data['total'] as int;
-          _hasMore = data['has_more'] as bool;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final data = await ReviewService.instance.getReviews(widget.shop.id, page: _page + 1, limit: 15);
-      if (mounted) {
-        setState(() {
-          _reviews.addAll(data['reviews'] as List<ReviewModel>);
-          _page++;
-          _hasMore = data['has_more'] as bool;
-          _loadingMore = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.65,
-      minChildSize: 0.4,
-      maxChildSize: 0.92,
-      expand: false,
-      builder: (_, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            // Handle + header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: Column(
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36, height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.outline.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.shop.name,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 18, fontWeight: FontWeight.w700,
-                                color: AppColors.onSurface,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFC107)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  widget.shop.avgReviewRating.toStringAsFixed(1),
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15, fontWeight: FontWeight.w700,
-                                    color: AppColors.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '$_total review${_total == 1 ? '' : 's'}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13, color: AppColors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerLow,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.close_rounded, size: 18, color: AppColors.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Divider(color: AppColors.outline.withValues(alpha: 0.2), height: 1),
-                ],
-              ),
-            ),
-            // Reviews list
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
-                  : _reviews.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.rate_review_outlined, size: 48,
-                                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.3)),
-                              const SizedBox(height: 12),
-                              Text('No reviews yet',
-                                  style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant)),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: scrollCtrl,
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
-                          itemCount: _reviews.length + (_hasMore ? 1 : 0),
-                          itemBuilder: (_, i) {
-                            if (i == _reviews.length) {
-                              if (!_loadingMore) _loadMore();
-                              return const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-                              );
-                            }
-                            return _ReviewTile(review: _reviews[i]);
-                          },
-                        ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Single review row used inside the reviews bottom sheet.
-class _ReviewTile extends StatelessWidget {
-  final ReviewModel review;
-  const _ReviewTile({required this.review});
-
-  @override
-  Widget build(BuildContext context) {
-    final firstName = review.userName.trim().split(' ').first;
-    final displayName = firstName.isNotEmpty ? firstName : 'Customer';
-    final initial = displayName[0].toUpperCase();
-
-    final diff = DateTime.now().difference(review.createdAt);
-    String ago;
-    if (diff.inDays >= 365) ago = '${diff.inDays ~/ 365}y ago';
-    else if (diff.inDays >= 30) ago = '${diff.inDays ~/ 30}mo ago';
-    else if (diff.inDays >= 1) ago = '${diff.inDays}d ago';
-    else if (diff.inHours >= 1) ago = '${diff.inHours}h ago';
-    else ago = 'Just now';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Avatar circle with gradient
-              Container(
-                width: 38, height: 38,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient135,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(initial,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(displayName,
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                    Text(ago,
-                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
-                  ],
-                ),
-              ),
-              // Stars
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(5, (i) => Icon(
-                  i < review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                  size: 14,
-                  color: i < review.rating ? const Color(0xFFFFC107) : AppColors.outline,
-                )),
-              ),
-            ],
-          ),
-          if (review.review != null && review.review!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              review.review!,
-              style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface, height: 1.5),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 /// Bottom sheet showing full scheme details. Call from any screen.
 void showSchemeSheet(BuildContext context, SchemeModel scheme) {

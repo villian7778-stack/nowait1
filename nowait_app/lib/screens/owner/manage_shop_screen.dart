@@ -89,6 +89,18 @@ class _ManageShopScreenState extends State<ManageShopScreen>
       if (mounted) {
         setState(() {
           _queueItems = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          // Recompute live queue count from actual active entries
+          _shop.queueCount = _queueItems.where((e) {
+            final s = e['status'] as String? ?? '';
+            return s == 'waiting' || s == 'serving' || s == 'coming';
+          }).length;
+          // Update current serving token from the serving entry
+          for (final e in _queueItems) {
+            if (e['status'] == 'serving') {
+              _shop.currentToken = e['token_number'] as int? ?? _shop.currentToken;
+              break;
+            }
+          }
           _loadingQueue = false;
         });
       }

@@ -10,7 +10,7 @@ import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
-import '../../widgets/shop_card.dart' show DirectionsChip;
+import '../../widgets/shop_card.dart' show DirectionsChip, ShopRatingRow;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
@@ -999,6 +999,8 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            const SizedBox(height: 4),
+            ShopRatingRow(shop: shop, starSize: 11),
             const Expanded(child: SizedBox()),
             // Status row
             Row(
@@ -1059,6 +1061,7 @@ class _CompactShopCard extends StatelessWidget {
       child: Icon(CategoryTheme.icon(shop.category), color: color, size: 22),
     );
   }
+
 }
 
 // ─── Shimmer placeholder card ─────────────────────────────────────────────────

@@ -5,6 +5,8 @@ class ReviewService {
   static final ReviewService instance = ReviewService._();
   ReviewService._();
 
+  final Map<String, Map<String, dynamic>> _summaryCache = {};
+
   Future<ReviewModel> submitReview({
     required String shopId,
     required String queueEntryId,
@@ -39,11 +41,17 @@ class ReviewService {
       'total': data['total'] ?? 0,
       'page': data['page'] ?? 1,
       'has_more': data['has_more'] ?? false,
+      'avg_rating': (data['avg_rating'] as num?)?.toDouble() ?? 0.0,
     };
   }
 
   Future<Map<String, dynamic>> getReviewSummary(String shopId) async {
+    if (_summaryCache.containsKey(shopId)) return _summaryCache[shopId]!;
     final json = await ApiClient.instance.get('/reviews/shops/$shopId/summary');
-    return json as Map<String, dynamic>;
+    final result = json as Map<String, dynamic>;
+    _summaryCache[shopId] = result;
+    return result;
   }
+
+  void invalidateSummaryCache(String shopId) => _summaryCache.remove(shopId);
 }
