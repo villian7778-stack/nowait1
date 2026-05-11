@@ -218,11 +218,17 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
 # ── customer status ───────────────────────────────────────────────────────────
 
 def get_my_queue_status(user_id: str, shop_id: Optional[str] = None) -> list:
+    # Include recently completed/skipped entries (joined in last 2 hours) so the
+    # Flutter client can detect the status transition and show the rating sheet.
+    two_hours_ago = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     query = (
         supabase.table("queue_entries")
         .select("*")
         .eq("user_id", user_id)
-        .in_("status", ["waiting", "serving"])
+        .or_(
+            f"status.in.(waiting,serving),"
+            f"and(status.in.(completed,skipped,cancelled),joined_at.gte.{two_hours_ago})"
+        )
         .order("joined_at", desc=True)
     )
     if shop_id:

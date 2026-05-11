@@ -22,7 +22,8 @@ class ManageShopScreen extends StatefulWidget {
   State<ManageShopScreen> createState() => _ManageShopScreenState();
 }
 
-class _ManageShopScreenState extends State<ManageShopScreen> {
+class _ManageShopScreenState extends State<ManageShopScreen>
+    with WidgetsBindingObserver {
   late ShopModel _shop;
   bool _isCallingNext = false;
   bool _isTogglingOpen = false;
@@ -39,11 +40,19 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     super.initState();
     _shop = widget.shop;
     _l.addListener(_onLocale);
+    WidgetsBinding.instance.addObserver(this);
     _loadQueue();
     _loadUnreadCount();
     _loadSubscriptionExpiry();
-    // Auto-refresh queue every 15 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) => _loadQueue());
+    // Auto-refresh queue every 5 seconds so new customers appear quickly
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadQueue());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadQueue();
+    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -66,6 +75,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _l.removeListener(_onLocale);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 

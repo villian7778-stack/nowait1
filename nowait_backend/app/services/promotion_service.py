@@ -1,7 +1,12 @@
+import logging
+
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.schemas.promotion import PromotionCreate, PromotionUpdate
+from app.services.notification_service import create_notification
+
+logger = logging.getLogger(__name__)
 
 
 def get_shop_promotions(shop_id: str, active_only: bool = False) -> dict:
@@ -15,12 +20,14 @@ def get_shop_promotions(shop_id: str, active_only: bool = False) -> dict:
 def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate) -> dict:
     shop = execute_one(
         supabase.table("shops")
-        .select("id")
+        .select("id, name")
         .eq("id", shop_id)
         .eq("owner_id", owner_id)
     )
     if not shop.data:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+    shop_name = shop.data.get("name", "A shop")
 
     result = supabase.table("promotions").insert({
         "shop_id": shop_id,
@@ -32,7 +39,44 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate) -> dict
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create promotion")
-    return result.data[0]
+
+    promotion = result.data[0]
+    is_scheme = data.title != "Featured Promotion"
+
+    # Notify all past visitors of this shop about the new scheme/promotion.
+    # Past visitors = users with a completed queue entry at this shop.
+    try:
+        visitors_res = (
+            supabase.table("queue_entries")
+            .select("user_id")
+            .eq("shop_id", shop_id)
+            .eq("status", "completed")
+            .execute()
+        )
+        # "scheme" type for customer-facing offers; "promotion" for featured boosts
+        notif_type = "scheme" if is_scheme else "promotion"
+        title_label = "New Scheme" if is_scheme else "Featured Offer"
+        seen_users: set = set()
+        for row in visitors_res.data or []:
+            uid = row["user_id"]
+            if uid in seen_users or uid == owner_id:
+                continue
+            seen_users.add(uid)
+            try:
+                create_notification(
+                    user_id=uid,
+                    type=notif_type,
+                    title=f"{title_label} at {shop_name}",
+                    body=f"{data.title}: {data.description[:120]}",
+                    shop_name=shop_name,
+                    shop_id=shop_id,
+                )
+            except Exception as e:
+                logger.warning("Failed to notify user %s: %s", uid, e)
+    except Exception as e:
+        logger.warning("Failed to fetch past visitors for notifications: %s", e)
+
+    return promotion
 
 
 def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) -> dict:
