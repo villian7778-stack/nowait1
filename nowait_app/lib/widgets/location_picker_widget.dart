@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/location_service.dart';
 import '../theme/app_theme.dart';
@@ -41,8 +42,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   final _searchFocusNode = FocusNode();
   List<PlacePrediction> _suggestions = [];
   bool _showSuggestions = false;
+  bool _isSearching = false;   // true while the Places API call is in-flight
+  bool _searchReturnedEmpty = false; // true when query had results but none came back
   Timer? _searchDebounce;
   Timer? _geocodeDebounce;
+  Timer? _suggestionHideTimer;
 
   @override
   void initState() {
@@ -52,9 +56,13 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       _center = LatLng(widget.initialLat!, widget.initialLng!);
       _address = widget.initialAddress ?? '';
     }
+    // Delay hiding suggestions so a tap on a suggestion row registers first.
     _searchFocusNode.addListener(() {
       if (!_searchFocusNode.hasFocus && mounted) {
-        setState(() => _showSuggestions = false);
+        _suggestionHideTimer?.cancel();
+        _suggestionHideTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _showSuggestions = false);
+        });
       }
     });
   }
@@ -63,6 +71,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   void dispose() {
     _searchDebounce?.cancel();
     _geocodeDebounce?.cancel();
+    _suggestionHideTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _mapController.dispose();
@@ -74,30 +83,52 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
     if (value.trim().length < 2) {
-      if (mounted) setState(() { _suggestions = []; _showSuggestions = false; });
+      if (mounted) {
+        setState(() {
+          _suggestions = [];
+          _showSuggestions = false;
+          _isSearching = false;
+          _searchReturnedEmpty = false;
+        });
+      }
       return;
     }
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
+    // Show spinner immediately so the user knows something is happening.
+    if (mounted) setState(() { _isSearching = true; _searchReturnedEmpty = false; });
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
       final results = await LocationService.instance.searchPlaces(value);
       if (mounted) {
         setState(() {
           _suggestions = results;
           _showSuggestions = results.isNotEmpty;
+          _isSearching = false;
+          _searchReturnedEmpty = results.isEmpty;
         });
       }
     });
   }
 
   Future<void> _onSuggestionTap(PlacePrediction prediction) async {
+    // Cancel any pending hide-timer so the tap is not blocked by focus loss.
+    _suggestionHideTimer?.cancel();
+    // Cancel any in-flight drag geocode so it can't overwrite state after this.
+    _geocodeDebounce?.cancel();
+
     _searchFocusNode.unfocus();
     setState(() {
       _showSuggestions = false;
-      _searchController.text = prediction.mainText;
+      _isSearching = false;
+      _searchReturnedEmpty = false;
+      _searchController.text =
+          prediction.mainText.isNotEmpty ? prediction.mainText : prediction.description;
       _isGeocoding = true;
+      _isLoadingGPS = false;
       _hasConfirmed = false;
     });
 
-    final result = await LocationService.instance.getPlaceDetails(prediction.placeId);
+    // Fetch lat/lng for the selected place via Google Place Details.
+    final result =
+        await LocationService.instance.getPlaceDetails(prediction.placeId);
     if (!mounted) return;
 
     if (result != null) {
@@ -105,12 +136,16 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       _mapController.move(latlng, _selectedZoom);
       setState(() {
         _center = latlng;
-        _address = result.address;
+        _address = result.address.isNotEmpty
+            ? result.address
+            : prediction.description.isNotEmpty
+                ? prediction.description
+                : _coordFallback(result.lat, result.lng);
         _isGeocoding = false;
       });
     } else {
       setState(() => _isGeocoding = false);
-      _showError('Could not load location details. Try again.');
+      _showError('Could not load location details. Check your connection and try again.');
     }
   }
 
@@ -118,7 +153,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   void _onPositionChanged(MapCamera camera, bool hasGesture) {
     if (_hasConfirmed) return;
-    if (!hasGesture) return; // ignore programmatic moves that already set _address
+    // Ignore programmatic moves (from GPS/search) — those paths set _address directly.
+    if (!hasGesture) return;
 
     final newCenter = camera.center;
     setState(() {
@@ -135,17 +171,48 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       );
       if (mounted) {
         setState(() {
-          _address = addr ?? '';
+          // Fall back to coordinate string so the Confirm button is never
+          // permanently disabled when the geocoding backend is unreachable.
+          _address = (addr != null && addr.isNotEmpty)
+              ? addr
+              : _coordFallback(newCenter.latitude, newCenter.longitude);
           _isGeocoding = false;
         });
       }
     });
   }
 
+  String _coordFallback(double lat, double lng) =>
+      '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+
   // ── GPS ─────────────────────────────────────────────────────────────────────
 
   Future<void> _useCurrentLocation() async {
-    setState(() { _isLoadingGPS = true; _hasConfirmed = false; });
+    if (_isLoadingGPS) return;
+
+    // 1. Check if the device's location service (GPS) is switched on.
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!mounted) return;
+    if (!serviceEnabled) {
+      await _showLocationServiceDialog();
+      return;
+    }
+
+    // 2. Check app-level permission; if permanently denied, prompt settings.
+    final permission = await Geolocator.checkPermission();
+    if (!mounted) return;
+    if (permission == LocationPermission.deniedForever) {
+      await _showPermissionDeniedDialog();
+      return;
+    }
+
+    // 3. Permission is granted (or will be requested by geolocator) — proceed.
+    _geocodeDebounce?.cancel();
+    setState(() {
+      _isLoadingGPS = true;
+      _isGeocoding = false;
+      _hasConfirmed = false;
+    });
 
     final result = await LocationService.instance.getCurrentLocation();
     if (!mounted) return;
@@ -155,18 +222,171 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       _mapController.move(latlng, _selectedZoom);
       setState(() {
         _center = latlng;
-        _address = result.address;
+        _address = result.address.isNotEmpty
+            ? result.address
+            : _coordFallback(result.lat, result.lng);
         _isLoadingGPS = false;
       });
     } else {
       setState(() => _isLoadingGPS = false);
-      _showError('Could not get location. Check that GPS is enabled and permission is granted.');
+      _showError('Could not get location. Make sure GPS is enabled and try again.');
     }
+  }
+
+  /// Dialog shown when the device's GPS / location service is switched off.
+  Future<void> _showLocationServiceDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.location_off_rounded,
+                  size: 20, color: AppColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Location is Off',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Turn on your device\'s location (GPS) so we can find where you are.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Geolocator.openLocationSettings();
+            },
+            child: Text(
+              'Open Settings',
+              style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Dialog shown when the app's location permission is permanently denied.
+  Future<void> _showPermissionDeniedDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.location_disabled_rounded,
+                  size: 20, color: AppColors.error),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Permission Denied',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Location access was denied. Open app settings and allow location permission to use this feature.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Geolocator.openAppSettings();
+            },
+            child: Text(
+              'Open Settings',
+              style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Confirm ──────────────────────────────────────────────────────────────────
 
   void _confirmLocation() {
+    if (_isGeocoding || _isLoadingGPS) return;
     if (_address.isEmpty) {
       _showError('No address detected. Move the pin to a valid location.');
       return;
@@ -189,6 +409,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     );
   }
 
+  bool get _canConfirm => !_isGeocoding && !_isLoadingGPS && _address.isNotEmpty;
+
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
@@ -197,7 +419,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       backgroundColor: AppColors.surface,
       body: Stack(
         children: [
-          // ── Full-screen OpenStreetMap (no API key required) ────────────────
+          // ── Full-screen OpenStreetMap ──────────────────────────────────────
           Positioned.fill(
             child: FlutterMap(
               mapController: _mapController,
@@ -292,10 +514,12 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             ),
           ),
 
-          // ── Top bar: back button + search ──────────────────────────────────
+          // ── Top overlay: back + search + "use current location" + suggestions
           SafeArea(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                // Row: back button + search field
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: Row(
@@ -325,13 +549,22 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           ),
                           child: Row(
                             children: [
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                child: Icon(
-                                  Icons.search_rounded,
-                                  size: 18,
-                                  color: AppColors.onSurfaceVariant,
-                                ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: _isSearching
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.primary,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.search_rounded,
+                                        size: 18,
+                                        color: AppColors.onSurfaceVariant,
+                                      ),
                               ),
                               Expanded(
                                 child: TextField(
@@ -352,6 +585,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                     color: AppColors.onSurface,
                                   ),
                                   textInputAction: TextInputAction.search,
+                                  onTapOutside: (_) {
+                                    // The focus listener already handles hiding with delay;
+                                    // just unfocus the field here.
+                                    _searchFocusNode.unfocus();
+                                  },
                                 ),
                               ),
                               if (_searchController.text.isNotEmpty)
@@ -363,9 +601,12 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                   ),
                                   onPressed: () {
                                     _searchController.clear();
+                                    _searchDebounce?.cancel();
                                     setState(() {
                                       _suggestions = [];
                                       _showSuggestions = false;
+                                      _isSearching = false;
+                                      _searchReturnedEmpty = false;
                                     });
                                   },
                                   padding: EdgeInsets.zero,
@@ -381,6 +622,103 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                     ],
                   ),
                 ),
+
+                // "Use my current location" horizontal pill button
+                if (!_showSuggestions)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: GestureDetector(
+                      onTap: _isLoadingGPS ? null : _useCurrentLocation,
+                      child: Container(
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.10),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isLoadingGPS)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            else
+                              const Icon(
+                                Icons.my_location_rounded,
+                                size: 18,
+                                color: AppColors.primary,
+                              ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isLoadingGPS
+                                  ? 'Getting your location...'
+                                  : 'Use my current location',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _isLoadingGPS
+                                    ? AppColors.onSurfaceVariant
+                                    : AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // "No results" feedback
+                if (_searchReturnedEmpty &&
+                    !_isSearching &&
+                    _searchController.text.trim().length >= 2)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_off_rounded,
+                              size: 16, color: AppColors.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'No results for "${_searchController.text.trim()}"',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // Autocomplete suggestions dropdown
                 if (_showSuggestions)
@@ -410,65 +748,71 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                         ),
                         itemBuilder: (_, i) {
                           final s = _suggestions[i];
-                          return InkWell(
-                            onTap: () => _onSuggestionTap(s),
-                            borderRadius: i == 0
-                                ? const BorderRadius.vertical(top: Radius.circular(12))
-                                : i == (_suggestions.length.clamp(0, 5) - 1)
-                                    ? const BorderRadius.vertical(
-                                        bottom: Radius.circular(12))
-                                    : BorderRadius.zero,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 28,
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              // Cancel the hide-timer the instant the user's
+                              // finger touches a suggestion row (before focus loss fires).
+                              onTapDown: (_) => _suggestionHideTimer?.cancel(),
+                              onTap: () => _onSuggestionTap(s),
+                              borderRadius: i == 0
+                                  ? const BorderRadius.vertical(top: Radius.circular(12))
+                                  : i == (_suggestions.length.clamp(0, 5) - 1)
+                                      ? const BorderRadius.vertical(
+                                          bottom: Radius.circular(12))
+                                      : BorderRadius.zero,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.location_on_outlined,
+                                        size: 14,
+                                        color: AppColors.primary,
+                                      ),
                                     ),
-                                    child: const Icon(
-                                      Icons.location_on_outlined,
-                                      size: 14,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          s.mainText.isNotEmpty
-                                              ? s.mainText
-                                              : s.description,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.onSurface,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (s.secondaryText.isNotEmpty) ...[
-                                          const SizedBox(height: 1),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            s.secondaryText,
+                                            s.mainText.isNotEmpty
+                                                ? s.mainText
+                                                : s.description,
                                             style: GoogleFonts.inter(
-                                              fontSize: 11,
-                                              color: AppColors.onSurfaceVariant,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.onSurface,
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
+                                          if (s.secondaryText.isNotEmpty) ...[
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              s.secondaryText,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: AppColors.onSurfaceVariant,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -477,29 +821,6 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                     ),
                   ),
               ],
-            ),
-          ),
-
-          // ── GPS button (right side) ───────────────────────────────────────
-          Positioned(
-            right: 12,
-            bottom: 200,
-            child: _MapButton(
-              onTap: _isLoadingGPS ? null : _useCurrentLocation,
-              child: _isLoadingGPS
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    )
-                  : const Icon(
-                      Icons.my_location_rounded,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
             ),
           ),
 
@@ -560,53 +881,44 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                               ),
                             ),
                             const SizedBox(height: 3),
-                            _isGeocoding
-                                ? Row(
-                                    children: [
-                                      const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Detecting address...',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          color: AppColors.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Text(
-                                    _address.isEmpty
-                                        ? 'Move the map to select a location'
-                                        : _address,
+                            if (_isGeocoding || _isLoadingGPS)
+                              Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _isLoadingGPS
+                                        ? 'Getting your location...'
+                                        : 'Detecting address...',
                                     style: GoogleFonts.inter(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: _address.isEmpty
-                                          ? AppColors.onSurfaceVariant
-                                          : AppColors.onSurface,
-                                      height: 1.4,
+                                      color: AppColors.onSurfaceVariant,
                                     ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                            if (_address.isNotEmpty && !_isGeocoding)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 3),
-                                child: Text(
-                                  '${_center.latitude.toStringAsFixed(6)}, '
-                                  '${_center.longitude.toStringAsFixed(6)}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
+                                ],
+                              )
+                            else
+                              Text(
+                                _address.isEmpty
+                                    ? 'Move the map to select a location'
+                                    : _address,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: _address.isEmpty
+                                      ? AppColors.onSurfaceVariant
+                                      : AppColors.onSurface,
+                                  height: 1.4,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                           ],
                         ),
@@ -615,10 +927,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Confirm button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
-                    child: _isGeocoding
+                    child: (_isGeocoding || _isLoadingGPS)
                         ? Container(
                             decoration: BoxDecoration(
                               color: AppColors.outline.withValues(alpha: 0.15),
@@ -636,14 +949,14 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             ),
                           )
                         : GestureDetector(
-                            onTap: _address.isNotEmpty ? _confirmLocation : null,
+                            onTap: _canConfirm ? _confirmLocation : null,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               decoration: BoxDecoration(
-                                gradient: _address.isNotEmpty
+                                gradient: _canConfirm
                                     ? AppColors.primaryGradient135
                                     : null,
-                                color: _address.isEmpty
+                                color: !_canConfirm
                                     ? AppColors.outline.withValues(alpha: 0.2)
                                     : null,
                                 borderRadius: BorderRadius.circular(14),
@@ -654,7 +967,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                   Icon(
                                     Icons.check_circle_outline_rounded,
                                     size: 18,
-                                    color: _address.isNotEmpty
+                                    color: _canConfirm
                                         ? Colors.white
                                         : AppColors.onSurfaceVariant,
                                   ),
@@ -664,7 +977,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                     style: GoogleFonts.inter(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
-                                      color: _address.isNotEmpty
+                                      color: _canConfirm
                                           ? Colors.white
                                           : AppColors.onSurfaceVariant,
                                     ),

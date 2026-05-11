@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.schemas.shop import ShopCreate, ShopUpdate
+from app.services import review_service
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,9 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
     for e in (queue_result.data or []):
         queue_by_shop.setdefault(e["shop_id"], []).append(e)
 
+    # Batch query 4: review summaries
+    review_summaries = review_service.get_batch_review_summaries(shop_ids)
+
     shops = []
     for shop in raw_shops:
         sid = shop["id"]
@@ -133,6 +137,7 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
         entries = queue_by_shop.get(sid, [])
         total = len(entries)
         serving = next((e["token_number"] for e in entries if e["status"] == "serving"), None)
+        rev = review_summaries.get(sid, {"avg_review_rating": 0.0, "review_count": 0})
         shops.append({
             **shop,
             "has_active_subscription": has_sub,
@@ -141,6 +146,7 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
             "active_promotions": active_promotions,
             "queue_count": total,
             "now_serving_token": serving,
+            **rev,
         })
 
     return {"shops": shops, "total": len(shops)}
@@ -155,6 +161,11 @@ def get_shop(shop_id: str) -> dict:
     # Get services
     svc_result = supabase.table("services").select("*").eq("shop_id", shop_id).execute()
     shop["services"] = svc_result.data or []
+
+    # Include review summary
+    rev = review_service.get_review_summary(shop_id)
+    shop["avg_review_rating"] = rev["average_rating"]
+    shop["review_count"] = rev["total_reviews"]
     return shop
 
 

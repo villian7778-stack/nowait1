@@ -9,6 +9,7 @@ import '../../services/locale_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
+import '../../widgets/shop_card.dart' show DirectionsChip;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
@@ -587,7 +588,7 @@ class _HomeTabState extends State<_HomeTab> {
             _sectionHeader(LocaleService.instance.tr('openNow'), isLive: true, context: context),
             const SizedBox(height: 14),
             SizedBox(
-              height: 158,
+              height: 176,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const NeverScrollableScrollPhysics(),
@@ -619,7 +620,7 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 158,
+            height: 176,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1027,6 +1028,11 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            // Directions chip — only when shop has saved coordinates
+            if (shop.latitude != null && shop.longitude != null) ...[
+              const SizedBox(height: 6),
+              DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
+            ],
           ],
         ),
       ),
@@ -1293,62 +1299,62 @@ class _QueueEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-              color: AppColors.shadowPrimary,
-              blurRadius: 14,
-              offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient135,
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Center(
-              child: Text(
-                entry.token,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white),
+    return GestureDetector(
+      onTap: onTrack,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.shadowPrimary,
+                blurRadius: 14,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient135,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Center(
+                child: Text(
+                  entry.token,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.shopName,
-                  style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${entry.peopleAhead} ahead · ~${entry.estimatedWaitMinutes} min wait',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant),
-                ),
-              ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.shopName,
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${entry.peopleAhead} ahead · ~${entry.estimatedWaitMinutes} min wait',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
-          ),
-          GestureDetector(
-            onTap: onTrack,
-            child: Container(
+            Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
               decoration: BoxDecoration(
                 gradient: AppColors.primaryGradient135,
@@ -1362,8 +1368,8 @@ class _QueueEntryCard extends StatelessWidget {
                     color: Colors.white),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

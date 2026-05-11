@@ -137,12 +137,27 @@ class ShopCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    '${shop.category} • ${shop.distance}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${shop.category} • ${shop.distance}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (shop.reviewCount > 0) ...[
+                        const SizedBox(width: 6),
+                        _StarRatingMini(
+                          rating: shop.avgReviewRating,
+                          count: shop.reviewCount,
+                        ),
+                      ],
+                    ],
                   ),
                   if (shop.address.isNotEmpty) ...[
                     const SizedBox(height: 2),
@@ -202,7 +217,7 @@ class ShopCard extends StatelessWidget {
                       if (!hideDirections &&
                           shop.latitude != null &&
                           shop.longitude != null)
-                        _DirectionsChip(
+                        DirectionsChip(
                           lat: shop.latitude!,
                           lng: shop.longitude!,
                         ),
@@ -301,18 +316,19 @@ class ShopCard extends StatelessWidget {
   }
 }
 
-/// Tappable chip that opens Google Maps navigation for the shop.
-class _DirectionsChip extends StatefulWidget {
+/// Tappable chip that opens Google Maps navigation for a location.
+/// Public so ShopDetailsScreen and compact cards can reuse it.
+class DirectionsChip extends StatefulWidget {
   final double lat;
   final double lng;
 
-  const _DirectionsChip({required this.lat, required this.lng});
+  const DirectionsChip({super.key, required this.lat, required this.lng});
 
   @override
-  State<_DirectionsChip> createState() => _DirectionsChipState();
+  State<DirectionsChip> createState() => _DirectionsChipState();
 }
 
-class _DirectionsChipState extends State<_DirectionsChip> {
+class _DirectionsChipState extends State<DirectionsChip> {
   bool _launching = false;
 
   Future<void> _launch() async {
@@ -360,6 +376,42 @@ class _DirectionsChipState extends State<_DirectionsChip> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Compact star + score display used on shop cards.
+class _StarRatingMini extends StatelessWidget {
+  final double rating;
+  final int count;
+
+  const _StarRatingMini({required this.rating, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFC107)),
+        const SizedBox(width: 2),
+        Text(
+          rating.toStringAsFixed(1),
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        Text(
+          ' ($count)',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 10,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
