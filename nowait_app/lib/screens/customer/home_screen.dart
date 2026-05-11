@@ -624,10 +624,12 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 176,
+            height: 196,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
               itemCount: openShops.length,
               itemBuilder: (_, i) => _CompactShopCard(
                 shop: openShops[i],
@@ -999,7 +1001,6 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
             ShopRatingRow(shop: shop, starSize: 11),
             const Expanded(child: SizedBox()),
             // Status row
