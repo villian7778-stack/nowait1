@@ -638,7 +638,7 @@ class _ReviewTile extends StatelessWidget {
               // Avatar circle with gradient
               Container(
                 width: 38, height: 38,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient135,
                   shape: BoxShape.circle,
                 ),

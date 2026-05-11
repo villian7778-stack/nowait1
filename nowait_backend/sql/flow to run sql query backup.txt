@@ -1,0 +1,2 @@
+1st query ==> migrate_full_till_reviews.sql
+2nd query ==> migrate_scheme_notif.sql
