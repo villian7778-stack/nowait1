@@ -77,11 +77,15 @@ def get_shop_reviews(shop_id: str, page: int = 1, limit: int = 20) -> dict:
         for r in reviews:
             r["user_name"] = name_map.get(r["user_id"], "Customer")
 
+    # Compute average from all reviews (not just this page)
+    summary = get_review_summary(shop_id)
+
     return {
         "reviews": reviews,
         "total": total,
         "page": page,
         "has_more": offset + limit < total,
+        "avg_rating": summary["average_rating"],
     }
 
 
@@ -92,7 +96,8 @@ def get_review_summary(shop_id: str) -> dict:
         .eq("shop_id", shop_id)
         .execute()
     )
-    ratings = [r["rating"] for r in (result.data or [])]
+    # Filter out None/null ratings to avoid sum() errors
+    ratings = [int(r["rating"]) for r in (result.data or []) if r.get("rating") is not None]
 
     if not ratings:
         return {
@@ -103,7 +108,9 @@ def get_review_summary(shop_id: str) -> dict:
 
     distribution = {str(i): 0 for i in range(1, 6)}
     for r in ratings:
-        distribution[str(r)] = distribution.get(str(r), 0) + 1
+        key = str(r)
+        if key in distribution:
+            distribution[key] += 1
 
     avg = round(sum(ratings) / len(ratings), 1)
     return {
@@ -117,15 +124,20 @@ def get_batch_review_summaries(shop_ids: list[str]) -> dict[str, dict]:
     """Batch-fetch review summaries for a list of shop IDs (used in list_shops)."""
     if not shop_ids:
         return {}
-    result = (
-        supabase.table("shop_reviews")
-        .select("shop_id, rating")
-        .in_("shop_id", shop_ids)
-        .execute()
-    )
-    by_shop: dict[str, list[int]] = {}
-    for r in (result.data or []):
-        by_shop.setdefault(r["shop_id"], []).append(r["rating"])
+    try:
+        result = (
+            supabase.table("shop_reviews")
+            .select("shop_id, rating")
+            .in_("shop_id", shop_ids)
+            .execute()
+        )
+        by_shop: dict[str, list[int]] = {}
+        for r in (result.data or []):
+            # Skip null ratings
+            if r.get("rating") is not None:
+                by_shop.setdefault(r["shop_id"], []).append(int(r["rating"]))
+    except Exception:
+        by_shop = {}
 
     summaries: dict[str, dict] = {}
     for sid in shop_ids:

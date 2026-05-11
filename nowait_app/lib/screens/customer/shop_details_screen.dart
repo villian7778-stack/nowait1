@@ -11,6 +11,7 @@ import '../../services/locale_service.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip;
 import '../../services/location_service.dart';
 import 'join_queue_sheet.dart';
+import 'reviews_screen.dart';
 import 'token_screen.dart';
 
 class ShopDetailsScreen extends StatefulWidget {
@@ -33,8 +34,8 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   List<StaffMember> _staff = [];
   List<ReviewModel> _reviews = [];
   int _reviewTotal = 0;
+  double _reviewAvg = 0.0;
   bool _reviewsLoading = false;
-  bool _showAllReviews = false;
   final _l = LocaleService.instance;
 
   @override
@@ -76,6 +77,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
         setState(() {
           _reviews = data['reviews'] as List<ReviewModel>;
           _reviewTotal = data['total'] as int;
+          _reviewAvg = (data['avg_rating'] as num?)?.toDouble() ?? 0.0;
           _reviewsLoading = false;
         });
       }
@@ -246,15 +248,17 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      // Star rating row
-                      if (shop.reviewCount > 0)
+                      // Star rating row — uses live avg from loaded reviews
+                      if (_reviewTotal > 0 || shop.reviewCount > 0)
                         GestureDetector(
-                          onTap: () => setState(() => _showAllReviews = !_showAllReviews),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ReviewsScreen(shop: shop),
+                          )),
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 6),
                             child: _RatingRow(
-                              rating: shop.avgReviewRating,
-                              count: shop.reviewCount,
+                              rating: _reviewTotal > 0 ? _reviewAvg : shop.avgReviewRating,
+                              count: _reviewTotal > 0 ? _reviewTotal : shop.reviewCount,
                             ),
                           ),
                         ),
@@ -434,15 +438,22 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                       ],
 
                       // ── Reviews section ───────────────────────────────────
-                      _ReviewsSection(
-                        reviews: _reviews,
-                        total: _reviewTotal,
-                        isLoading: _reviewsLoading,
-                        shopId: shop.id,
-                        avgRating: shop.avgReviewRating,
-                      ),
-                      if (_reviews.isNotEmpty || _reviewsLoading)
+                      if (_reviewsLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                        )
+                      else if (_reviewTotal > 0) ...[
+                        _ReviewsSummaryRow(
+                          avgRating: _reviewAvg,
+                          total: _reviewTotal,
+                          previews: _reviews.take(2).toList(),
+                          onViewAll: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ReviewsScreen(shop: shop),
+                          )),
+                        ),
                         const SizedBox(height: 24),
+                      ],
 
                       // ── Services ──────────────────────────────────────────
                       Text(
@@ -938,176 +949,102 @@ class _RatingRow extends StatelessWidget {
   }
 }
 
-// ── Reviews section ───────────────────────────────────────────────────────────
+// ── Reviews summary row (navigates to ReviewsScreen) ─────────────────────────
 
-class _ReviewsSection extends StatefulWidget {
-  final List<ReviewModel> reviews;
-  final int total;
-  final bool isLoading;
-  final String shopId;
+class _ReviewsSummaryRow extends StatelessWidget {
   final double avgRating;
+  final int total;
+  final List<ReviewModel> previews;
+  final VoidCallback onViewAll;
 
-  const _ReviewsSection({
-    required this.reviews,
-    required this.total,
-    required this.isLoading,
-    required this.shopId,
+  const _ReviewsSummaryRow({
     required this.avgRating,
+    required this.total,
+    required this.previews,
+    required this.onViewAll,
   });
 
   @override
-  State<_ReviewsSection> createState() => _ReviewsSectionState();
-}
-
-class _ReviewsSectionState extends State<_ReviewsSection> {
-  List<ReviewModel> _allReviews = [];
-  int _page = 1;
-  bool _loadingMore = false;
-  bool _hasMore = false;
-  bool _expanded = false;
-
-  @override
-  void didUpdateWidget(_ReviewsSection old) {
-    super.didUpdateWidget(old);
-    if (old.reviews != widget.reviews) {
-      _allReviews = List.from(widget.reviews);
-      _hasMore = widget.total > widget.reviews.length;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _allReviews = List.from(widget.reviews);
-    _hasMore = widget.total > widget.reviews.length;
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final data = await ReviewService.instance.getReviews(
-        widget.shopId,
-        page: _page + 1,
-        limit: 10,
-      );
-      final more = data['reviews'] as List<ReviewModel>;
-      setState(() {
-        _page++;
-        _allReviews.addAll(more);
-        _hasMore = data['has_more'] as bool;
-        _loadingMore = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.isLoading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionHeader(),
-          const SizedBox(height: 12),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-            ),
-          ),
-        ],
-      );
-    }
-    if (widget.total == 0) return const SizedBox.shrink();
-
-    final displayed = _expanded ? _allReviews : _allReviews.take(3).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader(),
-        const SizedBox(height: 12),
-        ...displayed.map((r) => _ReviewCard(review: r)),
-        if (_hasMore || (!_expanded && _allReviews.length > 3)) ...[
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () {
-              setState(() => _expanded = true);
-              if (_hasMore) _loadMore();
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+        // Header row
+        Row(
+          children: [
+            Text(
+              'Reviews',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_loadingMore)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                    )
-                  else
-                    const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 8),
+                  ...List.generate(5, (i) => Icon(
+                    avgRating >= i + 1
+                        ? Icons.star_rounded
+                        : avgRating >= i + 0.5
+                            ? Icons.star_half_rounded
+                            : Icons.star_outline_rounded,
+                    size: 11,
+                    color: const Color(0xFFFFC107),
+                  )),
+                  const SizedBox(width: 4),
                   Text(
-                    _loadingMore
-                        ? 'Loading…'
-                        : 'See all ${widget.total} reviews',
+                    '${avgRating.toStringAsFixed(1)} · $total',
                     style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.primary,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _sectionHeader() {
-    return Row(
-      children: [
-        Text(
-          'Reviews',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
-              const SizedBox(width: 3),
-              Text(
-                '${widget.avgRating.toStringAsFixed(1)} · ${widget.total}',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+        const SizedBox(height: 10),
+        // Preview of up to 2 reviews
+        ...previews.map((r) => _ReviewCard(review: r)),
+        // View all button
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: onViewAll,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.rate_review_outlined, size: 15, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'View all $total review${total == 1 ? '' : 's'}',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primary),
+              ],
+            ),
           ),
         ),
       ],

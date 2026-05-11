@@ -39,6 +39,7 @@ class ReviewService {
       'total': data['total'] ?? 0,
       'page': data['page'] ?? 1,
       'has_more': data['has_more'] ?? false,
+      'avg_rating': (data['avg_rating'] as num?)?.toDouble() ?? 0.0,
     };
   }
 
