@@ -8,7 +8,6 @@ import '../../services/location_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
-import '../../widgets/rating_review_sheet.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/ping_dot.dart';
@@ -41,7 +40,6 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
   bool _isCancelling = false;
   bool _isComing = false;
   bool _comingNotified = false;
-  bool _ratingShownForEntry = false; // guard so we only show the sheet once per entry
   final _l = LocaleService.instance;
 
   @override
@@ -103,29 +101,11 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
       final updated =
           entries.where((e) => e.entryId == _entry.entryId).firstOrNull;
       if (updated != null && mounted) {
-        final prevStatus = _entry.status;
         setState(() => _entry = updated);
         if (updated.status == QueueStatus.completed ||
             updated.status == QueueStatus.skipped ||
             updated.status == QueueStatus.cancelled) {
           _pollTimer?.cancel();
-        }
-        // Show rating sheet exactly once when service is completed
-        if (prevStatus != QueueStatus.completed &&
-            updated.status == QueueStatus.completed &&
-            !_ratingShownForEntry) {
-          _ratingShownForEntry = true;
-          // Small delay so the UI reflects the completed state first
-          Future.delayed(const Duration(milliseconds: 800), () {
-            if (mounted) {
-              showRatingReviewSheet(
-                context,
-                shopName: _entry.shopName,
-                shopId: _entry.shopId,
-                queueEntryId: _entry.entryId,
-              );
-            }
-          });
         }
       }
     } catch (_) {}

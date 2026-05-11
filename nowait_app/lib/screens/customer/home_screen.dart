@@ -9,6 +9,7 @@ import '../../services/locale_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/queue_monitor_service.dart';
 import '../../widgets/shop_card.dart' show DirectionsChip;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
@@ -32,11 +33,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     LocaleService.instance.addListener(_onLocale);
+    // Start global queue monitor so rating popup appears on any screen.
+    QueueMonitorService.instance.start();
   }
 
   @override
   void dispose() {
     LocaleService.instance.removeListener(_onLocale);
+    QueueMonitorService.instance.stop();
     super.dispose();
   }
 

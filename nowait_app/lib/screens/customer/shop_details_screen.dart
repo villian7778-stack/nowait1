@@ -1122,7 +1122,10 @@ class _ReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initial = review.userName.isNotEmpty ? review.userName[0].toUpperCase() : 'C';
+    // Show first name only for privacy
+    final firstName = review.userName.trim().split(' ').first;
+    final displayName = firstName.isNotEmpty ? firstName : 'Customer';
+    final initial = displayName[0].toUpperCase();
     final ago = _timeAgo(review.createdAt);
 
     return Container(
@@ -1168,7 +1171,7 @@ class _ReviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      review.userName,
+                      displayName,
                       style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,

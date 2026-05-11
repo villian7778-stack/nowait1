@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/locale_service.dart';
+import 'services/queue_monitor_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/customer/home_screen.dart';
 import 'screens/owner/owner_dashboard_screen.dart';
@@ -29,18 +30,20 @@ class NoWaitApp extends StatefulWidget {
 }
 
 class _NoWaitAppState extends State<NoWaitApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
-    // Rebuild the whole widget tree whenever the language changes.
-    // Flutter preserves the Navigator state through this rebuild because
-    // MaterialApp's internal navigator key remains stable.
     LocaleService.instance.addListener(_onLocaleChanged);
+    // Give the monitor the global key so it can show sheets from anywhere.
+    QueueMonitorService.instance.navigatorKey = _navigatorKey;
   }
 
   @override
   void dispose() {
     LocaleService.instance.removeListener(_onLocaleChanged);
+    QueueMonitorService.instance.stop();
     super.dispose();
   }
 
@@ -60,6 +63,7 @@ class _NoWaitAppState extends State<NoWaitApp> {
       title: 'NOWAIT',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      navigatorKey: _navigatorKey,
       home: home,
     );
   }
