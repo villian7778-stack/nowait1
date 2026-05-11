@@ -46,6 +46,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onLocale() => setState(() {});
 
+  Future<void> _onNavTap(int i) async {
+    if (i == 1) {
+      // My Queue: go directly to QueueStatusScreen if in queue; else show empty state
+      try {
+        final entries = await QueueService.instance.getMyStatus();
+        if (!mounted) return;
+        if (entries.isNotEmpty) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: entries[0])),
+          );
+          return;
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _currentIndex = 1);
+      return;
+    }
+    setState(() => _currentIndex = i);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -60,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: _BottomNav(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: _onNavTap,
       ),
     );
   }
@@ -1258,16 +1278,17 @@ class _QueueTabState extends State<_QueueTab> {
             ),
             const SizedBox(height: 20),
             Text(
-              LocaleService.instance.tr('noShopsFound'),
+              LocaleService.instance.tr('notInQueue'),
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              LocaleService.instance.tr('joinQueue'),
+              LocaleService.instance.tr('notInQueueSub'),
               style: GoogleFonts.inter(
                   fontSize: 14, color: AppColors.onSurfaceVariant),
               textAlign: TextAlign.center,

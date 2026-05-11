@@ -106,6 +106,12 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
             updated.status == QueueStatus.skipped ||
             updated.status == QueueStatus.cancelled) {
           _pollTimer?.cancel();
+          // Auto-navigate back to home so user isn't stuck on a finished queue
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
+          });
         }
       }
     } catch (_) {}
@@ -640,8 +646,9 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     const SizedBox(height: 20),
                   ],
 
-                  // Coming / cancel buttons — hidden when customer is being served
-                  if (_entry.status != QueueStatus.yourTurn) ...[
+                  // Coming / cancel buttons — only shown while actively waiting in line
+                  if (_entry.status == QueueStatus.waiting ||
+                      _entry.status == QueueStatus.almostThere) ...[
                     SizedBox(
                       width: double.infinity,
                       child: _comingNotified
