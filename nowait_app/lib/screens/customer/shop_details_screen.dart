@@ -69,11 +69,11 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   Future<void> _loadReviews() async {
     if (_shop == null) return;
     try {
-      final data = await ReviewService.instance.getReviews(_shop!.id, limit: 1);
+      final s = await ReviewService.instance.getReviewSummary(_shop!.id);
       if (mounted) {
         setState(() {
-          _reviewTotal = data['total'] as int;
-          _reviewAvg = (data['avg_rating'] as num?)?.toDouble() ?? 0.0;
+          _reviewTotal = (s['total_reviews'] as num?)?.toInt() ?? 0;
+          _reviewAvg = (s['average_rating'] as num?)?.toDouble() ?? 0.0;
         });
       }
     } catch (_) {}

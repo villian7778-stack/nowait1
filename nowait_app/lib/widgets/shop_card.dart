@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
 import '../services/location_service.dart';
+import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/category_theme.dart';
 import '../screens/customer/reviews_screen.dart';
@@ -147,52 +148,8 @@ class ShopCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (shop.reviewCount > 0 || shop.avgReviewRating > 0) ...[
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ReviewsScreen(shop: shop),
-                      )),
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          _starRow(shop.avgReviewRating, size: 13),
-                          const SizedBox(width: 4),
-                          Text(
-                            _fmtRating(shop.avgReviewRating),
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          if (shop.reviewCount > 0) ...[
-                            const SizedBox(width: 3),
-                            Text(
-                              '(${shop.reviewCount})',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 5),
-                          Text(
-                            'View',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right_rounded,
-                              size: 12, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ],
+                  const SizedBox(height: 4),
+                  ShopRatingRow(shop: shop, starSize: 13),
                   if (shop.address.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Row(
@@ -349,22 +306,103 @@ class ShopCard extends StatelessWidget {
     );
   }
 
-  String _fmtRating(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
+}
 
-  Widget _starRow(double rating, {double size = 13}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        if (rating >= i + 1) {
-          return Icon(Icons.star_rounded, size: size, color: const Color(0xFFFFC107));
-        } else if (rating >= i + 0.5) {
-          return Icon(Icons.star_half_rounded, size: size, color: const Color(0xFFFFC107));
-        } else {
-          return Icon(Icons.star_outline_rounded, size: size, color: AppColors.outline);
-        }
-      }),
+// ── Shared rating row — fetches summary lazily so it works even when the shop
+// list API returned 0 for avg/count (e.g. batch summary failed on backend). ───
+
+class ShopRatingRow extends StatefulWidget {
+  final ShopModel shop;
+  final double starSize;
+
+  const ShopRatingRow({super.key, required this.shop, this.starSize = 13});
+
+  @override
+  State<ShopRatingRow> createState() => _ShopRatingRowState();
+}
+
+class _ShopRatingRowState extends State<ShopRatingRow> {
+  double _avg = 0.0;
+  int _count = 0;
+  bool _fetched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _avg = widget.shop.avgReviewRating;
+    _count = widget.shop.reviewCount;
+    if (_avg == 0.0 && _count == 0) _fetchSummary();
+  }
+
+  Future<void> _fetchSummary() async {
+    if (_fetched) return;
+    _fetched = true;
+    try {
+      final s = await ReviewService.instance.getReviewSummary(widget.shop.id);
+      if (mounted) {
+        setState(() {
+          _avg = (s['average_rating'] as num?)?.toDouble() ?? 0.0;
+          _count = (s['total_reviews'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_avg == 0.0 && _count == 0) return const SizedBox.shrink();
+    final sz = widget.starSize;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => ReviewsScreen(shop: widget.shop),
+      )),
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ..._stars(_avg, sz),
+          const SizedBox(width: 4),
+          Text(
+            _fmt(_avg),
+            style: GoogleFonts.inter(
+              fontSize: sz - 1,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          if (_count > 0) ...[
+            const SizedBox(width: 3),
+            Text(
+              '($_count)',
+              style: GoogleFonts.inter(
+                fontSize: sz - 2,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(width: 5),
+          Text(
+            'View',
+            style: GoogleFonts.inter(
+              fontSize: sz - 2,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, size: sz - 1, color: AppColors.primary),
+        ],
+      ),
     );
   }
+
+  List<Widget> _stars(double r, double sz) => List.generate(5, (i) {
+    if (r >= i + 1) return Icon(Icons.star_rounded, size: sz, color: const Color(0xFFFFC107));
+    if (r >= i + 0.5) return Icon(Icons.star_half_rounded, size: sz, color: const Color(0xFFFFC107));
+    return Icon(Icons.star_outline_rounded, size: sz, color: AppColors.outline);
+  });
+
+  String _fmt(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
 }
 
 /// Tappable chip that opens Google Maps navigation for a location.

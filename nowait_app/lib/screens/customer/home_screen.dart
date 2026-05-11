@@ -10,8 +10,7 @@ import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
-import '../../widgets/shop_card.dart' show DirectionsChip;
-import 'reviews_screen.dart';
+import '../../widgets/shop_card.dart' show DirectionsChip, ShopRatingRow;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
@@ -1000,26 +999,8 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            if (shop.reviewCount > 0 || shop.avgReviewRating > 0) ...[
-              const SizedBox(height: 4),
-              GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => ReviewsScreen(shop: shop),
-                )),
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ..._compactStars(shop.avgReviewRating),
-                    const SizedBox(width: 3),
-                    Text(
-                      _fmtRating(shop.avgReviewRating),
-                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.onSurface),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            const SizedBox(height: 4),
+            ShopRatingRow(shop: shop, starSize: 11),
             const Expanded(child: SizedBox()),
             // Status row
             Row(
@@ -1081,19 +1062,6 @@ class _CompactShopCard extends StatelessWidget {
     );
   }
 
-  String _fmtRating(double r) => r % 1 == 0 ? r.toInt().toString() : r.toStringAsFixed(1);
-
-  List<Widget> _compactStars(double rating) {
-    return List.generate(5, (i) {
-      if (rating >= i + 1) {
-        return const Icon(Icons.star_rounded, size: 10, color: Color(0xFFFFC107));
-      } else if (rating >= i + 0.5) {
-        return const Icon(Icons.star_half_rounded, size: 10, color: Color(0xFFFFC107));
-      } else {
-        return const Icon(Icons.star_outline_rounded, size: 10, color: Color(0xFF8E9BB5));
-      }
-    });
-  }
 }
 
 // ─── Shimmer placeholder card ─────────────────────────────────────────────────

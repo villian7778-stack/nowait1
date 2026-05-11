@@ -44,12 +44,17 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
 
   Future<void> _loadReviews() async {
     try {
-      final data = await ReviewService.instance.getReviews(widget.shop.id, page: 1, limit: 20);
+      final results = await Future.wait([
+        ReviewService.instance.getReviews(widget.shop.id, page: 1, limit: 20),
+        ReviewService.instance.getReviewSummary(widget.shop.id),
+      ]);
+      final data = results[0] as Map<String, dynamic>;
+      final summary = results[1] as Map<String, dynamic>;
       if (mounted) {
         setState(() {
           _reviews = data['reviews'] as List<ReviewModel>;
           _total = data['total'] as int;
-          _avgRating = (data['avg_rating'] as num?)?.toDouble() ?? 0.0;
+          _avgRating = (summary['average_rating'] as num?)?.toDouble() ?? 0.0;
           _hasMore = data['has_more'] as bool;
           _loading = false;
         });
