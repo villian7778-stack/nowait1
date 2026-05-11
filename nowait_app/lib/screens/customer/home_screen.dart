@@ -48,14 +48,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _onNavTap(int i) async {
     if (i == 1) {
-      // My Queue: go directly to QueueStatusScreen if in queue; else show empty state
+      // My Queue: go directly to QueueStatusScreen only when actively in queue
       try {
         final entries = await QueueService.instance.getMyStatus();
         if (!mounted) return;
-        if (entries.isNotEmpty) {
+        final active = entries.where((e) =>
+          e.status == QueueStatus.waiting ||
+          e.status == QueueStatus.almostThere ||
+          e.status == QueueStatus.yourTurn,
+        ).toList();
+        if (active.isNotEmpty) {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: entries[0])),
+            MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: active[0])),
           );
           return;
         }
