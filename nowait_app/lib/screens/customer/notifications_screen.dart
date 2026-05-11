@@ -6,7 +6,10 @@ import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  /// Set to false for the owner view — hides the Promotions tab.
+  final bool showPromoTab;
+
+  const NotificationsScreen({super.key, this.showPromoTab = true});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -22,7 +25,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: widget.showPromoTab ? 2 : 1,
+      vsync: this,
+    );
     _l.addListener(_onLocale);
     _loadNotifications();
   }
@@ -52,13 +58,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final queueNotifs = _notifications
-        .where((n) => n.type != NotificationType.promotion)
-        .toList();
+    // Queue: everything that is strictly operational
+    final _queueTypes = {
+      NotificationType.yourTurn,
+      NotificationType.almostThere,
+      NotificationType.skipped,
+      NotificationType.coming,
+    };
+    final queueNotifs = _notifications.where((n) => _queueTypes.contains(n.type)).toList();
+    // Promotions: scheme offers + featured promotion notifications
     final promoNotifs = _notifications
-        .where((n) => n.type == NotificationType.promotion)
+        .where((n) => n.type == NotificationType.promotion || n.type == NotificationType.scheme)
         .toList();
     final unreadQueue = queueNotifs.where((n) => !n.isRead).length;
+    final unreadPromo = promoNotifs.where((n) => !n.isRead).length;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -88,22 +101,24 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   Text(_l.tr('queueTab')),
                   if (unreadQueue > 0) ...[
                     const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient135,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$unreadQueue',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                    ),
+                    _UnreadBadge(count: unreadQueue),
                   ],
                 ],
               ),
             ),
-            Tab(text: _l.tr('promotionsTab')),
+            if (widget.showPromoTab)
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(_l.tr('promotionsTab')),
+                    if (unreadPromo > 0) ...[
+                      const SizedBox(width: 6),
+                      _UnreadBadge(count: unreadPromo),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -113,7 +128,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               controller: _tabController,
               children: [
                 _QueueNotifTab(notifications: queueNotifs),
-                _PromoNotifTab(notifications: promoNotifs),
+                if (widget.showPromoTab) _PromoNotifTab(notifications: promoNotifs),
               ],
             ),
     );
@@ -160,65 +175,51 @@ class _PromoNotifTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = LocaleService.instance;
+
+    if (notifications.isEmpty) {
+      return _emptyState(l.tr('noPromos'), Icons.local_offer_outlined);
+    }
+
+    final schemeNotifs = notifications.where((n) => n.type == NotificationType.scheme).toList();
+    final promoNotifs  = notifications.where((n) => n.type == NotificationType.promotion).toList();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _sectionHeader(l.tr('exclusiveOffers')),
-        const SizedBox(height: 10),
-        // Featured promo card
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient135,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(l.tr('limitedTime'), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1.2)),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                l.tr('promoOffer'),
-                style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l.tr('promoDetail'),
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.8)),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  l.tr('claimNow'),
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...notifications.map((n) => _NotifTile(notif: n)),
-        if (notifications.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 24),
-            child: _emptyState(l.tr('noPromos'), Icons.local_offer_outlined),
-          ),
+        if (schemeNotifs.isNotEmpty) ...[
+          _sectionHeader('SCHEME OFFERS'),
+          const SizedBox(height: 10),
+          ...schemeNotifs.map((n) => _NotifTile(notif: n)),
+          const SizedBox(height: 16),
+        ],
+        if (promoNotifs.isNotEmpty) ...[
+          _sectionHeader('FEATURED PROMOTIONS'),
+          const SizedBox(height: 10),
+          ...promoNotifs.map((n) => _NotifTile(notif: n)),
+        ],
+        if (schemeNotifs.isEmpty && promoNotifs.isNotEmpty)
+          const SizedBox.shrink(),
       ],
+    );
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+  const _UnreadBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        gradient: AppColors.primaryGradient135,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$count',
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+      ),
     );
   }
 }
@@ -262,7 +263,9 @@ class _NotifTile extends StatelessWidget {
       case NotificationType.skipped:
         return (Icons.skip_next_rounded, AppColors.error, AppColors.errorContainer);
       case NotificationType.promotion:
-        return (Icons.local_offer_outlined, AppColors.secondary, AppColors.secondary.withValues(alpha: 0.1));
+        return (Icons.star_outline_rounded, AppColors.secondary, AppColors.secondary.withValues(alpha: 0.1));
+      case NotificationType.scheme:
+        return (Icons.local_offer_outlined, AppColors.primary, AppColors.primary.withValues(alpha: 0.1));
       case NotificationType.coming:
         return (Icons.directions_walk_rounded, AppColors.primary, AppColors.primary.withValues(alpha: 0.1));
     }

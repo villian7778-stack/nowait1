@@ -50,6 +50,8 @@ class ShopModel {
   final String? openingHours;
   final double? latitude;
   final double? longitude;
+  final double avgReviewRating;
+  final int reviewCount;
 
   ShopModel({
     required this.id,
@@ -75,6 +77,8 @@ class ShopModel {
     this.openingHours,
     this.latitude,
     this.longitude,
+    this.avgReviewRating = 0.0,
+    this.reviewCount = 0,
   });
 
   bool get canAcceptQueue => isOpen && hasActiveSubscription && !queuePaused;
@@ -120,6 +124,45 @@ class ShopModel {
       openingHours: json['opening_hours'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      avgReviewRating: (json['avg_review_rating'] as num?)?.toDouble() ?? 0.0,
+      reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+// ── Review ────────────────────────────────────────────────────────────────────
+
+class ReviewModel {
+  final String id;
+  final String shopId;
+  final String userId;
+  final String? queueEntryId;
+  final int rating;
+  final String? review;
+  final String userName;
+  final DateTime createdAt;
+
+  const ReviewModel({
+    required this.id,
+    required this.shopId,
+    required this.userId,
+    this.queueEntryId,
+    required this.rating,
+    this.review,
+    required this.userName,
+    required this.createdAt,
+  });
+
+  factory ReviewModel.fromJson(Map<String, dynamic> json) {
+    return ReviewModel(
+      id: json['id'] ?? '',
+      shopId: json['shop_id'] ?? '',
+      userId: json['user_id'] ?? '',
+      queueEntryId: json['queue_entry_id'] as String?,
+      rating: (json['rating'] as num?)?.toInt() ?? 0,
+      review: json['review'] as String?,
+      userName: json['user_name'] ?? 'Customer',
+      createdAt: DateTime.parse(json['created_at']),
     );
   }
 }
@@ -351,6 +394,8 @@ class NotificationModel {
         type = NotificationType.skipped;
       case 'promotion':
         type = NotificationType.promotion;
+      case 'scheme':
+        type = NotificationType.scheme;
       case 'coming':
         type = NotificationType.coming;
       default:
@@ -368,7 +413,7 @@ class NotificationModel {
   }
 }
 
-enum NotificationType { yourTurn, almostThere, skipped, promotion, coming }
+enum NotificationType { yourTurn, almostThere, skipped, promotion, scheme, coming }
 
 // ── Staff ─────────────────────────────────────────────────────────────────────
 

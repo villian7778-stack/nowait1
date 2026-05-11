@@ -55,16 +55,19 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
   - `subscription_service.dart` — subscribe, renew, cancel
   - `staff_service.dart` — add/remove staff, view assignments
   - `analytics_service.dart` — summary, hourly, and per-staff stats
+  - `location_service.dart` — singleton (`LocationService.instance`); GPS via `geolocator`; `getCurrentLocation()` returns `LocationResult`; `getAddressFromCoords()` reverse-geocodes via `/maps/geocode`; `searchPlaces()` calls `/maps/places/autocomplete`; `getPlaceDetails()` calls `/maps/place/details`; `launchDirections(lat, lng)` opens Google Maps / Apple Maps / browser fallback for navigation
 - `lib/widgets/` — reusable components:
   - `gradient_button.dart` — `GradientButton` (gradient fill, `AnimatedScale` press feedback) and `GhostButton` (10% primary opacity bg, no gradient) — use instead of `ElevatedButton`
-  - `shop_card.dart` — `ShopCard`
+  - `shop_card.dart` — `ShopCard`, `showSchemeSheet` helper, and `DirectionsChip` (tappable chip that calls `LocationService.instance.launchDirections`; shown on shop cards and detail screens when lat/lng are present)
   - `status_badge.dart` — `StatusBadge`
   - `searchable_picker_sheet.dart` — bottom-sheet picker with search input; used for state/city selection
   - `ping_dot.dart` — animated pulsing dot indicator (live/active status)
   - `dashed_circle_painter.dart` — custom painter for dashed-circle decorations on token/queue screens
+  - `location_picker_widget.dart` — `LocationPickerPage` (full-screen OpenStreetMap picker; push and await `LocationResult?`; has search, GPS, and drag-to-pick; debounces reverse-geocode on drag) and `LocationPreviewCard` (compact card for shop forms showing selected address; taps to push `LocationPickerPage`)
 - `lib/screens/auth/` — login, create account, OTP verification
 - `lib/screens/customer/` — `home_screen.dart`, `category_screen.dart` (category grid), `category_list_screen.dart` (shops within a category), `salon_list_screen.dart`, `shop_details_screen.dart`, `join_queue_sheet.dart` (bottom sheet), `queue_status_screen.dart`, `token_screen.dart` (large token number display after joining), `notifications_screen.dart`, `history_screen.dart` (past visits using `VisitHistory`)
 - `lib/screens/owner/` — `owner_dashboard_screen.dart`, `manage_shop_screen.dart`, `edit_shop_screen.dart`, `create_shop_screen.dart`, `subscription_screen.dart`, `promotion_screen.dart` (paid "Featured Promotion" visibility boosts), `scheme_screen.dart` (create/edit customer-facing offer/scheme via `PromotionService`), `staff_management_screen.dart` (add/remove staff by phone, view staff queue groups)
+- `lib/screens/help_support_screen.dart` — `HelpSupportScreen`; static contact info + FAQ list sourced from `LocaleService.instance.faqs`
 
 **Key conventions:**
 - `AuthService.instance`, `ApiClient.instance`, and all domain services are singletons — never instantiate with `new`
@@ -241,6 +244,10 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/maps/geocode` | — | Reverse-geocode `latlng=lat,lng` → address (proxies Google Geocoding API using server `GOOGLE_MAP_KEY`) |
 | GET | `/maps/places/autocomplete` | — | Places autocomplete `input=query` → predictions |
 | GET | `/maps/place/details` | — | Place details `place_id=...` → lat/lng + address |
+
+### Admin Panel
+
+`app/routers/admin.py` mounts a standalone HTML dashboard at `/nowaitt_778admin` (credentials: `778Admin` / `Admin@nowait778`). It uses its own cookie-based session (`_VALID_SESSIONS` in-memory set — resets on server restart) completely separate from Supabase JWT auth. Capabilities: view stats; CRUD on users, shops, queue entries, subscriptions, and promotions; manually grant subscriptions to any shop by UUID. Do not delete or rename the route prefix — it is intentionally obscure.
 
 ### Database Tables
 

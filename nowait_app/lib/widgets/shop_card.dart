@@ -137,12 +137,27 @@ class ShopCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    '${shop.category} • ${shop.distance}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${shop.category} • ${shop.distance}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (shop.reviewCount > 0) ...[
+                        const SizedBox(width: 6),
+                        _StarRatingMini(
+                          rating: shop.avgReviewRating,
+                          count: shop.reviewCount,
+                        ),
+                      ],
+                    ],
                   ),
                   if (shop.address.isNotEmpty) ...[
                     const SizedBox(height: 2),
@@ -361,6 +376,42 @@ class _DirectionsChipState extends State<DirectionsChip> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Compact star + score display used on shop cards.
+class _StarRatingMini extends StatelessWidget {
+  final double rating;
+  final int count;
+
+  const _StarRatingMini({required this.rating, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.star_rounded, size: 11, color: Color(0xFFFFC107)),
+        const SizedBox(width: 2),
+        Text(
+          rating.toStringAsFixed(1),
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        Text(
+          ' ($count)',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 10,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }

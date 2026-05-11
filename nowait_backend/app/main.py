@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin, analytics, auth, maps, notifications, promotions, queues, shops, staff, subscriptions
+from app.routers import admin, analytics, auth, maps, notifications, promotions, queues, reviews, shops, staff, subscriptions
 
 app = FastAPI(
     title="NOWAIT API",
@@ -45,6 +45,7 @@ app.add_middleware(
 
 app.include_router(admin.router)
 app.include_router(auth.router)
+app.include_router(reviews.router)
 app.include_router(maps.router)
 app.include_router(shops.router)
 app.include_router(queues.router)

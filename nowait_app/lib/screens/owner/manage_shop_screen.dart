@@ -158,51 +158,158 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     ).whenComplete(ctrl.dispose);
   }
 
-  /// Shows skip dialog with optional reason, then calls the API.
+  /// Shows skip confirmation dialog with optional reason, then calls the API.
   void _showSkipDialog(String entryId, String customerName) {
     final noteCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Skip $customerName?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Optionally add a reason:', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: noteCtrl,
-              decoration: InputDecoration(
-                hintText: 'e.g. Did not show up',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: AppColors.surfaceContainerLowest,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Warning icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_off_rounded, color: AppColors.error, size: 28),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Skip Customer?',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Are you sure you want to skip $customerName? They will lose their position in the queue.',
+                style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              // Optional reason field
+              StatefulBuilder(
+                builder: (ctx, setSt) => TextField(
+                  controller: noteCtrl,
+                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface),
+                  decoration: InputDecoration(
+                    hintText: 'Reason (optional, e.g. Did not show up)',
+                    hintStyle: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                    filled: true,
+                    fillColor: AppColors.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.4)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppColors.outline.withValues(alpha: 0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    prefixIcon: const Icon(Icons.edit_note_rounded, size: 18, color: AppColors.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          await QueueService.instance.skipCustomer(
+                            entryId,
+                            note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                          );
+                          if (mounted) {
+                            _loadQueue();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('$customerName skipped'),
+                                backgroundColor: AppColors.onSurfaceVariant,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } on ApiException catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.skip_next_rounded, color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Yes, Skip',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                await QueueService.instance.skipCustomer(entryId, note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
-                if (mounted) {
-                  _loadQueue();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$customerName skipped'), backgroundColor: AppColors.onSurfaceVariant, behavior: SnackBarBehavior.floating),
-                  );
-                }
-              } on ApiException catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: AppColors.error));
-              }
-            },
-            child: Text('Skip', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
     ).whenComplete(noteCtrl.dispose);
   }
@@ -694,7 +801,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen(showPromoTab: false)),
                 ).then((_) => _loadUnreadCount()),
                 child: Stack(
                   clipBehavior: Clip.none,

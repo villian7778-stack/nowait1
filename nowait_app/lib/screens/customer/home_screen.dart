@@ -588,7 +588,7 @@ class _HomeTabState extends State<_HomeTab> {
             _sectionHeader(LocaleService.instance.tr('openNow'), isLive: true, context: context),
             const SizedBox(height: 14),
             SizedBox(
-              height: 158,
+              height: 176,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const NeverScrollableScrollPhysics(),
@@ -620,7 +620,7 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 158,
+            height: 176,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
