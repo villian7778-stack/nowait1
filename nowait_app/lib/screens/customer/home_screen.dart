@@ -11,6 +11,7 @@ import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
 import '../../widgets/shop_card.dart' show DirectionsChip;
+import 'reviews_screen.dart';
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
@@ -999,6 +1000,26 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+            if (shop.reviewCount > 0) ...[
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ReviewsScreen(shop: shop),
+                )),
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ..._compactStars(shop.avgReviewRating),
+                    const SizedBox(width: 3),
+                    Text(
+                      shop.avgReviewRating.toStringAsFixed(1),
+                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const Expanded(child: SizedBox()),
             // Status row
             Row(
@@ -1058,6 +1079,18 @@ class _CompactShopCard extends StatelessWidget {
       ),
       child: Icon(CategoryTheme.icon(shop.category), color: color, size: 22),
     );
+  }
+
+  List<Widget> _compactStars(double rating) {
+    return List.generate(5, (i) {
+      if (rating >= i + 1) {
+        return const Icon(Icons.star_rounded, size: 10, color: Color(0xFFFFC107));
+      } else if (rating >= i + 0.5) {
+        return const Icon(Icons.star_half_rounded, size: 10, color: Color(0xFFFFC107));
+      } else {
+        return const Icon(Icons.star_outline_rounded, size: 10, color: Color(0xFF8E9BB5));
+      }
+    });
   }
 }
 

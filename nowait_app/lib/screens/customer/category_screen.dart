@@ -6,10 +6,23 @@ import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
-import '../../widgets/shop_card.dart' show showSchemeSheet, showReviewsSheet, DirectionsChip;
+import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip;
+import 'reviews_screen.dart';
 import 'shop_details_screen.dart';
 
 IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
+
+List<Widget> _buildStars(double rating, double size) {
+  return List.generate(5, (i) {
+    if (rating >= i + 1) {
+      return Icon(Icons.star_rounded, size: size, color: const Color(0xFFFFC107));
+    } else if (rating >= i + 0.5) {
+      return Icon(Icons.star_half_rounded, size: size, color: const Color(0xFFFFC107));
+    } else {
+      return Icon(Icons.star_outline_rounded, size: size, color: const Color(0xFF8E9BB5));
+    }
+  });
+}
 
 class CategoryScreen extends StatefulWidget {
   final String category;
@@ -712,20 +725,27 @@ class _PromotedShopCard extends StatelessWidget {
                   if (shop.reviewCount > 0) ...[
                     const SizedBox(height: 4),
                     GestureDetector(
-                      onTap: () => showReviewsSheet(context, shop: shop),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ReviewsScreen(shop: shop),
+                      )),
                       behavior: HitTestBehavior.opaque,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
-                          const SizedBox(width: 3),
+                          ..._buildStars(shop.avgReviewRating, 12),
+                          const SizedBox(width: 4),
                           Text(
                             shop.avgReviewRating.toStringAsFixed(1),
                             style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.onSurface),
                           ),
                           const SizedBox(width: 3),
                           Text(
-                            '(${shop.reviewCount}) · ${shop.reviewCount} review${shop.reviewCount == 1 ? '' : 's'}',
+                            '(${shop.reviewCount})',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'View',
                             style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
                           ),
                           const Icon(Icons.chevron_right_rounded, size: 12, color: AppColors.primary),
@@ -930,20 +950,27 @@ class _ShopListCard extends StatelessWidget {
                   if (shop.reviewCount > 0) ...[
                     const SizedBox(height: 4),
                     GestureDetector(
-                      onTap: () => showReviewsSheet(context, shop: shop),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ReviewsScreen(shop: shop),
+                      )),
                       behavior: HitTestBehavior.opaque,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFC107)),
-                          const SizedBox(width: 3),
+                          ..._buildStars(shop.avgReviewRating, 12),
+                          const SizedBox(width: 4),
                           Text(
                             shop.avgReviewRating.toStringAsFixed(1),
                             style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.onSurface),
                           ),
                           const SizedBox(width: 3),
                           Text(
-                            '(${shop.reviewCount}) · ${shop.reviewCount} review${shop.reviewCount == 1 ? '' : 's'}',
+                            '(${shop.reviewCount})',
+                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'View',
                             style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
                           ),
                           const Icon(Icons.chevron_right_rounded, size: 12, color: AppColors.primary),
