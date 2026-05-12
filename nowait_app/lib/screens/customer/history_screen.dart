@@ -5,6 +5,7 @@ import '../../services/locale_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/category_theme.dart';
 class HistoryScreen extends StatefulWidget {
   final VoidCallback? onGoHome;
   const HistoryScreen({super.key, this.onGoHome});
@@ -211,14 +212,13 @@ class _HistoryCard extends StatelessWidget {
                 Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient135,
+                    color: CategoryTheme.color(visit.shopCategory).withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Center(
-                    child: Text(
-                      _categoryEmoji(visit.shopCategory),
-                      style: const TextStyle(fontSize: 22),
-                    ),
+                  child: Icon(
+                    CategoryTheme.icon(visit.shopCategory),
+                    color: CategoryTheme.color(visit.shopCategory),
+                    size: 22,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -292,21 +292,6 @@ class _HistoryCard extends StatelessWidget {
     );
   }
 
-  String _categoryEmoji(String category) {
-    const map = {
-      'Salon': '✂️',
-      'Barbershop': '💈',
-      'Clinic': '🏥',
-      'Hospital': '🏨',
-      'Bank': '🏦',
-      'Restaurant': '🍽️',
-      'Spa': '💆',
-      'Gym': '💪',
-      'Pharmacy': '💊',
-      'Laundry': '👕',
-    };
-    return map[category] ?? '🏪';
-  }
 }
 
 class _DetailChip extends StatelessWidget {

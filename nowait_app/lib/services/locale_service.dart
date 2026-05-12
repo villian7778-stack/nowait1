@@ -91,7 +91,7 @@ class LocaleService extends ChangeNotifier {
 
   static const _en = <String, String>{
     // ── App-wide ──
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'Skip the wait, not the experience.',
     'language': 'Language',
     'changeLanguage': 'Change Language',
@@ -156,7 +156,7 @@ class LocaleService extends ChangeNotifier {
 
     // ── Home tab ──
     'hello': 'Hello, {name}',
-    'findYourSpot': 'Find your spot · skip the wait',
+    'findYourSpot': 'Skip The Wait Not The Experience',
     'openNow': 'Open Now',
     'featuredShops': 'Featured',
     'allShops': 'All Shops',
@@ -367,7 +367,7 @@ class LocaleService extends ChangeNotifier {
   // ─── Hindi ───────────────────────────────────────────────────────────────────
 
   static const _hi = <String, String>{
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'इंतजार छोड़ें, अनुभव नहीं।',
     'language': 'भाषा',
     'changeLanguage': 'भाषा बदलें',
@@ -627,7 +627,7 @@ class LocaleService extends ChangeNotifier {
   // ─── Marathi ─────────────────────────────────────────────────────────────────
 
   static const _mr = <String, String>{
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'प्रतीक्षा सोडा, अनुभव नाही।',
     'language': 'भाषा',
     'changeLanguage': 'भाषा बदला',

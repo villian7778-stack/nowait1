@@ -965,7 +965,7 @@ class _QueueListRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Row(
           children: [
-            // ── Left: token + position ──
+            // ── Left: position + token ──
             Column(
               children: [
                 Container(
@@ -975,24 +975,21 @@ class _QueueListRow extends StatelessWidget {
                     color: accentColor.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '#${item.tokenNumber}',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: accentColor,
-                          letterSpacing: -0.5,
-                        ),
+                  child: Center(
+                    child: Text(
+                      _ordinal(position),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: accentColor,
+                        letterSpacing: -0.5,
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _ordinal(position),
+                  '#${item.tokenNumber}',
                   style: GoogleFonts.inter(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
