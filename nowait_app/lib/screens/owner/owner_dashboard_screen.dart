@@ -169,7 +169,7 @@ class _ShopsTabState extends State<_ShopsTab> {
       if (mounted) {
         setState(() { _shop = shop; _isLoading = false; });
         widget.onShopLoaded(shop);
-        _loadReviews(shop.id);
+        if (shop != null) _loadReviews(shop.id);
       }
     } on ApiException {
       if (mounted) setState(() => _isLoading = false);
