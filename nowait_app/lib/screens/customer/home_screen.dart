@@ -1211,7 +1211,12 @@ class _QueueTabState extends State<_QueueTab> {
     try {
       setState(() => _isLoading = true);
       final entries = await QueueService.instance.getMyStatus();
-      if (mounted) setState(() { _entries = entries; _isLoading = false; });
+      final active = entries.where((e) =>
+        e.status == QueueStatus.waiting ||
+        e.status == QueueStatus.almostThere ||
+        e.status == QueueStatus.yourTurn,
+      ).toList();
+      if (mounted) setState(() { _entries = active; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
