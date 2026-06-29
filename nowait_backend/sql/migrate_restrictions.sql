@@ -16,3 +16,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_queue_per_user
 --    any queue (set automatically on cancellation, 2-hour cooldown).
 ALTER TABLE profiles
     ADD COLUMN IF NOT EXISTS queue_ban_until TIMESTAMPTZ;
+
+-- 3. Per-category cancellation ban timestamps.
+--    JSONB mapping category name → ISO-8601 ban expiry timestamp.
+--    Replaces the global queue_ban_until with independent per-category cooldowns.
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS queue_ban_categories JSONB DEFAULT '{}';

@@ -48,6 +48,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
     super.initState();
     _entry = widget.entry;
     _shopCategory = widget.shopCategory;
+    _comingNotified = widget.entry.hasNotifiedComing;
     _l.addListener(_onLocale);
 
     _spinController = AnimationController(
@@ -102,7 +103,10 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
       final updated =
           entries.where((e) => e.entryId == _entry.entryId).firstOrNull;
       if (updated != null && mounted) {
-        setState(() => _entry = updated);
+        setState(() {
+          _entry = updated;
+          if (updated.hasNotifiedComing) _comingNotified = true;
+        });
         if (updated.status == QueueStatus.completed) {
           _pollTimer?.cancel();
           _showRatingThenGoHome();

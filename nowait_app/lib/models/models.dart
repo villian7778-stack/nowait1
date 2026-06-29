@@ -255,6 +255,7 @@ class QueueEntry {
   final double? totalServiceCost;
   final double? shopLatitude;
   final double? shopLongitude;
+  final bool hasNotifiedComing;
 
   QueueEntry({
     required this.id,
@@ -274,6 +275,7 @@ class QueueEntry {
     this.totalServiceCost,
     this.shopLatitude,
     this.shopLongitude,
+    this.hasNotifiedComing = false,
   });
 
   factory QueueEntry.fromJson(Map<String, dynamic> json) {
@@ -331,6 +333,7 @@ class QueueEntry {
       totalServiceCost: totalCost,
       shopLatitude: (json['shop_latitude'] as num?)?.toDouble(),
       shopLongitude: (json['shop_longitude'] as num?)?.toDouble(),
+      hasNotifiedComing: json['coming_at'] != null,
     );
   }
 }

@@ -42,7 +42,7 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 - `lib/config/app_config.dart` — reads `BASE_URL` dart-define
 - `lib/theme/app_theme.dart` — single source of truth for `AppColors` and `AppTheme`; never hardcode colors in screens
 - `lib/theme/category_theme.dart` — per-category color/icon mappings used by category chips and list screens
-- `lib/models/models.dart` — all data models (`UserModel`, `ShopModel`, `ServiceModel`, `QueueEntry`, `NotificationModel`, `SchemeModel`, `StaffMember`, `StaffQueueGroup`, `AnalyticsSummary`, `VisitHistory`) and enums. `ShopModel.canAcceptQueue` (`isOpen && hasActiveSubscription && !queuePaused`) is the canonical gate before joining a queue. `SchemeModel` is populated from `active_promotions` in the shop JSON response.
+- `lib/models/models.dart` — all data models (`UserModel`, `ShopModel`, `ServiceModel`, `QueueEntry`, `NotificationModel`, `SchemeModel`, `StaffMember`, `StaffQueueGroup`, `AnalyticsSummary`, `VisitHistory`, `ReviewModel`) and enums. `ShopModel.canAcceptQueue` (`isOpen && hasActiveSubscription && !queuePaused`) is the canonical gate before joining a queue. `SchemeModel` is populated from `active_promotions` in the shop JSON response. `ShopModel` also carries `avgReviewRating`, `reviewCount`, `latitude`, `longitude`, `maxQueueSize`, and `openingHours` from the API response.
 - `lib/data/mock_data.dart` — static `CategoryProduct` lists (salon, beauty, hospital, etc.) used only by the category chip row at the top of each category screen; not a fallback for API calls
 - `lib/services/` — all singletons; call the backend via `ApiClient`:
   - `api_client.dart` — singleton HTTP client (`ApiClient.instance`), attaches Bearer token, throws `ApiException` on non-2xx
@@ -56,6 +56,8 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
   - `staff_service.dart` — add/remove staff, view assignments
   - `analytics_service.dart` — summary, hourly, and per-staff stats
   - `location_service.dart` — singleton (`LocationService.instance`); GPS via `geolocator`; `getCurrentLocation()` returns `LocationResult`; `getAddressFromCoords()` reverse-geocodes via `/maps/geocode`; `searchPlaces()` calls `/maps/places/autocomplete`; `getPlaceDetails()` calls `/maps/place/details`; `launchDirections(lat, lng)` opens Google Maps / Apple Maps / browser fallback for navigation
+  - `review_service.dart` — singleton; `submitReview()` posts to `/reviews/shops/{id}`; `getReviews()` fetches paginated list; `getReviewSummary()` fetches avg rating + star distribution (result is cached in-memory per shop; call `invalidateSummaryCache(shopId)` after submitting)
+  - `queue_monitor_service.dart` — singleton background poller (10 s interval); set `navigatorKey` before calling `start()`; polls `QueueService.getMyStatus()` and shows `showRatingReviewSheet` via the root navigator when an entry transitions to `completed`; call `stop()` on logout
 - `lib/widgets/` — reusable components:
   - `gradient_button.dart` — `GradientButton` (gradient fill, `AnimatedScale` press feedback) and `GhostButton` (10% primary opacity bg, no gradient) — use instead of `ElevatedButton`
   - `shop_card.dart` — `ShopCard`, `showSchemeSheet` helper, and `DirectionsChip` (tappable chip that calls `LocationService.instance.launchDirections`; shown on shop cards and detail screens when lat/lng are present)
@@ -64,8 +66,9 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
   - `ping_dot.dart` — animated pulsing dot indicator (live/active status)
   - `dashed_circle_painter.dart` — custom painter for dashed-circle decorations on token/queue screens
   - `location_picker_widget.dart` — `LocationPickerPage` (full-screen OpenStreetMap picker; push and await `LocationResult?`; has search, GPS, and drag-to-pick; debounces reverse-geocode on drag) and `LocationPreviewCard` (compact card for shop forms showing selected address; taps to push `LocationPickerPage`)
+  - `rating_review_sheet.dart` — `showRatingReviewSheet(context, shopName:, shopId:, queueEntryId:)` — modal bottom sheet for post-service star rating + optional text review; returns `true` if submitted, `false` if skipped
 - `lib/screens/auth/` — login, create account, OTP verification
-- `lib/screens/customer/` — `home_screen.dart`, `category_screen.dart` (category grid), `category_list_screen.dart` (shops within a category), `salon_list_screen.dart`, `shop_details_screen.dart`, `join_queue_sheet.dart` (bottom sheet), `queue_status_screen.dart`, `token_screen.dart` (large token number display after joining), `notifications_screen.dart`, `history_screen.dart` (past visits using `VisitHistory`)
+- `lib/screens/customer/` — `home_screen.dart`, `category_screen.dart` (category grid), `category_list_screen.dart` (shops within a category), `salon_list_screen.dart`, `shop_details_screen.dart`, `join_queue_sheet.dart` (bottom sheet), `queue_status_screen.dart`, `token_screen.dart` (large token number display after joining), `notifications_screen.dart`, `history_screen.dart` (past visits using `VisitHistory`), `reviews_screen.dart` (paginated customer reviews for a shop, infinite scroll)
 - `lib/screens/owner/` — `owner_dashboard_screen.dart`, `manage_shop_screen.dart`, `edit_shop_screen.dart`, `create_shop_screen.dart`, `subscription_screen.dart`, `promotion_screen.dart` (paid "Featured Promotion" visibility boosts), `scheme_screen.dart` (create/edit customer-facing offer/scheme via `PromotionService`), `staff_management_screen.dart` (add/remove staff by phone, view staff queue groups)
 - `lib/screens/help_support_screen.dart` — `HelpSupportScreen`; static contact info + FAQ list sourced from `LocaleService.instance.faqs`
 
@@ -147,7 +150,7 @@ app/
   config.py        — Settings (pydantic-settings, reads .env); DEMO_MODE bypasses real OTP
   database.py      — Two Supabase clients: supabase (service_role) and supabase_auth (anon, for OTP)
   dependencies.py  — FastAPI Depends: get_current_user, get_current_owner, get_token_user_id
-  routers/         — One file per domain: auth, shops, queues, notifications, promotions, subscriptions, staff, analytics
+  routers/         — One file per domain: auth, shops, queues, notifications, promotions, subscriptions, staff, analytics, reviews, maps
   schemas/         — Pydantic request/response models
   services/        — Business logic; routers are thin HTTP adapters only
 ```
@@ -170,6 +173,7 @@ app/
 - **Queue pause/resume** — `POST /queues/shop/{id}/pause` and `/resume` set `queue_paused` on the shop; paused shops still appear but `canAcceptQueue` returns `false`
 - **Staff queues** — customers can join a specific staff member's queue by passing `staff_id` to `/queues/join`; owners view staff-grouped queues via `GET /queues/shop/{id}/by-staff`
 - **`active_promotions` parsing** — entries with `title == 'Featured Promotion'` are paid visibility boosts (`isPromoted` flag on `ShopModel`); all other entries become the `SchemeModel` (customer-facing offer/scheme)
+- **Reviews** — submitted only for `completed` queue entries; re-submitting for the same `queue_entry_id` overwrites the previous rating; `ShopModel.avgReviewRating` / `reviewCount` come directly from the shop API response (not a separate call)
 
 ### Queue `display_status` Values
 
@@ -244,6 +248,9 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/maps/geocode` | — | Reverse-geocode `latlng=lat,lng` → address (proxies Google Geocoding API using server `GOOGLE_MAP_KEY`) |
 | GET | `/maps/places/autocomplete` | — | Places autocomplete `input=query` → predictions |
 | GET | `/maps/place/details` | — | Place details `place_id=...` → lat/lng + address |
+| POST | `/reviews/shops/{id}` | Customer | Submit rating (1–5) + optional text for a completed visit |
+| GET | `/reviews/shops/{id}` | — | Paginated reviews (`page`, `limit`) |
+| GET | `/reviews/shops/{id}/summary` | — | Avg rating, total count, per-star distribution |
 
 ### Admin Panel
 
@@ -251,4 +258,4 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 
 ### Database Tables
 
-`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `shop_staff` — all RLS-enabled; service role key bypasses RLS server-side.
+`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `shop_staff`, `reviews` — all RLS-enabled; service role key bypasses RLS server-side. The `reviews` table was added via `sql/migrate_reviews.sql`; apply it if working from an older schema snapshot.
