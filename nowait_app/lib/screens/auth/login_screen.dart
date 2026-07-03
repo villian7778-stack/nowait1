@@ -1,3 +1,4 @@
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,11 +17,17 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
   final _phoneController = TextEditingController();
   bool _isValid = false;
   bool _isLoading = false;
   final _l = LocaleService.instance;
+
+  late AnimationController _logoCtrl;
+  late AnimationController _textCtrl;
+  late Animation<double> _logoFlip;
+  late Animation<double> _textFade;
+  late Animation<Offset> _textSlide;
 
   @override
   void initState() {
@@ -30,12 +37,40 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isValid = len >= 10 && len <= 11);
     });
     _l.addListener(_onLocale);
+
+    // Hourglass: flips 180° then pauses, repeating every 2.4s
+    _logoCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+    _logoFlip = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: pi)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 30,
+      ),
+      TweenSequenceItem(tween: ConstantTween(pi), weight: 70),
+    ]).animate(_logoCtrl);
+
+    // App name + tagline: fade in + slide up once on mount
+    _textCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
+    _textFade = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _textCtrl, curve: const Interval(0.0, 0.8, curve: Curves.easeOut)),
+    );
+    _textSlide = Tween(begin: const Offset(0, 0.5), end: Offset.zero).animate(
+      CurvedAnimation(parent: _textCtrl, curve: const Interval(0.0, 0.9, curve: Curves.easeOut)),
+    );
   }
 
   @override
   void dispose() {
     _l.removeListener(_onLocale);
     _phoneController.dispose();
+    _logoCtrl.dispose();
+    _textCtrl.dispose();
     super.dispose();
   }
 
@@ -117,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                       const SizedBox(height: 40),
-                      // App logo
+                      // Animated hourglass logo
                       Center(
                         child: Container(
                           width: 76,
@@ -133,39 +168,53 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.hourglass_bottom_rounded,
-                            color: Colors.white,
-                            size: 38,
+                          child: AnimatedBuilder(
+                            animation: _logoFlip,
+                            builder: (_, child) => Transform.rotate(
+                              angle: _logoFlip.value,
+                              child: child,
+                            ),
+                            child: const Icon(
+                              Icons.hourglass_bottom_rounded,
+                              color: Colors.white,
+                              size: 38,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 28),
-                      Center(
-                        child: Text(
-                          _l.tr('appName'),
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1,
-                            foreground: Paint()
-                              ..shader = const LinearGradient(
-                                colors: [
-                                  AppColors.primary,
-                                  AppColors.secondary
-                                ],
-                              ).createShader(
-                                  const Rect.fromLTWH(0, 0, 200, 50)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Center(
-                        child: Text(
-                          _l.tr('appTagline'),
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: AppColors.onSurfaceVariant,
+                      // Animated app name + tagline
+                      FadeTransition(
+                        opacity: _textFade,
+                        child: SlideTransition(
+                          position: _textSlide,
+                          child: Column(
+                            children: [
+                              Center(
+                                child: Text(
+                                  _l.tr('appName'),
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -1,
+                                    foreground: Paint()
+                                      ..shader = const LinearGradient(
+                                        colors: [AppColors.primary, AppColors.secondary],
+                                      ).createShader(const Rect.fromLTWH(0, 0, 220, 50)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Center(
+                                child: Text(
+                                  _l.tr('appTagline'),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

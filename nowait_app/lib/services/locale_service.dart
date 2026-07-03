@@ -91,7 +91,7 @@ class LocaleService extends ChangeNotifier {
 
   static const _en = <String, String>{
     // ── App-wide ──
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'Skip the wait, not the experience.',
     'language': 'Language',
     'changeLanguage': 'Change Language',
@@ -156,11 +156,13 @@ class LocaleService extends ChangeNotifier {
 
     // ── Home tab ──
     'hello': 'Hello, {name}',
-    'findYourSpot': 'Find your spot · skip the wait',
+    'findYourSpot': 'Skip The Wait Not The Experience',
     'openNow': 'Open Now',
     'featuredShops': 'Featured',
     'allShops': 'All Shops',
     'noShopsFound': 'No shops found',
+    'notInQueue': "You're not in any queue",
+    'notInQueueSub': 'Browse shops and join a queue to track your spot here',
     'seeAll': 'See all',
     'searchByName': 'Search by name…',
     'searchByAddress': 'Search by address…',
@@ -365,7 +367,7 @@ class LocaleService extends ChangeNotifier {
   // ─── Hindi ───────────────────────────────────────────────────────────────────
 
   static const _hi = <String, String>{
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'इंतजार छोड़ें, अनुभव नहीं।',
     'language': 'भाषा',
     'changeLanguage': 'भाषा बदलें',
@@ -430,6 +432,8 @@ class LocaleService extends ChangeNotifier {
     'featuredShops': 'विशेष',
     'allShops': 'सभी दुकानें',
     'noShopsFound': 'कोई दुकान नहीं मिली',
+    'notInQueue': 'आप किसी कतार में नहीं हैं',
+    'notInQueueSub': 'दुकानें ब्राउज़ करें और कतार में शामिल हों',
     'seeAll': 'सभी देखें',
     'searchByName': 'नाम से खोजें…',
     'searchByAddress': 'पते से खोजें…',
@@ -623,7 +627,7 @@ class LocaleService extends ChangeNotifier {
   // ─── Marathi ─────────────────────────────────────────────────────────────────
 
   static const _mr = <String, String>{
-    'appName': 'NOWAIT',
+    'appName': 'NOWAITT',
     'appTagline': 'प्रतीक्षा सोडा, अनुभव नाही।',
     'language': 'भाषा',
     'changeLanguage': 'भाषा बदला',
@@ -688,6 +692,8 @@ class LocaleService extends ChangeNotifier {
     'featuredShops': 'वैशिष्ट्यीकृत',
     'allShops': 'सर्व दुकाने',
     'noShopsFound': 'दुकाने सापडली नाहीत',
+    'notInQueue': 'तुम्ही कोणत्याही रांगेत नाही',
+    'notInQueueSub': 'दुकाने ब्राउज़ करा आणि रांगेत सामील व्हा',
     'seeAll': 'सर्व पहा',
     'searchByName': 'नावाने शोधा…',
     'searchByAddress': 'पत्त्याने शोधा…',

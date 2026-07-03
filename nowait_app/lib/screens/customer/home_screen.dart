@@ -46,6 +46,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onLocale() => setState(() {});
 
+  Future<void> _onNavTap(int i) async {
+    if (i == 1) {
+      // My Queue: go directly to QueueStatusScreen only when actively in queue
+      try {
+        final entries = await QueueService.instance.getMyStatus();
+        if (!mounted) return;
+        final active = entries.where((e) =>
+          e.status == QueueStatus.waiting ||
+          e.status == QueueStatus.almostThere ||
+          e.status == QueueStatus.yourTurn,
+        ).toList();
+        if (active.isNotEmpty) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: active[0])),
+          );
+          return;
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _currentIndex = 1);
+      return;
+    }
+    setState(() => _currentIndex = i);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -60,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: _BottomNav(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: _onNavTap,
       ),
     );
   }
@@ -624,10 +649,12 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 176,
+            height: 196,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
               itemCount: openShops.length,
               itemBuilder: (_, i) => _CompactShopCard(
                 shop: openShops[i],
@@ -999,7 +1026,6 @@ class _CompactShopCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
             ShopRatingRow(shop: shop, starSize: 11),
             const Expanded(child: SizedBox()),
             // Status row
@@ -1185,7 +1211,12 @@ class _QueueTabState extends State<_QueueTab> {
     try {
       setState(() => _isLoading = true);
       final entries = await QueueService.instance.getMyStatus();
-      if (mounted) setState(() { _entries = entries; _isLoading = false; });
+      final active = entries.where((e) =>
+        e.status == QueueStatus.waiting ||
+        e.status == QueueStatus.almostThere ||
+        e.status == QueueStatus.yourTurn,
+      ).toList();
+      if (mounted) setState(() { _entries = active; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1257,16 +1288,17 @@ class _QueueTabState extends State<_QueueTab> {
             ),
             const SizedBox(height: 20),
             Text(
-              LocaleService.instance.tr('noShopsFound'),
+              LocaleService.instance.tr('notInQueue'),
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              LocaleService.instance.tr('joinQueue'),
+              LocaleService.instance.tr('notInQueueSub'),
               style: GoogleFonts.inter(
                   fontSize: 14, color: AppColors.onSurfaceVariant),
               textAlign: TextAlign.center,

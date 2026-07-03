@@ -70,15 +70,16 @@ def _calculate_total_duration(service_ids: list, avg_wait: int) -> int:
     return total if total > 0 else avg_wait
 
 
-def _check_queue_ban(user_id: str) -> None:
-    """Raise 403 if user is within the 2-hour cancellation cooldown period."""
+def _check_queue_ban(user_id: str, category: str) -> None:
+    """Raise 403 if user is within the 2-hour cancellation cooldown for the given category."""
     try:
         profile = execute_one(
-            supabase.table("profiles").select("queue_ban_until").eq("id", user_id)
+            supabase.table("profiles").select("queue_ban_categories").eq("id", user_id)
         )
         if not profile.data:
             return
-        ban_until_str = profile.data.get("queue_ban_until")
+        ban_categories = profile.data.get("queue_ban_categories") or {}
+        ban_until_str = ban_categories.get(category)
         if not ban_until_str:
             return
         ban_until = datetime.fromisoformat(ban_until_str.replace("Z", "+00:00"))
@@ -89,7 +90,7 @@ def _check_queue_ban(user_id: str) -> None:
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    f"You cannot join any queue for another {remaining_mins} {unit} "
+                    f"You cannot join any {category} queue for another {remaining_mins} {unit} "
                     "due to a recent cancellation."
                 ),
             )
@@ -173,11 +174,15 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
             seen.add(sid)
             unique_ids.append(sid)
 
-    avg_wait = _get_avg_wait(shop_id)
+    shop_info = execute_one(supabase.table("shops").select("avg_wait_minutes, category").eq("id", shop_id))
+    shop_row = shop_info.data or {}
+    avg_wait = shop_row.get("avg_wait_minutes", 10)
+    category = shop_row.get("category", "")
+
     total_duration = _calculate_total_duration(unique_ids, avg_wait) if unique_ids else None
 
-    # Enforce cancellation cooldown before hitting the DB
-    _check_queue_ban(user_id)
+    # Enforce per-category cancellation cooldown before hitting the DB
+    _check_queue_ban(user_id, category)
     # Enforce one active queue per user across all shops
     _check_existing_active_queue(user_id, shop_id)
 
@@ -263,10 +268,18 @@ def cancel_queue(entry_id: str, user_id: str) -> dict:
         "event_type": "cancelled",
     }).execute()
 
-    # Apply 2-hour cooldown: user cannot join any queue until ban_until
+    # Apply 2-hour cooldown scoped to the cancelled shop's category
     try:
-        ban_until = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
-        supabase.table("profiles").update({"queue_ban_until": ban_until}).eq("id", user_id).execute()
+        shop = execute_one(supabase.table("shops").select("category").eq("id", entry.data["shop_id"]))
+        category = shop.data.get("category") if shop.data else None
+        if category:
+            ban_until = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+            profile = execute_one(
+                supabase.table("profiles").select("queue_ban_categories").eq("id", user_id)
+            )
+            current_bans = (profile.data.get("queue_ban_categories") or {}) if profile.data else {}
+            current_bans[category] = ban_until
+            supabase.table("profiles").update({"queue_ban_categories": current_bans}).eq("id", user_id).execute()
     except Exception as ban_err:
         logger.warning("Failed to apply queue ban for user %s: %s", user_id, ban_err)
 
