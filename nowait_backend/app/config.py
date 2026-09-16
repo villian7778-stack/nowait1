@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # Default "*" is safe for a mobile-only API; restrict to your domain in web deployments.
     ALLOWED_ORIGINS: str = "*"
     GOOGLE_MAP_KEY: str = ""
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
 
     @property
     def cors_origins(self) -> List[str]:

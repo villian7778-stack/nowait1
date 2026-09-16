@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/subscription_service.dart';
+import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
@@ -135,12 +136,29 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               bool success = false;
               String? errorMsg;
               try {
-                await SubscriptionService.instance.createSubscription(
+                final order = await SubscriptionService.instance.createPaymentOrder(
                   widget.shop.id,
                   plan: _backendPlan,
                   durationDays: _durationDays,
                 );
+                final result = await PaymentService.instance.openCheckout(
+                  keyId: order['key_id'] as String,
+                  orderId: order['order_id'] as String,
+                  amountPaise: order['amount'] as int,
+                  name: widget.shop.name,
+                  description: '${_selectedPlan == 'yearly' ? 'Annual' : 'Monthly'} subscription',
+                );
+                await SubscriptionService.instance.verifyPaymentAndActivate(
+                  widget.shop.id,
+                  plan: _backendPlan,
+                  durationDays: _durationDays,
+                  razorpayOrderId: result.orderId,
+                  razorpayPaymentId: result.paymentId,
+                  razorpaySignature: result.signature,
+                );
                 success = true;
+              } on PaymentException catch (e) {
+                errorMsg = e.message;
               } on ApiException catch (e) {
                 errorMsg = e.message;
               } catch (_) {

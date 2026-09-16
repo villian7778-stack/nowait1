@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin, analytics, auth, maps, notifications, promotions, queues, reviews, shops, staff, subscriptions
+from app.routers import admin, analytics, auth, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
 
 app = FastAPI(
     title="NOWAIT API",
@@ -54,6 +54,7 @@ app.include_router(analytics.router)
 app.include_router(notifications.router)
 app.include_router(promotions.router)
 app.include_router(subscriptions.router)
+app.include_router(payments.router)
 
 
 @app.get("/", tags=["Health"])

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/promotion_service.dart';
+import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
@@ -119,11 +120,29 @@ class _PromotionScreenState extends State<PromotionScreen> {
                     .add(Duration(days: _selectedDays))
                     .toUtc()
                     .toIso8601String();
-                await PromotionService.instance.createPromotion(
+                const title = 'Featured Promotion';
+                final description = 'Shop promoted for $_selectedDays day${_selectedDays == 1 ? '' : 's'}';
+                final order = await PromotionService.instance.createPaymentOrder(
                   widget.shop.id,
-                  title: 'Featured Promotion',
-                  description: 'Shop promoted for $_selectedDays day${_selectedDays == 1 ? '' : 's'}',
+                  title: title,
+                  description: description,
                   validUntil: validUntil,
+                );
+                final result = await PaymentService.instance.openCheckout(
+                  keyId: order['key_id'] as String,
+                  orderId: order['order_id'] as String,
+                  amountPaise: order['amount'] as int,
+                  name: widget.shop.name,
+                  description: description,
+                );
+                await PromotionService.instance.verifyPaymentAndActivate(
+                  widget.shop.id,
+                  title: title,
+                  description: description,
+                  validUntil: validUntil,
+                  razorpayOrderId: result.orderId,
+                  razorpayPaymentId: result.paymentId,
+                  razorpaySignature: result.signature,
                 );
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -136,6 +155,13 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   );
                   await _loadActivePromotion();
                   setState(() => _isLoading = false);
+                }
+              } on PaymentException catch (e) {
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                  );
                 }
               } on ApiException catch (e) {
                 if (mounted) {
