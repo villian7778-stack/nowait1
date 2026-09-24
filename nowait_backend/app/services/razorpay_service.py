@@ -35,10 +35,22 @@ def create_order(amount_paise: int, receipt: str, currency: str = "INR") -> dict
             "payment_capture": 1,
         })
     except razorpay.errors.BadRequestError as e:
-        raise HTTPException(status_code=401, detail=f"Razorpay authentication/request error: {e}")
+        # Most commonly a misconfigured API key/secret, or an invalid request param —
+        # never surface the raw SDK message to the client, only to logs.
+        logger.error("Razorpay rejected the order-create request (check API keys/config): %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail="Payment provider rejected the request. Please try again, or contact support if this keeps happening.",
+        )
+    except (razorpay.errors.ServerError, razorpay.errors.GatewayError) as e:
+        logger.error("Razorpay is unavailable: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Payment provider is temporarily unavailable. Please try again in a few minutes.",
+        )
     except Exception as e:
-        logger.error("Razorpay order creation failed: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to create Razorpay order")
+        logger.error("Razorpay order creation failed unexpectedly: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to create payment order. Please try again.")
 
     return {
         "order_id": order["id"],

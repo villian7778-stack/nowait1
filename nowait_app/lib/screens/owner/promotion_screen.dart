@@ -116,6 +116,9 @@ class _PromotionScreenState extends State<PromotionScreen> {
             onPressed: () async {
               Navigator.pop(context);
               setState(() => _isLoading = true);
+              // Once Razorpay checkout succeeds, money is captured — a failure
+              // after that point needs very different messaging than one before it.
+              bool paymentCaptured = false;
               try {
                 final validUntil = DateTime.now()
                     .add(Duration(days: _selectedDays))
@@ -136,7 +139,9 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   name: widget.shop.name,
                   description: description,
                   contact: AuthService.instance.profile?['phone'] as String?,
+                  email: AuthService.instance.profile?['email'] as String?,
                 );
+                paymentCaptured = true;
                 await PromotionService.instance.verifyPaymentAndActivate(
                   widget.shop.id,
                   title: title,
@@ -168,15 +173,56 @@ class _PromotionScreenState extends State<PromotionScreen> {
               } on ApiException catch (e) {
                 if (mounted) {
                   setState(() => _isLoading = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-                  );
+                  if (paymentCaptured) {
+                    _showPaymentCapturedDialog(e.message);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                    );
+                  }
                 }
               } catch (_) {
-                if (mounted) setState(() => _isLoading = false);
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                  if (paymentCaptured) {
+                    _showPaymentCapturedDialog(
+                      'Your payment may have gone through, but something went wrong confirming it. Please contact support before trying again.',
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(_l.tr('somethingWrong')), backgroundColor: AppColors.error),
+                    );
+                  }
+                }
               }
             },
             child: Text('Pay ₹$_totalCost', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shown when Razorpay checkout succeeded but backend verification/activation
+  /// afterward failed — a dialog the owner has to actively dismiss, not a
+  /// snackbar that can be missed, since money has already been captured.
+  void _showPaymentCapturedDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Payment received', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+          ],
+        ),
+        content: Text(message, style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, height: 1.5)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

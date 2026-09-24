@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
@@ -71,13 +73,33 @@ class ApiClient {
     return false;
   }
 
+  /// Runs one request attempt, translating platform/network-level failures
+  /// (no signal, DNS failure, timeout, server unreachable) into a clear
+  /// ApiException instead of letting a raw SocketException/TimeoutException
+  /// surface as a generic "something went wrong" further up the call chain.
+  Future<http.Response> _send(Future<http.Response> Function() makeRequest) async {
+    try {
+      return await makeRequest().timeout(_timeout);
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out. Check your connection and try again.');
+    } on SocketException {
+      throw ApiException(0, 'No internet connection. Check your network and try again.');
+    } on HandshakeException {
+      throw ApiException(0, 'Secure connection failed. Check your network and try again.');
+    } on http.ClientException {
+      throw ApiException(0, 'Could not reach the server. Please try again.');
+    } on FormatException {
+      throw ApiException(0, 'Received an unexpected response from the server. Please try again.');
+    }
+  }
+
   /// Executes [makeRequest], retries once after token refresh on 401.
   Future<dynamic> _executeWithRetry(Future<http.Response> Function() makeRequest) async {
-    var res = await makeRequest().timeout(_timeout);
+    var res = await _send(makeRequest);
     if (res.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        res = await makeRequest().timeout(_timeout);
+        res = await _send(makeRequest);
       }
     }
     return _handle(res);
@@ -141,17 +163,30 @@ class ApiClient {
       contentType: MediaType(parts[0], parts.length > 1 ? parts[1] : 'octet-stream'),
     ));
 
-    final streamed = await request.send().timeout(_timeout);
-    final res = await http.Response.fromStream(streamed);
+    final res = await _send(() async {
+      final streamed = await request.send();
+      return http.Response.fromStream(streamed);
+    });
     return _handle(res);
   }
+
+  static const _statusFallbacks = <int, String>{
+    401: 'Your session has expired. Please log in again.',
+    403: "You don't have permission to do that.",
+    404: "That couldn't be found.",
+    429: 'Too many attempts. Please wait a moment and try again.',
+    500: 'Something went wrong on our end. Please try again.',
+    502: 'The server is temporarily unavailable. Please try again shortly.',
+    503: 'The service is temporarily unavailable. Please try again shortly.',
+    504: 'The server took too long to respond. Please try again.',
+  };
 
   dynamic _handle(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return null;
       return jsonDecode(utf8.decode(res.bodyBytes));
     }
-    String message = 'Request failed (${res.statusCode})';
+    String message = _statusFallbacks[res.statusCode] ?? 'Request failed (${res.statusCode})';
     try {
       final body = jsonDecode(utf8.decode(res.bodyBytes));
       if (body is Map) {

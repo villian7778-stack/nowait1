@@ -136,6 +136,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               setState(() => _isLoading = true);
               bool success = false;
               String? errorMsg;
+              // Once Razorpay checkout succeeds, money is captured — a failure
+              // after that point needs very different messaging than one before it.
+              bool paymentCaptured = false;
               try {
                 final order = await SubscriptionService.instance.createPaymentOrder(
                   widget.shop.id,
@@ -149,7 +152,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   name: widget.shop.name,
                   description: '${_selectedPlan == 'yearly' ? 'Annual' : 'Monthly'} subscription',
                   contact: AuthService.instance.profile?['phone'] as String?,
+                  email: AuthService.instance.profile?['email'] as String?,
                 );
+                paymentCaptured = true;
                 await SubscriptionService.instance.verifyPaymentAndActivate(
                   widget.shop.id,
                   plan: _backendPlan,
@@ -164,7 +169,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               } on ApiException catch (e) {
                 errorMsg = e.message;
               } catch (_) {
-                errorMsg = 'Something went wrong. Please try again.';
+                errorMsg = paymentCaptured
+                    ? 'Your payment may have gone through, but something went wrong confirming it. Please contact support before trying again.'
+                    : 'Something went wrong. Please try again.';
               } finally {
                 if (mounted) {
                   if (success) {
@@ -185,9 +192,35 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   } else {
                     setState(() => _isLoading = false);
                     if (errorMsg != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(errorMsg), backgroundColor: AppColors.error),
-                      );
+                      if (paymentCaptured) {
+                        // Payment went through but activation failed — this needs a
+                        // dialog the owner has to actively dismiss, not a snackbar
+                        // that can be missed.
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text('Payment received', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+                              ],
+                            ),
+                            content: Text(errorMsg!, style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, height: 1.5)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(errorMsg), backgroundColor: AppColors.error),
+                        );
+                      }
                     }
                   }
                 }

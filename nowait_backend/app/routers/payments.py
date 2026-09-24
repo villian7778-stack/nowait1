@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +18,8 @@ from app.services import payment_transaction_service, promotion_service, razorpa
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
+logger = logging.getLogger(__name__)
+
 # Razorpay test-mode integration: every order is fixed at Rs. 1 regardless of the
 # selected plan/duration so the checkout flow can be verified end-to-end without
 # moving real money. Swap this for real plan/promotion pricing before going live.
@@ -29,6 +32,33 @@ def _require_shop_owner(shop_id: str, owner_id: str) -> None:
     )
     if not shop.data:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+
+def _activate_or_explain(activate_fn, payment_id: str):
+    """Runs the post-payment activation step (grant subscription / create promotion).
+    By this point Razorpay has already captured the payment, so a failure here must
+    never look like "payment failed" to the client — it's a distinct, actionable
+    "we owe you this" state that needs a support reference, not a retry."""
+    try:
+        return activate_fn()
+    except HTTPException as e:
+        logger.error("Activation rejected after payment %s was captured: %s", payment_id, e.detail)
+        raise HTTPException(
+            status_code=e.status_code,
+            detail=(
+                f"Your payment was received (reference: {payment_id}), but activating it failed: {e.detail}. "
+                "Please contact support with this reference — do not pay again."
+            ),
+        )
+    except Exception as e:
+        logger.error("Activation failed after payment %s was captured: %s", payment_id, e)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Your payment was received (reference: {payment_id}), but activating it failed on our end. "
+                "Please contact support with this reference — do not pay again."
+            ),
+        )
 
 
 @router.post(
@@ -65,10 +95,19 @@ def verify_subscription_payment(
         "paid" if valid else "failed",
     )
     if not valid:
-        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "We couldn't verify this payment. If Razorpay showed you a success screen, "
+                f"please contact support with reference {body.razorpay_payment_id} before trying again."
+            ),
+        )
 
     sub_data = SubscriptionCreate(plan=body.plan, duration_days=body.duration_days)
-    return subscription_service.create_or_renew_subscription(shop_id, current_user["id"], sub_data)
+    return _activate_or_explain(
+        lambda: subscription_service.create_or_renew_subscription(shop_id, current_user["id"], sub_data),
+        body.razorpay_payment_id,
+    )
 
 
 @router.post(
@@ -105,9 +144,18 @@ def verify_promotion_payment(
         "paid" if valid else "failed",
     )
     if not valid:
-        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "We couldn't verify this payment. If Razorpay showed you a success screen, "
+                f"please contact support with reference {body.razorpay_payment_id} before trying again."
+            ),
+        )
 
     promo_data = PromotionCreate(
         title=body.title, description=body.description, valid_until=body.valid_until
     )
-    return promotion_service.create_promotion(shop_id, current_user["id"], promo_data)
+    return _activate_or_explain(
+        lambda: promotion_service.create_promotion(shop_id, current_user["id"], promo_data),
+        body.razorpay_payment_id,
+    )
