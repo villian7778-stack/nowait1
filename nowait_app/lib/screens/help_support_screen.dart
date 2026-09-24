@@ -7,8 +7,7 @@ import '../theme/app_theme.dart';
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
 
-  static const _phone = '+91 98765 43210';
-  static const _email = 'support@nowait.app';
+  static const _email = 'nowaitt778@gmail.com';
 
   @override
   Widget build(BuildContext context) {
@@ -43,24 +42,12 @@ class HelpSupportScreen extends StatelessWidget {
                       BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10, offset: const Offset(0, 2)),
                     ],
                   ),
-                  child: Column(
-                    children: [
-                      _contactTile(
-                        context,
-                        icon: Icons.phone_outlined,
-                        label: l.tr('callUs'),
-                        value: _phone,
-                        snackLabel: l.tr('copiedClipboard'),
-                      ),
-                      Container(height: 1, margin: const EdgeInsets.only(left: 66), color: AppColors.surfaceContainerLow),
-                      _contactTile(
-                        context,
-                        icon: Icons.email_outlined,
-                        label: l.tr('emailUs'),
-                        value: _email,
-                        snackLabel: l.tr('copiedClipboard'),
-                      ),
-                    ],
+                  child: _contactTile(
+                    context,
+                    icon: Icons.email_outlined,
+                    label: l.tr('emailUs'),
+                    value: _email,
+                    snackLabel: l.tr('copiedClipboard'),
                   ),
                 ),
                 const SizedBox(height: 28),
