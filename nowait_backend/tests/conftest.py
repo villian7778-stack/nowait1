@@ -16,18 +16,14 @@ os.environ["SUPABASE_URL"] = "https://test.supabase.co"
 os.environ["SUPABASE_SERVICE_KEY"] = "test-service-role-key"
 os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
 os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-at-least-32-chars-padding-xx"
-os.environ["DEMO_MODE"] = "True"
-os.environ["DEMO_OTP"] = "123456"
-os.environ["DEMO_PASSWORD"] = "TestPass#2024"
 
 # ── 2. Mock create_client BEFORE any app module is imported ───────────────────
 # database.py calls create_client() at module level; patching here ensures the
 # call succeeds with a MagicMock instead of raising "Invalid API key".
 _mock_db_client = MagicMock(name="supabase_db")
-_mock_auth_client = MagicMock(name="supabase_auth")
 _create_client_patcher = patch(
     "supabase.create_client",
-    side_effect=[_mock_db_client, _mock_auth_client],
+    side_effect=[_mock_db_client],
 )
 _create_client_patcher.start()
 

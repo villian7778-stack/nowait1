@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     id                   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name                 TEXT NOT NULL DEFAULT '',
     phone                TEXT UNIQUE NOT NULL,
+    email                TEXT,
     state                TEXT DEFAULT '',
     city                 TEXT DEFAULT '',
     role                 TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'owner')),
@@ -180,6 +181,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 -- ============================================================
 
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS state                TEXT DEFAULT '';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email                TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS queue_ban_until      TIMESTAMPTZ;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS queue_ban_categories JSONB DEFAULT '{}';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS fcm_token            TEXT;
@@ -226,6 +228,7 @@ CREATE INDEX IF NOT EXISTS idx_shop_reviews_created_at    ON shop_reviews(create
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_shop_id  ON payment_transactions(shop_id);
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_owner_id ON payment_transactions(owner_id);
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_status   ON payment_transactions(status);
+CREATE INDEX IF NOT EXISTS idx_profiles_email                ON profiles(email);
 
 -- ============================================================
 -- UPDATED_AT TRIGGER

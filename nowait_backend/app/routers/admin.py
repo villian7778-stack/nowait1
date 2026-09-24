@@ -1,6 +1,6 @@
 """
 NOWAIT Admin Panel — /nowaitt_778admin
-Credentials: 778Admin / Admin@nowait778
+Credentials are set via ADMIN_USERNAME / ADMIN_PASSWORD in .env — never hardcoded here.
 """
 import secrets
 from datetime import datetime, timezone
@@ -8,12 +8,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Cookie, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.config import settings
 from app.database import supabase
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/nowaitt_778admin", tags=["Admin"])
 
-_ADMIN_USERNAME = "778Admin"
-_ADMIN_PASSWORD = "Admin@nowait778"
 _VALID_SESSIONS: set[str] = set()
 
 
@@ -39,12 +39,15 @@ def login_page(admin_session: str | None = Cookie(default=None)):
 
 
 @router.post("/login")
-def do_login(username: str = Form(...), password: str = Form(...)):
-    if username == _ADMIN_USERNAME and password == _ADMIN_PASSWORD:
+@limiter.limit("5/minute")
+def do_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    valid_username = bool(settings.ADMIN_PASSWORD) and secrets.compare_digest(username, settings.ADMIN_USERNAME)
+    valid_password = bool(settings.ADMIN_PASSWORD) and secrets.compare_digest(password, settings.ADMIN_PASSWORD)
+    if valid_username and valid_password:
         token = secrets.token_hex(32)
         _VALID_SESSIONS.add(token)
         resp = RedirectResponse("/nowaitt_778admin/dashboard", status_code=302)
-        resp.set_cookie("admin_session", token, httponly=True, samesite="lax", max_age=86400)
+        resp.set_cookie("admin_session", token, httponly=True, samesite="lax", secure=True, max_age=86400)
         return resp
     resp = RedirectResponse("/nowaitt_778admin/login?error=1", status_code=302)
     return resp

@@ -70,13 +70,29 @@ class TestHealth:
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 class TestAuthEndpoints:
-    def test_send_otp(self, anon_client):
-        with patch("app.routers.auth.auth_service.send_otp",
-                   return_value={"message": "OTP sent to +911234567890"}):
-            resp = anon_client.post("/auth/send-otp", json={"phone": "+911234567890"})
+    def test_register(self, anon_client):
+        register_resp = {
+            "access_token": "fake.jwt",
+            "token_type": "bearer",
+            "expires_in": 3600,
+            "refresh_token": "fake-refresh",
+            "profile": {
+                "id": "u1", "name": "Rahul", "phone": "+911234567890",
+                "email": "rahul@example.com", "state": "Maharashtra", "city": "Mumbai",
+                "role": "customer", "created_at": "2026-01-01T00:00:00Z",
+            },
+            "email_confirmation_required": False,
+        }
+        with patch("app.routers.auth.auth_service.register", return_value=register_resp):
+            resp = anon_client.post("/auth/register", json={
+                "name": "Rahul", "phone": "+911234567890", "email": "rahul@example.com",
+                "password": "Str0ngPass!", "state": "Maharashtra", "city": "Mumbai",
+                "role": "customer",
+            })
         assert resp.status_code == 200
+        assert resp.json()["email_confirmation_required"] is False
 
-    def test_verify_otp(self, anon_client):
+    def test_login(self, anon_client):
         auth_resp = {
             "access_token": "fake.jwt",
             "token_type": "bearer",
@@ -85,11 +101,17 @@ class TestAuthEndpoints:
             "profile": None,
             "profile_required": True,
         }
-        with patch("app.routers.auth.auth_service.verify_otp", return_value=auth_resp):
-            resp = anon_client.post("/auth/verify-otp",
-                                    json={"phone": "+911234567890", "token": "123456"})
+        with patch("app.routers.auth.auth_service.login", return_value=auth_resp):
+            resp = anon_client.post("/auth/login",
+                                    json={"email": "rahul@example.com", "password": "Str0ngPass!"})
         assert resp.status_code == 200
         assert resp.json()["profile_required"] is True
+
+    def test_forgot_password(self, anon_client):
+        with patch("app.routers.auth.auth_service.forgot_password",
+                   return_value={"message": "If an account exists for this email, a password reset link has been sent."}):
+            resp = anon_client.post("/auth/forgot-password", json={"email": "rahul@example.com"})
+        assert resp.status_code == 200
 
     def test_get_me_as_customer(self, customer_client):
         resp = customer_client.get("/auth/me")

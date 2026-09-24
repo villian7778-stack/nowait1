@@ -27,7 +27,7 @@ flutter test --name "description text"          # Run tests matching a name
 
 Flutter widget tests only — no backend tests exist in `nowait_app/`.
 
-**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker`, `flutter_map`, `latlong2`, `geolocator`, `url_launcher` — no state management library, no DI framework. Map rendering uses OpenStreetMap via `flutter_map` (no API key required). Geocoding and Places search are proxied through the backend (`/maps/*` endpoints) using the server's `GOOGLE_MAP_KEY`.
+**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker`, `flutter_map`, `latlong2`, `geolocator`, `url_launcher`, `razorpay_flutter`, `supabase_flutter` — no state management library, no DI framework. Map rendering uses OpenStreetMap via `flutter_map` (no API key required). Geocoding and Places search are proxied through the backend (`/maps/*` endpoints) using the server's `GOOGLE_MAP_KEY`. `supabase_flutter` is used only for Google sign-in and password-recovery deep links (`SUPABASE_URL`/`SUPABASE_ANON_KEY` dart-defines) — all other data access, including email/password auth, goes through the FastAPI backend via `ApiClient`.
 
 **To set the backend URL** (defaults to `http://localhost:8000`):
 ```bash
@@ -39,14 +39,14 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 
 **Architecture:**
 - `lib/main.dart` — entry point; loads `AuthService` and `LocaleService` from storage in parallel, routes to login/home/dashboard based on auth state; forces portrait; listens to `LocaleService` to rebuild the widget tree on language change
-- `lib/config/app_config.dart` — reads `BASE_URL` dart-define
+- `lib/config/app_config.dart` — reads `BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` dart-defines; the latter two are only used for the Google sign-in / password-recovery deep-link handshake (`authCallbackUrl`), never for email/password auth
 - `lib/theme/app_theme.dart` — single source of truth for `AppColors` and `AppTheme`; never hardcode colors in screens
 - `lib/theme/category_theme.dart` — per-category color/icon mappings used by category chips and list screens
 - `lib/models/models.dart` — all data models (`UserModel`, `ShopModel`, `ServiceModel`, `QueueEntry`, `NotificationModel`, `SchemeModel`, `StaffMember`, `StaffQueueGroup`, `AnalyticsSummary`, `VisitHistory`, `ReviewModel`) and enums. `ShopModel.canAcceptQueue` (`isOpen && hasActiveSubscription && !queuePaused`) is the canonical gate before joining a queue. `SchemeModel` is populated from `active_promotions` in the shop JSON response. `ShopModel` also carries `avgReviewRating`, `reviewCount`, `latitude`, `longitude`, `maxQueueSize`, and `openingHours` from the API response.
 - `lib/data/mock_data.dart` — static `CategoryProduct` lists (salon, beauty, hospital, etc.) used only by the category chip row at the top of each category screen; not a fallback for API calls
 - `lib/services/` — all singletons; call the backend via `ApiClient`:
   - `api_client.dart` — singleton HTTP client (`ApiClient.instance`), attaches Bearer token, throws `ApiException` on non-2xx
-  - `auth_service.dart` — OTP flow, session persistence via `shared_preferences`, role detection
+  - `auth_service.dart` — email/password register/login/forgot-password against the FastAPI backend; `adoptSupabaseSession()` and `resetPassword()` talk to the Supabase Flutter SDK directly, only for the Google OAuth and password-recovery deep-link flows; session persistence via `shared_preferences`; role detection
   - `locale_service.dart` — i18n singleton; supports `en`/`hi`/`mr`; `LocaleService.instance.tr('key', params: {'name': 'value'})` for all user-facing strings; placeholders in string table use `{name}` syntax; persists choice via `shared_preferences`; extends `ChangeNotifier` so the app rebuilds on language switch
   - `shop_service.dart` — CRUD + toggle-open
   - `queue_service.dart` — join, status, cancel, coming, history
@@ -67,7 +67,7 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
   - `dashed_circle_painter.dart` — custom painter for dashed-circle decorations on token/queue screens
   - `location_picker_widget.dart` — `LocationPickerPage` (full-screen OpenStreetMap picker; push and await `LocationResult?`; has search, GPS, and drag-to-pick; debounces reverse-geocode on drag) and `LocationPreviewCard` (compact card for shop forms showing selected address; taps to push `LocationPickerPage`)
   - `rating_review_sheet.dart` — `showRatingReviewSheet(context, shopName:, shopId:, queueEntryId:)` — modal bottom sheet for post-service star rating + optional text review; returns `true` if submitted, `false` if skipped
-- `lib/screens/auth/` — login, create account, OTP verification
+- `lib/screens/auth/` — `login_screen.dart` (email/password + Google), `create_account_screen.dart` (also doubles as the post-Google-sign-in "Complete Your Profile" screen via `isCompletingProfile: true`), `forgot_password_screen.dart`, `reset_password_screen.dart` (shown when the app catches the password-recovery deep link)
 - `lib/screens/customer/` — `home_screen.dart`, `category_screen.dart` (category grid), `category_list_screen.dart` (shops within a category), `salon_list_screen.dart`, `shop_details_screen.dart`, `join_queue_sheet.dart` (bottom sheet), `queue_status_screen.dart`, `token_screen.dart` (large token number display after joining), `notifications_screen.dart`, `history_screen.dart` (past visits using `VisitHistory`), `reviews_screen.dart` (paginated customer reviews for a shop, infinite scroll)
 - `lib/screens/owner/` — `owner_dashboard_screen.dart`, `manage_shop_screen.dart`, `edit_shop_screen.dart`, `create_shop_screen.dart`, `subscription_screen.dart`, `promotion_screen.dart` (paid "Featured Promotion" visibility boosts), `scheme_screen.dart` (create/edit customer-facing offer/scheme via `PromotionService`), `staff_management_screen.dart` (add/remove staff by phone, view staff queue groups)
 - `lib/screens/help_support_screen.dart` — `HelpSupportScreen`; static contact info + FAQ list sourced from `LocaleService.instance.faqs`
@@ -79,7 +79,7 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 - Phone numbers use a hardcoded `+91` prefix (India)
 - No state management library — screens are `StatefulWidget`; call services directly in `initState`/handlers
 - Navigation uses `Navigator.push`/`pop` directly — no named routes
-- `AuthService.pendingPhone` stores the phone number during OTP flow because in demo mode the JWT doesn't contain a phone claim; it's passed explicitly to `complete-profile`
+- Authentication is email + password (backend-issued Supabase JWT) or Google OAuth (Supabase-issued JWT obtained client-side); the mobile number is profile-only data, collected at registration/profile-completion and never used to log in or verified by OTP
 - All user-facing strings go through `LocaleService.instance.tr('key')` — never hardcode display text in widgets
 
 ## Design System
@@ -122,9 +122,9 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload  # http://localhost:8000
 ```
 
-Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `DEMO_MODE` (default `True`), `DEMO_OTP` (default `123456`), `DEMO_PASSWORD` (default `NowaitDemo#2024` — used by demo auth flow). **No `.env.example` is committed** — create `.env` from scratch using the variable names above.
+Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `PASSWORD_RESET_REDIRECT_URL` (default `io.nowait.app://auth-callback` — the app's deep link, embedded in password-reset emails; must match the intent-filter in `AndroidManifest.xml` and the Redirect URL allow-listed in the Supabase dashboard). **No `.env.example` is committed** — create `.env` from scratch using the variable names above.
 
-Run `sql/schema.sql` once in Supabase's SQL Editor to create all tables, indexes, RLS policies, and the atomic `join_queue` function. Incremental migration scripts (`sql/migrate_*.sql`) and `sql/storage_setup.sql` (Supabase Storage bucket/policy setup) are applied separately as needed. Interactive docs at `/docs`.
+Run `sql/final_consolidated.sql` once in Supabase's SQL Editor — it's the union of every incremental migration (idempotent, safe on a fresh database or an existing one at any prior state) and creates all tables, indexes, RLS policies, and the atomic `join_queue` function in one shot. Interactive docs at `/docs`.
 
 **Backend tests** (unit tests with mocked Supabase — no real DB needed):
 ```bash
@@ -147,17 +147,15 @@ docker run -p 8000:8000 --env-file .env nowait-backend
 ```
 app/
   main.py          — FastAPI app, CORS, router registration
-  config.py        — Settings (pydantic-settings, reads .env); DEMO_MODE bypasses real OTP
-  database.py      — Two Supabase clients: supabase (service_role) and supabase_auth (anon, for OTP)
+  config.py        — Settings (pydantic-settings, reads .env)
+  database.py      — Supabase client (service_role key, bypasses RLS server-side)
   dependencies.py  — FastAPI Depends: get_current_user, get_current_owner, get_token_user_id
   routers/         — One file per domain: auth, shops, queues, notifications, promotions, subscriptions, staff, analytics, reviews, maps
   schemas/         — Pydantic request/response models
   services/        — Business logic; routers are thin HTTP adapters only
 ```
 
-**Auth:** Supabase JWTs are decoded in `dependencies.py` — it tries HS256 first (legacy projects), then falls back to ES256/RS256 via cached JWKS (newer projects). Audience must be `authenticated`. Four `Depends` helpers exist: `get_current_user` (full profile lookup), `get_current_owner` (enforces `role == 'owner'`), `get_token_user_id` (ID only, no profile needed), `get_token_claims` (full JWT payload including `phone` claim — used for profile creation).
-
-**Demo mode:** `DEMO_MODE=True` (default) accepts OTP `123456` without Twilio. For production, set `DEMO_MODE=False` and enable the Phone provider in Supabase (Authentication > Providers) with Twilio credentials.
+**Auth:** email/password and Google OAuth both produce a standard Supabase-issued JWT, decoded identically in `dependencies.py` — it tries HS256 first (legacy projects), then falls back to ES256/RS256 via cached JWKS (newer projects). Audience must be `authenticated`. Four `Depends` helpers exist: `get_current_user` (full profile lookup), `get_current_owner` (enforces `role == 'owner'`), `get_token_user_id` (ID only, no profile needed), `get_token_claims` (full JWT payload including `email` claim — used by `/auth/complete-profile` for the Google-new-user flow). `POST /auth/register` creates the Supabase auth user and the `profiles` row in one call via direct REST calls to Supabase's `/auth/v1/signup` and `/auth/v1/token` endpoints (`app/services/auth_service.py`) rather than the `supabase-py` client's `.auth` namespace, for reliability. The mobile number is stored on the profile but never used for login or OTP-verified — Google sign-in is handled entirely client-side in the Flutter app via `supabase_flutter` (see `nowait_app/lib/main.dart`'s `onAuthStateChange` listener); the backend has no dedicated Google endpoint since the resulting JWT validates through the same `dependencies.py` code path.
 
 **`execute_one(query)`** (`database.py`) — wrapper around `.maybe_single().execute()` that normalises supabase-py 2.9+ behaviour where a missing row may return `None` or raise `APIError(code=204)`. All single-row lookups in services should use this instead of `.single()`.
 
@@ -202,9 +200,10 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 |---|---|---|---|
 | GET | `/` | — | Service status |
 | GET | `/health` | — | Health check |
-| POST | `/auth/send-otp` | — | Send OTP (E.164 phone) |
-| POST | `/auth/verify-otp` | — | Verify OTP, get JWTs |
-| POST | `/auth/complete-profile` | Bearer | Set name, city, role (first login only) |
+| POST | `/auth/register` | — | Create account (email + password + profile) in one call |
+| POST | `/auth/login` | — | Log in with email + password, get JWTs |
+| POST | `/auth/forgot-password` | — | Send a password-reset link (Supabase-hosted flow) |
+| POST | `/auth/complete-profile` | Bearer | Set name, phone, state, city, role (new Google sign-in only) |
 | GET | `/auth/me` | Bearer | Current user profile |
 | POST | `/auth/refresh` | — | Refresh access token |
 | GET | `/shops` | — | List shops (`city`, `category`, `open_only` filters) |
@@ -258,7 +257,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 
 ### Database Tables
 
-`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `shop_staff`, `reviews`, `payment_transactions` — all RLS-enabled; service role key bypasses RLS server-side. The `reviews` table was added via `sql/migrate_reviews.sql`; apply it if working from an older schema snapshot. The `payment_transactions` table was added via `sql/migrate_payments.sql` — logs every Razorpay order (`purpose`: `subscription`/`promotion`, `status`: `created`/`paid`/`failed`) written by `app/services/payment_transaction_service.py`; owners can only read their own rows, all writes go through the service-role key from `app/routers/payments.py`.
+`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `shop_staff`, `reviews`, `payment_transactions` — all RLS-enabled; service role key bypasses RLS server-side. `sql/final_consolidated.sql` is the single up-to-date source for the full schema (superset of every `sql/migrate_*.sql` file); run it on a fresh project or an existing one at any prior state. `profiles.email` was added for the email/password + Google auth system — populated at registration/profile-completion, distinct from `auth.users.email` (which Supabase manages). The `payment_transactions` table logs every Razorpay order (`purpose`: `subscription`/`promotion`, `status`: `created`/`paid`/`failed`) written by `app/services/payment_transaction_service.py`; owners can only read their own rows, all writes go through the service-role key from `app/routers/payments.py`.
 
 ### Payments (Razorpay)
 

@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.rate_limit import limiter
 from app.routers import admin, analytics, auth, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
 
 app = FastAPI(
@@ -12,15 +15,16 @@ app = FastAPI(
 A REST API for the NOWAIT app — queue management for salons and shops.
 
 ### Authentication
-All protected endpoints require a Bearer token obtained via `POST /auth/verify-otp`.
+All protected endpoints require a Bearer token obtained via `POST /auth/login` (or
+`POST /auth/register` for a new account). Google sign-in is handled client-side via
+Supabase Auth; the resulting token works against the same endpoints — a new Google
+user without a profile calls `POST /auth/complete-profile` once.
 
 ### Queue Flow (Customer)
-1. `POST /auth/send-otp` — receive OTP on phone
-2. `POST /auth/verify-otp` — get `access_token`
-3. `POST /auth/complete-profile` — first login only
-4. `GET /shops` — browse shops
-5. `POST /queues/join` — join queue, receive token number
-6. `GET /queues/status` — track position in real-time
+1. `POST /auth/register` — create account (email + password), or `POST /auth/login`
+2. `GET /shops` — browse shops
+3. `POST /queues/join` — join queue, receive token number
+4. `GET /queues/status` — track position in real-time
 
 ### Queue Flow (Owner)
 1. Authenticate (same as above, role = 'owner')
@@ -34,6 +38,9 @@ All protected endpoints require a Bearer token obtained via `POST /auth/verify-o
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

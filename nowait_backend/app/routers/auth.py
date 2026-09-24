@@ -1,79 +1,81 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.dependencies import get_current_user, get_token_claims
+from app.rate_limit import limiter
 from app.schemas.auth import (
     AuthResponse,
     CompleteProfileRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
     ProfileResponse,
     RefreshTokenRequest,
-    SendOTPRequest,
-    VerifyOTPRequest,
+    RegisterRequest,
+    RegisterResponse,
 )
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/send-otp", summary="Send OTP to phone number")
-def send_otp(body: SendOTPRequest):
+@router.post("/register", response_model=RegisterResponse, summary="Register with email and password")
+@limiter.limit("5/minute")
+def register(request: Request, body: RegisterRequest):
     """
-    Send an OTP SMS to the given phone number via Supabase Auth.
-    Phone must be in E.164 format (e.g., +911234567890).
+    Creates an account and profile in one step. The mobile number is stored on the
+    profile but is never used for login or verified by OTP.
 
     **Sample Request:**
-    ```json
-    {"phone": "+911234567890"}
-    ```
-    **Sample Response:**
-    ```json
-    {"message": "OTP sent to +911234567890"}
-    ```
-    """
-    return auth_service.send_otp(body.phone)
-
-
-@router.post("/verify-otp", response_model=AuthResponse, summary="Verify OTP and get access token")
-def verify_otp(body: VerifyOTPRequest):
-    """
-    Verify the OTP and receive a JWT access token.
-    If `profile_required` is true, call `POST /auth/complete-profile` next.
-
-    **Sample Request:**
-    ```json
-    {"phone": "+911234567890", "token": "123456"}
-    ```
-    **Sample Response:**
     ```json
     {
-      "access_token": "eyJ...",
-      "token_type": "bearer",
-      "expires_in": 3600,
-      "refresh_token": "...",
-      "profile": null,
-      "profile_required": true
+      "name": "Rahul Sharma",
+      "phone": "+911234567890",
+      "email": "rahul@example.com",
+      "password": "Str0ngPass!",
+      "state": "Maharashtra",
+      "city": "Mumbai",
+      "role": "customer"
     }
     ```
+    If Supabase's "Confirm email" setting is enabled, no session is returned and
+    `email_confirmation_required` is true — the user must confirm via email before
+    calling `/auth/login`.
     """
-    return auth_service.verify_otp(body.phone, body.token)
+    return auth_service.register(body)
 
 
-@router.post("/complete-profile", response_model=ProfileResponse, summary="Complete user profile after first login")
-def complete_profile(body: CompleteProfileRequest, claims: dict = Depends(get_token_claims)):
+@router.post("/login", response_model=AuthResponse, summary="Log in with email and password")
+@limiter.limit("5/minute")
+def login(request: Request, body: LoginRequest):
     """
-    Called once after first OTP verification. Sets name, city, and role.
-    The phone number is extracted from the JWT payload (phone claim).
-
     **Sample Request:**
     ```json
-    {"name": "Rahul Sharma", "city": "Mumbai", "role": "customer"}
+    {"email": "rahul@example.com", "password": "Str0ngPass!"}
     ```
     """
+    return auth_service.login(body)
+
+
+@router.post("/forgot-password", summary="Send a password reset link to the given email")
+@limiter.limit("3/minute")
+def forgot_password(request: Request, body: ForgotPasswordRequest):
+    """Uses Supabase's built-in secure password reset flow. Always returns a generic
+    success message regardless of whether the email exists, to avoid account enumeration."""
+    return auth_service.forgot_password(body.email)
+
+
+@router.post("/complete-profile", response_model=ProfileResponse, summary="Complete profile after Google sign-in")
+def complete_profile(body: CompleteProfileRequest, claims: dict = Depends(get_token_claims)):
+    """
+    Called once after a new Google sign-in with no existing profile. Sets name,
+    phone, state, city, and role. The email is taken from the JWT (Google-provided),
+    never re-entered by the user.
+    """
     user_id = claims.get("sub")
-    phone = claims.get("phone") or body.phone or ""
+    email = claims.get("email") or ""
+    from fastapi import HTTPException, status
     if not user_id:
-        from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    return auth_service.complete_profile(user_id, phone, body)
+    return auth_service.complete_profile(user_id, email, body)
 
 
 @router.get("/me", response_model=ProfileResponse, summary="Get current user profile")

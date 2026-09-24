@@ -9,7 +9,7 @@ import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
 import '../customer/home_screen.dart';
 import '../owner/owner_dashboard_screen.dart';
-import 'otp_verification_screen.dart';
+import 'login_screen.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   final bool isCompletingProfile;
@@ -23,7 +23,12 @@ class CreateAccountScreen extends StatefulWidget {
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _addressController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   String _selectedState = '';
   String _selectedCity = '';
   Map<String, List<String>> _stateCityData = {};
@@ -45,6 +50,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     LocaleService.instance.removeListener(_onLocale);
     _nameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _addressController.dispose();
     super.dispose();
   }
@@ -81,19 +89,42 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     return null;
   }
 
+  bool get _isPhoneValid {
+    final phoneLen = _phoneController.text.length;
+    return phoneLen >= 10 && phoneLen <= 11;
+  }
+
+  String? get _passwordError {
+    final pw = _passwordController.text;
+    if (pw.isEmpty) return null;
+    if (pw.length < 8) return 'Password must be at least 8 characters';
+    return null;
+  }
+
+  String? get _confirmPasswordError {
+    final confirm = _confirmPasswordController.text;
+    if (confirm.isEmpty) return null;
+    if (confirm != _passwordController.text) return 'Passwords do not match';
+    return null;
+  }
+
   bool get _isValid {
     if (_nameError != null) return false;
     if (widget.isCompletingProfile) {
       return _nameController.text.trim().isNotEmpty &&
+          _isPhoneValid &&
           _selectedState.isNotEmpty &&
           _selectedCity.isNotEmpty &&
           _selectedRole.isNotEmpty &&
           _agreedToTerms;
     }
-    final phoneLen = _phoneController.text.length;
     return _nameController.text.trim().isNotEmpty &&
-        phoneLen >= 10 &&
-        phoneLen <= 11 &&
+        _isPhoneValid &&
+        _emailController.text.contains('@') &&
+        _passwordError == null &&
+        _passwordController.text.length >= 8 &&
+        _confirmPasswordController.text == _passwordController.text &&
+        _confirmPasswordController.text.isNotEmpty &&
         _selectedState.isNotEmpty &&
         _selectedCity.isNotEmpty &&
         _selectedRole.isNotEmpty &&
@@ -109,13 +140,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
     setState(() => _isLoading = true);
     final apiRole = _selectedRole;
+    final e164Phone = '+91${_phoneController.text}';
     try {
       if (widget.isCompletingProfile) {
         await AuthService.instance.completeProfile(
-          _nameController.text.trim(),
-          _selectedState,
-          _selectedCity,
-          apiRole,
+          name: _nameController.text.trim(),
+          phone: e164Phone,
+          state: _selectedState,
+          city: _selectedCity,
+          role: apiRole,
         );
         if (!mounted) return;
         final isOwner = AuthService.instance.isOwner;
@@ -127,21 +160,48 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           (r) => false,
         );
       } else {
-        AuthService.instance.pendingName = _nameController.text.trim();
-        AuthService.instance.pendingState = _selectedState;
-        AuthService.instance.pendingCity = _selectedCity;
-        AuthService.instance.pendingRole = apiRole;
-        await AuthService.instance.sendOtp(_phoneController.text);
+        final result = await AuthService.instance.register(
+          name: _nameController.text.trim(),
+          phone: e164Phone,
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          state: _selectedState,
+          city: _selectedCity,
+          role: apiRole,
+        );
         if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phone: _phoneController.text,
-              isNewUser: true,
-              role: _selectedRole,
+        if (result.emailConfirmationRequired) {
+          await showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(_l.tr('checkYourEmail'), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+              content: Text(
+                result.message ?? _l.tr('checkYourEmailHint'),
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(_l.tr('backToLogin'), style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                ),
+              ],
             ),
+          );
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (r) => false,
+          );
+          return;
+        }
+        final isOwner = AuthService.instance.isOwner;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) =>
+                isOwner ? const OwnerDashboardScreen() : const HomeScreen(),
           ),
+          (r) => false,
         );
       }
     } on ApiException catch (e) {
@@ -246,9 +306,33 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             textCapitalization: TextCapitalization.words,
                             errorText: _nameError,
                           ),
+                          const SizedBox(height: 14),
+                          _buildPhoneField(),
                           if (!widget.isCompletingProfile) ...[
                             const SizedBox(height: 14),
-                            _buildPhoneField(),
+                            _buildField(
+                              controller: _emailController,
+                              label: _l.tr('emailAddress'),
+                              hint: _l.tr('emailHint'),
+                              icon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildPasswordField(
+                              controller: _passwordController,
+                              label: _l.tr('password'),
+                              obscure: _obscurePassword,
+                              toggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                              errorText: _passwordError,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildPasswordField(
+                              controller: _confirmPasswordController,
+                              label: _l.tr('confirmPassword'),
+                              obscure: _obscureConfirmPassword,
+                              toggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                              errorText: _confirmPasswordError,
+                            ),
                           ],
                         ]),
                         const SizedBox(height: 24),
@@ -400,6 +484,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     required String hint,
     required IconData icon,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    TextInputType? keyboardType,
     String? errorText,
   }) {
     return Column(
@@ -418,6 +503,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         TextField(
           controller: controller,
           textCapitalization: textCapitalization,
+          keyboardType: keyboardType,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: hint,
@@ -427,6 +513,49 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               fontSize: 11,
               color: AppColors.error,
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback toggle,
+    String? errorText,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: obscure,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            hintText: label,
+            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20, color: AppColors.onSurfaceVariant),
+            suffixIcon: IconButton(
+              onPressed: toggle,
+              icon: Icon(
+                obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 20,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            errorText: errorText,
+            errorStyle: GoogleFonts.inter(fontSize: 11, color: AppColors.error),
           ),
         ),
       ],

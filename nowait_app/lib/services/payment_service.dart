@@ -33,6 +33,8 @@ class PaymentService {
     required int amountPaise,
     required String name,
     required String description,
+    String? contact,
+    String? email,
   }) {
     _razorpay?.clear();
     final completer = Completer<PaymentResult>();
@@ -51,7 +53,11 @@ class PaymentService {
       'currency': 'INR',
       'name': 'NOWAIT',
       'description': description,
-      'prefill': {},
+      // Prefilling contact/email skips Checkout's own contact-entry step.
+      'prefill': {
+        if (contact != null && contact.isNotEmpty) 'contact': contact,
+        if (email != null && email.isNotEmpty) 'email': email,
+      },
       'theme': {'color': '#1f4cdd'},
     });
 

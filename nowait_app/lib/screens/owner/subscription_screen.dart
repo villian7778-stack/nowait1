@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/subscription_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
+import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
@@ -147,6 +148,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   amountPaise: order['amount'] as int,
                   name: widget.shop.name,
                   description: '${_selectedPlan == 'yearly' ? 'Annual' : 'Monthly'} subscription',
+                  contact: AuthService.instance.profile?['phone'] as String?,
                 );
                 await SubscriptionService.instance.verifyPaymentAndActivate(
                   widget.shop.id,

@@ -6,178 +6,48 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 from app.config import settings
-from app.database import execute_one, supabase, supabase_auth
-from app.schemas.auth import CompleteProfileRequest
+from app.database import execute_one, supabase
+from app.schemas.auth import CompleteProfileRequest, LoginRequest, RegisterRequest
 
 
-def _demo_email(phone: str) -> str:
-    clean = phone.replace("+", "").replace(" ", "").replace("-", "")
-    return f"demo{clean}@nowait.demo"
-
-
-def send_otp(phone: str) -> dict:
-    if settings.DEMO_MODE:
-        return {"message": f"OTP sent to {phone}"}
-
-    try:
-        supabase_auth.auth.sign_in_with_otp({"phone": phone})
-        return {"message": f"OTP sent to {phone}"}
-    except Exception as e:
-        error_msg = str(e).lower()
-        logger.error("OTP send error: %s", e)
-        if "rate" in error_msg:
-            raise HTTPException(status_code=429, detail="Too many requests. Please wait before trying again.")
-        raise HTTPException(status_code=400, detail="Failed to send OTP. Please check the phone number and try again.")
-
-
-def verify_otp(phone: str, token: str) -> dict:
-    if settings.DEMO_MODE:
-        if token != settings.DEMO_OTP:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid OTP. Use {settings.DEMO_OTP} in demo mode.",
-            )
-        return _demo_sign_in(phone)
-
-    try:
-        result = supabase_auth.auth.verify_with_otp({
-            "phone": phone, "token": token, "type": "sms",
-        })
-        session = result.session
-        user = result.user
-        if not session or not user:
-            raise HTTPException(status_code=400, detail="OTP verification failed")
-        profile_result = execute_one(supabase.table("profiles").select("*").eq("id", user.id))
-        profile = profile_result.data
-        return {
-            "access_token": session.access_token,
-            "token_type": "bearer",
-            "expires_in": session.expires_in,
-            "refresh_token": session.refresh_token,
-            "profile": profile,
-            "profile_required": profile is None,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("OTP verification error: %s", e)
-        raise HTTPException(status_code=400, detail="OTP verification failed. Please try again.")
-
-
-def _demo_sign_in(phone: str) -> dict:
-    email = _demo_email(phone)
-    password = settings.DEMO_PASSWORD
-
-    # ── Step 1: Try direct REST sign-in (bypasses supabase-py client quirks) ──
-    data = _direct_sign_in(email, password)
-    if data:
-        print(f"[DEMO] Signed in existing user: {email}")
-        return _build_response_from_dict(data)
-
-    # ── Step 2: Create user via Admin API with email pre-confirmed ────────────
-    user_id = _try_admin_create(email, password)
-    if user_id:
-        _admin_confirm_user(user_id)
-
-    # ── Step 3: Sign-in after creation ───────────────────────────────────────
-    data = _direct_sign_in(email, password)
-    if data:
-        print(f"[DEMO] Signed in after creation: {email}")
-        return _build_response_from_dict(data)
-
-    raise HTTPException(status_code=500, detail=f"Demo login failed for {email}. Check Supabase Email provider is enabled.")
-
-
-def _direct_sign_in(email: str, password: str) -> dict | None:
-    """Sign in via direct REST call — more reliable than supabase-py client."""
-    url = f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=password"
-    headers = {
-        "apikey": settings.SUPABASE_ANON_KEY,
-        "Content-Type": "application/json",
-    }
+def _signup(email: str, password: str) -> tuple[dict | None, str | None]:
+    """Creates a Supabase auth user via direct REST call. Returns (response, None) on
+    success or (None, error_message) on failure."""
+    url = f"{settings.SUPABASE_URL}/auth/v1/signup"
+    headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
     try:
         resp = httpx.post(url, json={"email": email, "password": password}, headers=headers, timeout=10.0)
-        print(f"[DEMO] Direct sign-in -> HTTP {resp.status_code}")
-        if resp.status_code == 200:
-            return resp.json()
-        return None
-    except Exception as e:
-        print(f"[DEMO] Direct sign-in exception: {e}")
-        return None
-
-
-def _try_admin_create(email: str, password: str) -> str | None:
-    """Create user via Admin API with email pre-confirmed. Returns user ID or None."""
-    url = f"{settings.SUPABASE_URL}/auth/v1/admin/users"
-    headers = {
-        "apikey": settings.SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = httpx.post(url, json={
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-        }, headers=headers, timeout=10.0)
-        print(f"[DEMO] Admin create -> HTTP {resp.status_code}: {resp.text[:300]}")
-        data = resp.json()
         if resp.status_code in (200, 201):
-            return data.get("id")
-        if resp.status_code == 422:
-            # User already exists — get their ID
-            return _get_user_id_by_email(email)
-        return None
+            return resp.json(), None
+        try:
+            err = resp.json()
+            msg = err.get("error_description") or err.get("msg") or err.get("error") or "Registration failed"
+        except Exception:
+            msg = "Registration failed"
+        return None, msg
     except Exception as e:
-        print(f"[DEMO] Admin create exception: {e}")
-        return None
+        logger.error("Signup request failed: %s", e)
+        return None, "Registration failed. Please try again."
 
 
-def _get_user_id_by_email(email: str) -> str | None:
-    """Look up existing user ID by email via Admin API."""
-    url = f"{settings.SUPABASE_URL}/auth/v1/admin/users"
-    headers = {
-        "apikey": settings.SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-    }
+def _password_grant(email: str, password: str) -> tuple[dict | None, str | None]:
+    """Signs in via direct REST call to Supabase's password grant. Returns (session, None)
+    on success or (None, error_message) on failure."""
+    url = f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
     try:
-        resp = httpx.get(url, params={"email": email}, headers=headers, timeout=10.0)
-        data = resp.json()
-        users = data.get("users", [])
-        for u in users:
-            if u.get("email") == email:
-                return u.get("id")
+        resp = httpx.post(url, json={"email": email, "password": password}, headers=headers, timeout=10.0)
+        if resp.status_code == 200:
+            return resp.json(), None
+        try:
+            err = resp.json()
+            msg = err.get("error_description") or err.get("msg") or err.get("error") or "Invalid email or password"
+        except Exception:
+            msg = "Invalid email or password"
+        return None, msg
     except Exception as e:
-        print(f"[DEMO] Get user ID exception: {e}")
-    return None
-
-
-def _admin_confirm_user(user_id: str) -> None:
-    """Force-confirm email and reset password via Admin API."""
-    url = f"{settings.SUPABASE_URL}/auth/v1/admin/users/{user_id}"
-    headers = {
-        "apikey": settings.SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = httpx.put(url, json={"email_confirm": True, "password": settings.DEMO_PASSWORD}, headers=headers, timeout=10.0)
-        print(f"[DEMO] Force-confirm+reset -> HTTP {resp.status_code}")
-    except Exception as e:
-        print(f"[DEMO] Force-confirm exception: {e}")
-
-
-def _build_response(session, user) -> dict:
-    profile_result = execute_one(supabase.table("profiles").select("*").eq("id", user.id))
-    profile = profile_result.data
-    return {
-        "access_token": session.access_token,
-        "token_type": "bearer",
-        "expires_in": session.expires_in,
-        "refresh_token": session.refresh_token,
-        "profile": profile,
-        "profile_required": profile is None,
-    }
+        logger.error("Password grant request failed: %s", e)
+        return None, "Login failed. Please try again."
 
 
 def _build_response_from_dict(data: dict) -> dict:
@@ -194,11 +64,98 @@ def _build_response_from_dict(data: dict) -> dict:
     }
 
 
-def complete_profile(user_id: str, phone: str, data: CompleteProfileRequest) -> dict:
+def register(data: RegisterRequest) -> dict:
+    existing_phone = execute_one(supabase.table("profiles").select("id").eq("phone", data.phone))
+    if existing_phone.data:
+        raise HTTPException(status_code=400, detail="This mobile number is already registered.")
+
+    result, error = _signup(data.email, data.password)
+    if result is None:
+        raise HTTPException(status_code=400, detail=error or "Registration failed")
+
+    user = result.get("user") or result
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=500, detail="Registration failed: no user id returned")
+
+    # Supabase returns identities=[] (without erroring) for an email that's already
+    # registered but unconfirmed, to avoid leaking which emails exist.
+    if user.get("identities") == []:
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
     profile_data = {
         "id": user_id,
-        "phone": phone,
         "name": data.name,
+        "phone": data.phone,
+        "email": data.email,
+        "state": data.state,
+        "city": data.city,
+        "role": data.role,
+    }
+    try:
+        profile_result = supabase.table("profiles").upsert(profile_data).execute()
+    except Exception as e:
+        logger.error("Profile creation failed for user %s: %s", user_id, e)
+        raise HTTPException(status_code=500, detail="Failed to create profile")
+    if not profile_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create profile")
+    profile = profile_result.data[0]
+
+    access_token = result.get("access_token")
+    if access_token:
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": result.get("expires_in", 3600),
+            "refresh_token": result.get("refresh_token", ""),
+            "profile": profile,
+            "email_confirmation_required": False,
+        }
+
+    return {
+        "email_confirmation_required": True,
+        "message": "Account created. Please check your email to confirm your address before logging in.",
+        "profile": profile,
+    }
+
+
+def login(data: LoginRequest) -> dict:
+    session_data, error = _password_grant(data.email, data.password)
+    if session_data is None:
+        raise HTTPException(status_code=400, detail=error or "Invalid email or password")
+    return _build_response_from_dict(session_data)
+
+
+def forgot_password(email: str) -> dict:
+    url = f"{settings.SUPABASE_URL}/auth/v1/recover"
+    headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
+    try:
+        httpx.post(
+            url,
+            json={"email": email},
+            params={"redirect_to": settings.PASSWORD_RESET_REDIRECT_URL},
+            headers=headers,
+            timeout=10.0,
+        )
+    except Exception as e:
+        logger.warning("Password recovery request failed: %s", e)
+    # Always return the same message regardless of outcome, to avoid leaking
+    # whether an account exists for this email.
+    return {"message": "If an account exists for this email, a password reset link has been sent."}
+
+
+def complete_profile(user_id: str, email: str, data: CompleteProfileRequest) -> dict:
+    existing_phone = execute_one(
+        supabase.table("profiles").select("id").eq("phone", data.phone).neq("id", user_id)
+    )
+    if existing_phone.data:
+        raise HTTPException(status_code=400, detail="This mobile number is already registered.")
+
+    profile_data = {
+        "id": user_id,
+        "name": data.name,
+        "phone": data.phone,
+        "email": email,
         "state": data.state,
         "city": data.city,
         "role": data.role,
@@ -255,15 +212,21 @@ def delete_account(user_id: str) -> dict:
 
 
 def refresh_session(refresh_token: str) -> dict:
+    url = f"{settings.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token"
+    headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}
     try:
-        result = supabase_auth.auth.refresh_session(refresh_token)
-        session = result.session
+        resp = httpx.post(url, json={"refresh_token": refresh_token}, headers=headers, timeout=10.0)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
+        data = resp.json()
         return {
-            "access_token": session.access_token,
+            "access_token": data["access_token"],
             "token_type": "bearer",
-            "expires_in": session.expires_in,
-            "refresh_token": session.refresh_token,
+            "expires_in": data.get("expires_in", 3600),
+            "refresh_token": data.get("refresh_token", ""),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Session refresh error: %s", e)
         raise HTTPException(status_code=401, detail="Session expired. Please log in again.")

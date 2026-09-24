@@ -59,6 +59,7 @@ class ApiClient {
         if (data['refresh_token'] != null) {
           AuthService.instance.refreshToken = data['refresh_token'] as String?;
         }
+        await AuthService.instance.persistTokens();
         return true;
       }
     } catch (_) {

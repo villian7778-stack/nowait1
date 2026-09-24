@@ -6,9 +6,6 @@ from app.config import settings
 # Admin client uses service_role key — bypasses RLS, for server-side operations
 supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
-# Auth client uses anon key — for OTP operations
-supabase_auth: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-
 
 class _OneResult:
     __slots__ = ("data",)
