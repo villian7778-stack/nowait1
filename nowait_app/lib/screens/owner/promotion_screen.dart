@@ -172,6 +172,13 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   await _loadActivePromotion();
                   setState(() => _isLoading = false);
                 }
+              } on PaymentAlreadyCaptured catch (_) {
+                // UPI captured the payment but Razorpay delivered "order is already paid"
+                // error. Money is on Razorpay's end — let _showPaymentCapturedDialog reconcile.
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                  _showPaymentCapturedDialog('Checking your payment status...');
+                }
               } on PaymentException catch (e) {
                 if (mounted) {
                   setState(() => _isLoading = false);

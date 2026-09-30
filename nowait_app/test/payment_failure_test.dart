@@ -21,4 +21,15 @@ void main() {
     expect(PaymentService.describeFailure(null, null), 'Payment failed');
     expect(PaymentService.describeFailure('not json {', null), 'Payment failed: not json {');
   });
+
+  test('describeFailure surfaces "already paid" description from UPI error body', () {
+    // Razorpay UPI "order is already paid" error — description must be surfaced.
+    final body = {
+      'error': {
+        'description': 'Your payment has been declined as the order is already paid.',
+        'reason': 'order_already_paid',
+      }
+    };
+    expect(PaymentService.describeFailure(null, body), contains('already paid'));
+  });
 }

@@ -11,6 +11,15 @@ class PaymentException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when Razorpay delivers an error callback saying "order is already paid".
+/// This happens with UPI: the UPI app captures the payment but Razorpay's checkout
+/// then shows an error screen instead of calling the success handler. The payment
+/// IS captured on Razorpay's end — the caller should reconcile rather than retry.
+class PaymentAlreadyCaptured implements Exception {
+  final String orderId;
+  PaymentAlreadyCaptured(this.orderId);
+}
+
 /// Result of a successful Razorpay Standard Checkout payment, ready to be
 /// sent to the backend's verify-payment endpoint.
 class PaymentResult {
@@ -87,10 +96,32 @@ class PaymentService {
     // code == Razorpay.PAYMENT_CANCELLED when the user dismisses the modal.
     final cancelled = response.code == Razorpay.PAYMENT_CANCELLED;
     debugPrint('Razorpay failure: code=${response.code} message=${response.message} body=${response.error}');
+
+    // "Order is already paid" means UPI captured the payment but Razorpay's checkout
+    // delivered the error callback instead of success (common in UPI redirect flows on
+    // Android). The money IS on Razorpay's end — tell the caller to reconcile.
+    if (!cancelled && _isAlreadyPaid(response)) {
+      debugPrint('Razorpay: order $_orderId is already paid — signalling reconcile');
+      _completer?.completeError(PaymentAlreadyCaptured(_orderId ?? ''));
+      return;
+    }
+
     if (!cancelled) _reportFailure(response);
     _completer?.completeError(
       PaymentException(cancelled ? 'Payment cancelled' : describeFailure(response.message, response.error)),
     );
+  }
+
+  static bool _isAlreadyPaid(PaymentFailureResponse response) {
+    final body = response.error;
+    final err = body?['error'] is Map ? body!['error'] as Map : body;
+    final description = (err?['description'] ?? '').toString().toLowerCase();
+    final reason = (err?['reason'] ?? '').toString().toLowerCase();
+    final message = (response.message ?? '').toLowerCase();
+    return description.contains('already paid') ||
+        reason.contains('already_paid') ||
+        reason.contains('already paid') ||
+        message.contains('already paid');
   }
 
   /// Checkout runs on the phone, so the server never sees Razorpay's failure reason.

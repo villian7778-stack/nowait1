@@ -228,6 +228,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   razorpaySignature: result.signature,
                 );
                 success = true;
+              } on PaymentAlreadyCaptured catch (_) {
+                // UPI captured the payment but Razorpay delivered the "order is already
+                // paid" error screen instead of the success callback. Money is on
+                // Razorpay's end — mark as captured and let reconcile activate it below.
+                paymentCaptured = true;
               } on PaymentException catch (e) {
                 errorMsg = e.message;
               } on ApiException catch (e) {
@@ -246,8 +251,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     ? 'Your payment may have gone through, but something went wrong confirming it. Please contact support before trying again.'
                     : 'Something went wrong. Please try again.';
               }
-              // Razorpay took the money but verify failed: ask the server to confirm it
-              // with Razorpay directly before telling the owner anything went wrong.
+              // Razorpay took the money but verify failed / delivered "already paid"
+              // error: ask the server to confirm with Razorpay directly.
               if (!success && paymentCaptured) {
                 try {
                   success = await SubscriptionService.instance.reconcilePayments(widget.shop.id) > 0;
