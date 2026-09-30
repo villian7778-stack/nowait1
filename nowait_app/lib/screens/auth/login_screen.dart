@@ -24,6 +24,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+  bool _isCheckingEmail = false;
+  bool _emailNotFound = false;
+  // 0 = choose method, 1 = enter email, 2 = enter password
+  int _step = 0;
   final _l = LocaleService.instance;
 
   late AnimationController _logoCtrl;
@@ -38,7 +42,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(() => setState(() {}));
+    _emailController.addListener(() {
+      if (_emailNotFound) _emailNotFound = false;
+      setState(() {});
+    });
     _passwordController.addListener(() => setState(() {}));
     _l.addListener(_onLocale);
 
@@ -138,6 +145,217 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
+
+  bool get _isEmailValid =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_emailController.text.trim());
+
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+    );
+  }
+
+  Future<void> _checkEmail() async {
+    if (!_isEmailValid || _isCheckingEmail) return;
+    FocusScope.of(context).unfocus();
+    setState(() { _isCheckingEmail = true; _emailNotFound = false; });
+    try {
+      final exists = await AuthService.instance.emailExists(_emailController.text.trim());
+      if (!mounted) return;
+      setState(() {
+        if (exists) {
+          _step = 2;
+        } else {
+          _emailNotFound = true;
+        }
+      });
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError(_l.tr('somethingWrong'));
+    } finally {
+      if (mounted) setState(() => _isCheckingEmail = false);
+    }
+  }
+
+  void _goBack() {
+    setState(() {
+      _emailNotFound = false;
+      _passwordController.clear();
+      _step = _step == 2 ? 1 : 0;
+    });
+  }
+
+  Widget _stepHeading(String title, String subtitle) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 24),
+        ],
+      );
+
+  Widget _backButton() => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: _goBack,
+          icon: const Icon(Icons.arrow_back_rounded, size: 18),
+          label: Text(_l.tr('back')),
+          style: TextButton.styleFrom(foregroundColor: AppColors.primary, padding: EdgeInsets.zero),
+        ),
+      );
+
+  Widget _loadingBar({required bool gradient}) => Container(
+        height: 52,
+        decoration: BoxDecoration(
+          gradient: gradient ? AppColors.primaryGradient135 : null,
+          color: gradient ? null : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: gradient ? null : Border.all(color: AppColors.outline.withValues(alpha: 0.4)),
+        ),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: gradient ? Colors.white : null,
+            ),
+          ),
+        ),
+      );
+
+  List<Widget> _buildChooseStep() => [
+        _stepHeading(_l.tr('welcomeBack'), _l.tr('chooseHowToContinue')),
+        SizedBox(
+          width: double.infinity,
+          child: _isGoogleLoading
+              ? _loadingBar(gradient: false)
+              : _GoogleButton(
+                  label: _l.tr('continueWithGoogle'),
+                  recommendedLabel: _l.tr('recommended'),
+                  onPressed: _continueWithGoogle,
+                ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: GradientButton(
+            label: _l.tr('continueWithEmail'),
+            onPressed: () => setState(() => _step = 1),
+            icon: Icons.mail_outline_rounded,
+          ),
+        ),
+      ];
+
+  List<Widget> _buildEmailStep() => [
+        _backButton(),
+        const SizedBox(height: 8),
+        _stepHeading(_l.tr('enterYourEmail'), _l.tr('enterEmailToContinue')),
+        _AuthTextField(
+          controller: _emailController,
+          hint: _l.tr('emailAddress'),
+          icon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 16),
+        if (_emailNotFound) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _l.tr('noAccountForEmail'),
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: GradientButton(
+              label: _l.tr('createAccount'),
+              icon: Icons.person_add_outlined,
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreateAccountScreen(initialEmail: _emailController.text.trim()),
+                ),
+              ),
+            ),
+          ),
+        ] else
+          SizedBox(
+            width: double.infinity,
+            child: _isCheckingEmail
+                ? _loadingBar(gradient: true)
+                : GradientButton(
+                    label: _l.tr('continueLabel'),
+                    onPressed: _isEmailValid ? _checkEmail : () {},
+                    icon: Icons.arrow_forward_rounded,
+                  ),
+          ),
+      ];
+
+  List<Widget> _buildPasswordStep() => [
+        _backButton(),
+        const SizedBox(height: 8),
+        _stepHeading(_l.tr('enterYourPassword'), _emailController.text.trim()),
+        _AuthTextField(
+          controller: _passwordController,
+          hint: _l.tr('password'),
+          icon: Icons.lock_outline_rounded,
+          obscureText: _obscurePassword,
+          suffixIcon: IconButton(
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            icon: Icon(
+              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              size: 20,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+            ),
+            child: Text(
+              _l.tr('forgotPassword'),
+              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: _isLoading
+              ? _loadingBar(gradient: true)
+              : GradientButton(
+                  label: _l.tr('login'),
+                  onPressed: _isValid ? _login : () {},
+                  icon: Icons.login_rounded,
+                ),
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -245,142 +463,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         ),
                       ),
                       const SizedBox(height: 48),
-                      Text(
-                        _l.tr('welcomeBack'),
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _l.tr('enterEmailPassword'),
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      // Google sign-in (recommended)
-                      SizedBox(
-                        width: double.infinity,
-                        child: _isGoogleLoading
-                            ? Container(
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: _googleRed,
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 22, height: 22,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2.5),
-                                  ),
-                                ),
-                              )
-                            : _GoogleButton(
-                                label: _l.tr('continueWithGoogle'),
-                                recommendedLabel: _l.tr('recommended'),
-                                onPressed: _continueWithGoogle,
-                              ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              _l.tr('orLoginWithEmail'),
-                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Email input
-                      _AuthTextField(
-                        controller: _emailController,
-                        hint: _l.tr('emailAddress'),
-                        icon: Icons.mail_outline_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 12),
-                      // Password input
-                      _AuthTextField(
-                        controller: _passwordController,
-                        hint: _l.tr('password'),
-                        icon: Icons.lock_outline_rounded,
-                        obscureText: _obscurePassword,
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                            size: 20,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
-                          ),
-                          child: Text(
-                            _l.tr('forgotPassword'),
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: _isLoading
-                            ? Container(
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  gradient: AppColors.primaryGradient135,
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2.5),
-                                  ),
-                                ),
-                              )
-                            : GradientButton(
-                                label: _l.tr('login'),
-                                onPressed: _isValid ? _login : () {},
-                                icon: Icons.login_rounded,
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: GhostButton(
-                          label: _l.tr('createAccount'),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CreateAccountScreen()),
-                          ),
-                          icon: Icons.person_add_outlined,
-                        ),
-                      ),
+                      if (_step == 0) ..._buildChooseStep(),
+                      if (_step == 1) ..._buildEmailStep(),
+                      if (_step == 2) ..._buildPasswordStep(),
                       const SizedBox(height: 32),
                       Center(
                         child: Padding(
@@ -472,8 +557,6 @@ class _AuthTextField extends StatelessWidget {
   }
 }
 
-const _googleRed = Color(0xFFDB4437);
-
 class _GoogleButton extends StatelessWidget {
   final String label;
   final String recommendedLabel;
@@ -492,36 +575,22 @@ class _GoogleButton extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           height: 52,
-          child: ElevatedButton(
+          child: OutlinedButton(
             onPressed: onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _googleRed,
-              foregroundColor: Colors.white,
-              elevation: 0,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.white,
+              side: BorderSide(color: AppColors.outline.withValues(alpha: 0.5)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                  child: Text(
-                    'G',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: _googleRed,
-                    ),
-                  ),
-                ),
+                const _GoogleGLogo(size: 24),
                 const SizedBox(width: 10),
                 Text(
                   label,
                   style: GoogleFonts.inter(
-                      fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                      fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface),
                 ),
               ],
             ),
@@ -538,15 +607,44 @@ class _GoogleButton extends StatelessWidget {
             ),
             child: Text(
               recommendedLabel,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
+              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Google "G" in the brand colours: a bold "G" glyph masked with a hard-stop
+/// sweep gradient (blue, green, yellow, red) — no image asset needed.
+class _GoogleGLogo extends StatelessWidget {
+  final double size;
+  const _GoogleGLogo({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (bounds) => const SweepGradient(
+        colors: [
+          Color(0xFF4285F4), Color(0xFF4285F4),
+          Color(0xFF34A853), Color(0xFF34A853),
+          Color(0xFFFBBC05), Color(0xFFFBBC05),
+          Color(0xFFEA4335), Color(0xFFEA4335),
+          Color(0xFF4285F4), Color(0xFF4285F4),
+        ],
+        stops: [0.0, 0.12, 0.12, 0.38, 0.38, 0.55, 0.55, 0.85, 0.85, 1.0],
+      ).createShader(bounds),
+      child: Text(
+        'G',
+        style: GoogleFonts.roboto(
+          fontSize: size,
+          fontWeight: FontWeight.w900,
+          height: 1.0,
+          color: Colors.white,
+        ),
+      ),
     );
   }
 }

@@ -13,8 +13,9 @@ import 'login_screen.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   final bool isCompletingProfile;
+  final String? initialEmail;
 
-  const CreateAccountScreen({super.key, this.isCompletingProfile = false});
+  const CreateAccountScreen({super.key, this.isCompletingProfile = false, this.initialEmail});
 
   @override
   State<CreateAccountScreen> createState() => _CreateAccountScreenState();
@@ -42,6 +43,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   void initState() {
     super.initState();
     LocaleService.instance.addListener(_onLocale);
+    if (widget.initialEmail != null) _emailController.text = widget.initialEmail!;
     _loadStateCityData();
   }
 

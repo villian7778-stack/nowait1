@@ -81,6 +81,7 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 - Phone numbers use a hardcoded `+91` prefix (India)
 - No state management library — screens are `StatefulWidget`; call services directly in `initState`/handlers
 - Navigation uses `Navigator.push`/`pop` directly — no named routes
+- Login screen is a 3-step flow: choose (Google, marked Recommended / Email) → email → password, or "Create Account" prefilled with the email if `/auth/check-email` says it's unknown. `AuthService` is a `ChangeNotifier`; `main.dart` listens to it to re-pick the home screen after login/logout — don't remove that or login appears to do nothing until app restart
 - Authentication is email + password (backend-issued Supabase JWT) or Google OAuth (Supabase-issued JWT obtained client-side); the mobile number is profile-only data, collected at registration/profile-completion and never used to log in or verified by OTP
 - All user-facing strings go through `LocaleService.instance.tr('key')` — never hardcode display text in widgets
 
@@ -203,6 +204,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/` | — | Service status |
 | GET | `/health` | — | Health check |
 | POST | `/auth/register` | — | Create account (email + password + profile) in one call |
+| POST | `/auth/check-email` | — | `{exists: bool}` for an email — drives the app's email-first login (exists → password step, else → create account) |
 | POST | `/auth/login` | — | Log in with email + password, get JWTs |
 | POST | `/auth/forgot-password` | — | Send a password-reset link (Supabase-hosted flow) |
 | POST | `/auth/complete-profile` | Bearer | Set name, phone, state, city, role (new Google sign-in only) |

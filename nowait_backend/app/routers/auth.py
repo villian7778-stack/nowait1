@@ -4,6 +4,8 @@ from app.dependencies import get_current_user, get_token_claims
 from app.rate_limit import limiter
 from app.schemas.auth import (
     AuthResponse,
+    CheckEmailRequest,
+    CheckEmailResponse,
     CompleteProfileRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -53,6 +55,14 @@ def login(request: Request, body: LoginRequest):
     ```
     """
     return auth_service.login(body)
+
+
+@router.post("/check-email", response_model=CheckEmailResponse, summary="Check whether an account exists for an email")
+@limiter.limit("10/minute")
+def check_email(request: Request, body: CheckEmailRequest):
+    """Used by the app's email-first login: existing email -> ask for password,
+    unknown email -> offer to create an account."""
+    return {"exists": auth_service.email_exists(body.email)}
 
 
 @router.post("/forgot-password", summary="Send a password reset link to the given email")

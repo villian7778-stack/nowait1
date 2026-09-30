@@ -126,6 +126,14 @@ def login(data: LoginRequest) -> dict:
     return _build_response_from_dict(session_data)
 
 
+def email_exists(email: str) -> bool:
+    """True if a profile with this email (case-insensitive) already exists."""
+    # Escape ilike wildcards so '_' / '%' in an address only match literally.
+    pattern = email.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    result = supabase.table("profiles").select("id").ilike("email", pattern).limit(1).execute()
+    return bool(result.data)
+
+
 def forgot_password(email: str) -> dict:
     url = f"{settings.SUPABASE_URL}/auth/v1/recover"
     headers = {"apikey": settings.SUPABASE_ANON_KEY, "Content-Type": "application/json"}

@@ -119,6 +119,12 @@ class AuthService extends ChangeNotifier {
     return false;
   }
 
+  /// Whether an account already exists for [email] (drives the email-first login).
+  Future<bool> emailExists(String email) async {
+    final res = await ApiClient.instance.post('/auth/check-email', body: {'email': email});
+    return res['exists'] == true;
+  }
+
   Future<String> forgotPassword(String email) async {
     final res = await ApiClient.instance.post('/auth/forgot-password', body: {'email': email});
     return res['message'] as String? ?? 'If an account exists for this email, a reset link has been sent.';

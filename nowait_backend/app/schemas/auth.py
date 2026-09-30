@@ -39,6 +39,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class CheckEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class CheckEmailResponse(BaseModel):
+    exists: bool
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
