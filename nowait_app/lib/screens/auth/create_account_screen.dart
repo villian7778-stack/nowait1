@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +37,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   String _selectedRole = '';
   bool _isLoading = false;
   bool _agreedToTerms = false;
+  // Set on the first "Create Account" tap: from then on every missing/invalid field
+  // gets a red outline and a message.
+  bool _submitted = false;
+  final _phoneFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  bool _phoneTouched = false;
+  bool _emailTouched = false;
+  // Email availability (create-account only): null = unknown / not checked yet.
+  bool? _emailAvailable;
+  Timer? _emailDebounce;
+  String _lastCheckedEmail = '';
 
   LocaleService get _l => LocaleService.instance;
 
@@ -44,12 +56,25 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     super.initState();
     LocaleService.instance.addListener(_onLocale);
     if (widget.initialEmail != null) _emailController.text = widget.initialEmail!;
+    _phoneFocus.addListener(() {
+      if (!_phoneFocus.hasFocus && _phoneController.text.isNotEmpty) setState(() => _phoneTouched = true);
+    });
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus && _emailController.text.isNotEmpty) setState(() => _emailTouched = true);
+    });
+    if (!widget.isCompletingProfile) {
+      _emailController.addListener(_onEmailChanged);
+      if (widget.initialEmail != null) _checkEmailAvailability();
+    }
     _loadStateCityData();
   }
 
   @override
   void dispose() {
     LocaleService.instance.removeListener(_onLocale);
+    _emailDebounce?.cancel();
+    _phoneFocus.dispose();
+    _emailFocus.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
@@ -110,6 +135,65 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     return null;
   }
 
+  bool get _isEmailFormatValid =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_emailController.text.trim());
+
+  void _onEmailChanged() {
+    final email = _emailController.text.trim();
+    if (email == _lastCheckedEmail) return;
+    _emailDebounce?.cancel();
+    if (_emailAvailable != null) setState(() => _emailAvailable = null);
+    if (!_isEmailFormatValid) return;
+    _emailDebounce = Timer(const Duration(milliseconds: 700), _checkEmailAvailability);
+  }
+
+  Future<void> _checkEmailAvailability() async {
+    final email = _emailController.text.trim();
+    if (!_isEmailFormatValid) return;
+    _lastCheckedEmail = email;
+    try {
+      final exists = await AuthService.instance.emailExists(email);
+      if (!mounted || _emailController.text.trim() != email) return;
+      setState(() => _emailAvailable = !exists);
+    } catch (_) {
+      // Network/rate-limit hiccup: leave unknown; the server re-checks on submit.
+      if (mounted && _emailController.text.trim() == email) {
+        setState(() => _emailAvailable = null);
+        _lastCheckedEmail = '';
+      }
+    }
+  }
+
+  // ── Messages shown under each field (null = field is fine / not flagged yet) ──
+  String? get _nameShownError =>
+      _nameError ?? (_submitted && _nameController.text.trim().isEmpty ? _l.tr('errNameRequired') : null);
+
+  String? get _phoneShownError {
+    if (_isPhoneValid) return null;
+    if (_submitted || (_phoneController.text.isNotEmpty && _phoneTouched)) return _l.tr('errPhoneInvalid');
+    return null;
+  }
+
+  String? get _emailShownError {
+    final e = _emailController.text.trim();
+    if (_emailAvailable == false) return _l.tr('emailNotAvailable');
+    if (e.isEmpty) return _submitted ? _l.tr('errEmailRequired') : null;
+    if (!_isEmailFormatValid && (_submitted || _emailTouched)) return _l.tr('errEmailInvalid');
+    return null;
+  }
+
+  String? get _passwordShownError =>
+      _passwordError ?? (_submitted && _passwordController.text.isEmpty ? _l.tr('errPasswordRequired') : null);
+
+  String? get _confirmShownError =>
+      _confirmPasswordError ??
+      (_submitted && _confirmPasswordController.text.isEmpty ? _l.tr('errConfirmRequired') : null);
+
+  String? get _stateShownError => _submitted && _selectedState.isEmpty ? _l.tr('errStateRequired') : null;
+  String? get _cityShownError => _submitted && _selectedCity.isEmpty ? _l.tr('errCityRequired') : null;
+  String? get _roleShownError => _submitted && _selectedRole.isEmpty ? _l.tr('errRoleRequired') : null;
+  String? get _termsShownError => _submitted && !_agreedToTerms ? _l.tr('errTermsRequired') : null;
+
   bool get _isValid {
     if (_nameError != null) return false;
     if (widget.isCompletingProfile) {
@@ -122,7 +206,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
     return _nameController.text.trim().isNotEmpty &&
         _isPhoneValid &&
-        _emailController.text.contains('@') &&
+        _isEmailFormatValid &&
+        _emailAvailable != false &&
         _passwordError == null &&
         _passwordController.text.length >= 8 &&
         _confirmPasswordController.text == _passwordController.text &&
@@ -135,6 +220,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   void _createAccount() async {
     if (!_isValid) {
+      setState(() => _submitted = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_l.tr('fillAllFields'))),
       );
@@ -306,7 +392,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             hint: _l.tr('fullNameHint'),
                             icon: Icons.person_outline_rounded,
                             textCapitalization: TextCapitalization.words,
-                            errorText: _nameError,
+                            errorText: _nameShownError,
                           ),
                           const SizedBox(height: 14),
                           _buildPhoneField(),
@@ -318,6 +404,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                               hint: _l.tr('emailHint'),
                               icon: Icons.mail_outline_rounded,
                               keyboardType: TextInputType.emailAddress,
+                              focusNode: _emailFocus,
+                              errorText: _emailShownError,
                             ),
                             const SizedBox(height: 14),
                             _buildPasswordField(
@@ -325,7 +413,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                               label: _l.tr('password'),
                               obscure: _obscurePassword,
                               toggle: () => setState(() => _obscurePassword = !_obscurePassword),
-                              errorText: _passwordError,
+                              errorText: _passwordShownError,
                             ),
                             const SizedBox(height: 14),
                             _buildPasswordField(
@@ -333,7 +421,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                               label: _l.tr('confirmPassword'),
                               obscure: _obscureConfirmPassword,
                               toggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-                              errorText: _confirmPasswordError,
+                              errorText: _confirmShownError,
                             ),
                           ],
                         ]),
@@ -354,6 +442,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             hint: _l.tr('stateHint'),
                             icon: Icons.map_outlined,
                             value: _selectedState.isEmpty ? null : _selectedState,
+                            errorText: _stateShownError,
                             enabled: true,
                             onTap: () => _showSearchPicker(
                               title: _l.tr('stateLabel'),
@@ -374,6 +463,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                                 : _l.tr('cityHint'),
                             icon: Icons.location_city_outlined,
                             value: _selectedCity.isEmpty ? null : _selectedCity,
+                            errorText: _cityShownError,
                             enabled: _selectedState.isNotEmpty,
                             onTap: _selectedState.isEmpty
                                 ? null
@@ -488,6 +578,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     TextCapitalization textCapitalization = TextCapitalization.none,
     TextInputType? keyboardType,
     String? errorText,
+    FocusNode? focusNode,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -504,6 +595,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
+          focusNode: focusNode,
           textCapitalization: textCapitalization,
           keyboardType: keyboardType,
           onChanged: (_) => setState(() {}),
@@ -571,6 +663,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     required String? value,
     required bool enabled,
     required VoidCallback? onTap,
+    String? errorText,
   }) {
     final hasValue = value != null && value.isNotEmpty;
     return Column(
@@ -597,9 +690,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   : AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: hasValue
-                    ? AppColors.primary.withValues(alpha: 0.4)
-                    : AppColors.outline.withValues(alpha: 0.4),
+                color: errorText != null
+                    ? AppColors.error
+                    : hasValue
+                        ? AppColors.primary.withValues(alpha: 0.4)
+                        : AppColors.outline.withValues(alpha: 0.4),
+                width: errorText != null ? 1.5 : 1,
               ),
             ),
             child: Row(
@@ -638,9 +734,19 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ),
           ),
         ),
+        if (errorText != null) _fieldError(errorText),
       ],
     );
   }
+
+  /// Red helper text under a custom (non-TextField) control.
+  Widget _fieldError(String text) => Padding(
+        padding: const EdgeInsets.only(top: 6, left: 12),
+        child: Text(
+          text,
+          style: GoogleFonts.inter(fontSize: 11, color: AppColors.error),
+        ),
+      );
 
   void _showSearchPicker({
     required String title,
@@ -663,6 +769,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _buildPhoneField() {
+    final phoneError = _phoneShownError;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -680,7 +787,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           decoration: BoxDecoration(
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.outline.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: phoneError != null ? AppColors.error : AppColors.outline.withValues(alpha: 0.4),
+              width: phoneError != null ? 1.5 : 1,
+            ),
           ),
           child: Row(
             children: [
@@ -730,6 +840,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               Expanded(
                 child: TextField(
                   controller: _phoneController,
+                  focusNode: _phoneFocus,
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -751,6 +862,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             ],
           ),
         ),
+        if (phoneError != null) _fieldError(phoneError),
       ],
     );
   }
@@ -769,13 +881,25 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            _roleChip(_l.tr('customer'), Icons.person_outline_rounded, 'customer'),
-            const SizedBox(width: 10),
-            _roleChip(_l.tr('shopOwner'), Icons.storefront_outlined, 'owner'),
-          ],
+        // Constant 3px padding so the red outline appearing never shifts the layout.
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: _roleShownError != null ? AppColors.error : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              _roleChip(_l.tr('customer'), Icons.person_outline_rounded, 'customer'),
+              const SizedBox(width: 10),
+              _roleChip(_l.tr('shopOwner'), Icons.storefront_outlined, 'owner'),
+            ],
+          ),
         ),
+        if (_roleShownError != null) _fieldError(_roleShownError!),
       ],
     );
   }
@@ -819,6 +943,21 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Widget _buildTermsCheckbox() {
+    final termsError = _termsShownError;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _termsRow(termsError != null),
+        if (termsError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 34),
+            child: Text(termsError, style: GoogleFonts.inter(fontSize: 11, color: AppColors.error)),
+          ),
+      ],
+    );
+  }
+
+  Widget _termsRow(bool hasError) {
     return GestureDetector(
       onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
       behavior: HitTestBehavior.opaque,
@@ -836,7 +975,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               border: Border.all(
                 color: _agreedToTerms
                     ? AppColors.primary
-                    : AppColors.outline.withValues(alpha: 0.5),
+                    : hasError
+                        ? AppColors.error
+                        : AppColors.outline.withValues(alpha: 0.5),
                 width: 1.5,
               ),
             ),

@@ -7,6 +7,7 @@ import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/no_refund_notice.dart';
 import '../../widgets/gradient_button.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -86,7 +87,56 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     (Icons.support_agent_rounded, 'Priority Support', '24/7 dedicated support', false),
   ];
 
+  static const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_months[d.month - 1]} ${d.year}';
+
+  /// Entry point for the Pay button. If the shop already has an active
+  /// subscription, explain when it ends and ask before extending it.
   void _activate() {
+    final expiresAt = _subscriptionData?['expires_at'] as String?;
+    final end = expiresAt == null ? null : DateTime.tryParse(expiresAt)?.toLocal();
+    if (_isActive && end != null && end.isAfter(DateTime.now())) {
+      final newEnd = end.add(Duration(days: _durationDays));
+      final length = _selectedPlan == 'yearly' ? '1 year' : '1 month';
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Subscription already active', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your active subscription ends on ${_fmtDate(end)}.\n\n'
+                'Do you want to extend it by $length? The new end date will be ${_fmtDate(newEnd)}.',
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              const NoRefundNotice(),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showPaymentDialog(extend: true);
+              },
+              child: Text('Extend', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    _showPaymentDialog();
+  }
+
+  void _showPaymentDialog({bool extend = false}) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -123,6 +173,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               'Once activated, your shop will be open to receive customers.',
               style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
             ),
+            const SizedBox(height: 12),
+            const NoRefundNotice(),
           ],
         ),
         actions: [
@@ -144,6 +196,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   widget.shop.id,
                   plan: _backendPlan,
                   durationDays: _durationDays,
+                  extend: extend,
                 );
                 final result = await PaymentService.instance.openCheckout(
                   keyId: order['key_id'] as String,
@@ -239,9 +292,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Cancel Subscription?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-        content: Text(
-          'Your shop will immediately be closed and customers will not be able to join the queue.',
-          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your shop will immediately be closed and customers will not be able to join the queue.',
+              style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            const NoRefundNotice(),
+          ],
         ),
         actions: [
           TextButton(

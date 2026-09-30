@@ -20,11 +20,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _sent = false;
   final _l = LocaleService.instance;
 
-  bool get _isValid => _emailController.text.contains('@');
+  bool _submitted = false;
+  bool _touched = false;
+  final _emailFocus = FocusNode();
+
+  bool get _isValid =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_emailController.text.trim());
+
+  String? get _emailError {
+    final e = _emailController.text.trim();
+    if (e.isEmpty) return _submitted ? _l.tr('errEmailRequired') : null;
+    if (!_isValid && (_submitted || _touched)) return _l.tr('errEmailInvalid');
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus && _emailController.text.isNotEmpty) setState(() => _touched = true);
+    });
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _emailFocus.dispose();
     super.dispose();
   }
 
@@ -105,10 +126,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.outline.withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: _emailError != null ? AppColors.error : AppColors.outline.withValues(alpha: 0.4),
+                      width: _emailError != null ? 1.5 : 1,
+                    ),
                   ),
                   child: TextField(
                     controller: _emailController,
+                    focusNode: _emailFocus,
                     keyboardType: TextInputType.emailAddress,
                     onChanged: (_) => setState(() {}),
                     style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.onSurface),
@@ -123,6 +148,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                   ),
                 ),
+                if (_emailError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 12),
+                    child: Text(_emailError!, style: GoogleFonts.inter(fontSize: 12, color: AppColors.error)),
+                  ),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -142,7 +172,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         )
                       : GradientButton(
                           label: _l.tr('sendResetLink'),
-                          onPressed: _isValid ? _sendResetLink : () {},
+                          onPressed: _isValid ? _sendResetLink : () => setState(() => _submitted = true),
                           icon: Icons.send_rounded,
                         ),
                 ),

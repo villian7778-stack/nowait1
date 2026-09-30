@@ -1,12 +1,18 @@
 import logging
 
-from app.database import supabase
+from fastapi import HTTPException
+
+from app.database import execute_one, supabase
 
 logger = logging.getLogger(__name__)
 
 
 def record_order(shop_id: str, owner_id: str, purpose: str, order_id: str, amount_paise: int, metadata: dict) -> None:
-    """Logs a Razorpay order as 'created' immediately after it's issued."""
+    """Logs a Razorpay order as 'created' immediately after it's issued.
+
+    The ledger row is what ties an order to its shop, owner and plan, so verification
+    depends on it: if it can't be written the checkout must not start.
+    """
     try:
         supabase.table("payment_transactions").insert({
             "shop_id": shop_id,
@@ -18,17 +24,55 @@ def record_order(shop_id: str, owner_id: str, purpose: str, order_id: str, amoun
             "metadata": metadata,
         }).execute()
     except Exception as e:
-        # Ledger write is best-effort — never blocks the actual checkout flow.
-        logger.warning("Failed to record payment_transactions row for order %s: %s", order_id, e)
+        logger.error("Failed to record payment_transactions row for order %s: %s", order_id, e)
+        raise HTTPException(status_code=500, detail="Could not start the payment. Please try again.")
 
 
-def finalize(order_id: str, payment_id: str, signature: str, status: str) -> None:
-    """Updates the order's transaction row with the final payment_id/signature/status."""
+def get_order_for_verify(order_id: str, shop_id: str, owner_id: str, purpose: str) -> dict:
+    """Loads the ledger row for an order and checks it belongs to this owner, shop and
+    purpose and has not already been paid out. Returns the row (with its metadata)."""
+    row = execute_one(supabase.table("payment_transactions").select("*").eq("razorpay_order_id", order_id)).data
+    if not row:
+        raise HTTPException(status_code=404, detail="Unknown payment order.")
+    if row["owner_id"] != owner_id or row["shop_id"] != shop_id or row["purpose"] != purpose:
+        logger.warning("Order %s verify attempted by owner %s for shop %s (purpose %s)", order_id, owner_id, shop_id, purpose)
+        raise HTTPException(status_code=403, detail="This payment does not belong to this shop.")
+    if row["status"] == "paid":
+        raise HTTPException(status_code=409, detail="This payment has already been processed.")
+    return row
+
+
+def claim_paid(order_id: str, payment_id: str, signature: str) -> bool:
+    """Atomically flips the order to 'paid'. Returns False if someone else already did,
+    which is what stops the same payment being applied twice (even concurrently)."""
+    result = (
+        supabase.table("payment_transactions")
+        .update({"razorpay_payment_id": payment_id, "razorpay_signature": signature, "status": "paid"})
+        .eq("razorpay_order_id", order_id)
+        .in_("status", ["created", "failed"])
+        .execute()
+    )
+    return bool(result.data)
+
+
+def mark_failed(order_id: str, payment_id: str, signature: str) -> None:
+    """Records a bad-signature attempt. Never touches a row that is already paid."""
     try:
         supabase.table("payment_transactions").update({
             "razorpay_payment_id": payment_id,
             "razorpay_signature": signature,
-            "status": status,
-        }).eq("razorpay_order_id", order_id).execute()
+            "status": "failed",
+        }).eq("razorpay_order_id", order_id).eq("status", "created").execute()
     except Exception as e:
-        logger.warning("Failed to finalize payment_transactions row for order %s: %s", order_id, e)
+        logger.warning("Failed to mark payment_transactions row failed for order %s: %s", order_id, e)
+
+
+def release_claim(order_id: str) -> None:
+    """Puts a claimed order back to 'created' when activation failed after the claim,
+    so the verify can be retried instead of being locked out as 'already processed'."""
+    try:
+        supabase.table("payment_transactions").update({"status": "created"}).eq(
+            "razorpay_order_id", order_id
+        ).eq("status", "paid").execute()
+    except Exception as e:
+        logger.error("Failed to release claim on order %s: %s", order_id, e)

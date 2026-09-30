@@ -489,19 +489,30 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                           Icon(
                             !shop.hasActiveSubscription
                                 ? Icons.block_rounded
-                                : Icons.store_outlined,
-                            color: AppColors.onSurfaceVariant,
+                                : shop.isQueuePausedByOwner
+                                    ? Icons.pause_circle_outline_rounded
+                                    : Icons.store_outlined,
+                            color: shop.isQueuePausedByOwner
+                                ? AppColors.error
+                                : AppColors.onSurfaceVariant,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            !shop.hasActiveSubscription
-                                ? _l.tr('shopNotAccepting')
-                                : _l.tr('shopCurrentlyClosed'),
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.onSurfaceVariant,
+                          Flexible(
+                            child: Text(
+                              !shop.hasActiveSubscription
+                                  ? _l.tr('shopNotAccepting')
+                                  : shop.isQueuePausedByOwner
+                                      ? _l.tr('queuePausedByOwner')
+                                      : _l.tr('shopCurrentlyClosed'),
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: shop.isQueuePausedByOwner
+                                    ? AppColors.error
+                                    : AppColors.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ],

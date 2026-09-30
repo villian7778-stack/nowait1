@@ -85,7 +85,7 @@ class TestAuthEndpoints:
         }
         with patch("app.routers.auth.auth_service.register", return_value=register_resp):
             resp = anon_client.post("/auth/register", json={
-                "name": "Rahul", "phone": "+911234567890", "email": "rahul@example.com",
+                "name": "Rahul", "phone": "+917972145836", "email": "rahul@example.com",
                 "password": "Str0ngPass!", "state": "Maharashtra", "city": "Mumbai",
                 "role": "customer",
             })
@@ -381,9 +381,8 @@ class TestSubscriptionEndpoints:
         assert resp.status_code == 200
         assert resp.json()["has_active_subscription"] is True
 
-    def test_create_subscription_returns_201(self, owner_client):
-        with patch("app.routers.subscriptions.subscription_service.create_or_renew_subscription",
-                   return_value=self._sub_resp):
-            resp = owner_client.post("/subscriptions/shop/shop-001",
-                                     json={"plan": "basic", "duration_days": 30})
-        assert resp.status_code == 201
+    def test_direct_create_subscription_is_blocked(self, owner_client):
+        # Subscriptions must go through payment verification, not this endpoint.
+        resp = owner_client.post("/subscriptions/shop/shop-001",
+                                 json={"plan": "basic", "duration_days": 30})
+        assert resp.status_code == 403

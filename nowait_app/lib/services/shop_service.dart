@@ -119,6 +119,12 @@ class ShopService {
     var filename = file.name.isNotEmpty ? file.name : 'image.jpg';
     var mimeType = _mimeFromFilename(filename);
     final bytes = await _compress(original);
+    if (bytes.lengthInBytes > _maxImageBytes) {
+      throw ApiException(
+        413,
+        'Photo "$filename" is too large even after compression (max 0.5 MB each, 5 photos = 2.5 MB). Please choose a different photo.',
+      );
+    }
     if (!identical(bytes, original)) {
       // Compressed output is always JPEG.
       filename = '${filename.split('.').first}.jpg';

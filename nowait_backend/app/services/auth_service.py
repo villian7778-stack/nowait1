@@ -81,7 +81,7 @@ def register(data: RegisterRequest) -> dict:
     # Supabase returns identities=[] (without erroring) for an email that's already
     # registered but unconfirmed, to avoid leaking which emails exist.
     if user.get("identities") == []:
-        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+        raise HTTPException(status_code=400, detail="This email is not available.")
 
     profile_data = {
         "id": user_id,

@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/no_refund_notice.dart';
 
 class PromotionScreen extends StatefulWidget {
   final ShopModel shop;
@@ -105,6 +106,8 @@ class _PromotionScreenState extends State<PromotionScreen> {
               'Your shop will appear in the Promotions section for $_selectedDays days.',
               style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
             ),
+            const SizedBox(height: 12),
+            const NoRefundNotice(),
           ],
         ),
         actions: [

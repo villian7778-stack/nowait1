@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JoinQueueRequest(BaseModel):
@@ -49,12 +49,29 @@ class QueueListItem(BaseModel):
     joined_at: str
 
 
+class MaxSizeRequest(BaseModel):
+    # null = no limit. The app's "Reset" also sends null.
+    max_size: Optional[int] = Field(default=None, ge=1, le=1000)
+
+
+class LimitRequestAction(BaseModel):
+    # skip  = ignore this request, close = just dismiss the popup,
+    # reset = remove the limit so waiting customers can join
+    action: str = Field(pattern="^(skip|close|reset)$")
+
+
 class ShopQueueResponse(BaseModel):
     shop_id: str
     shop_name: str
     is_open: bool
     queue_paused: bool
     max_queue_size: Optional[int]
+    # waiting + serving right now (the number shown as "6/12")
+    active_count: int = 0
+    limit_reached: bool = False
+    # a customer tried to join while the limit was reached and the owner hasn't
+    # answered the popup yet
+    limit_request_pending: bool = False
     total_waiting: int
     now_serving_token: Optional[int]
     queue: list[QueueListItem]

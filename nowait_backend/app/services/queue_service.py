@@ -162,6 +162,59 @@ def _build_entry_response(entry: dict, shop_name: str, avg_wait: int) -> dict:
     }
 
 
+# ── queue limit: blocked-join requests ───────────────────────────────────────
+# A customer turned away by the limit leaves a 'limit_blocked' row in queue_events.
+# The owner's app sees it through get_shop_queue() and shows a popup; answering the
+# popup writes a 'limit_ack' row. The newest of the two decides whether one is pending.
+# Rows older than _LIMIT_REQUEST_TTL are ignored so a stale request never pops up later.
+
+_LIMIT_REQUEST_TTL = timedelta(minutes=30)
+
+
+def _limit_request_pending(shop_id: str) -> bool:
+    since = (datetime.now(timezone.utc) - _LIMIT_REQUEST_TTL).isoformat()
+    res = (
+        supabase.table("queue_events")
+        .select("event_type")
+        .eq("shop_id", shop_id)
+        .in_("event_type", ["limit_blocked", "limit_ack"])
+        .gte("created_at", since)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    return bool(rows) and rows[0]["event_type"] == "limit_blocked"
+
+
+def _record_limit_block(shop_id: str) -> None:
+    """Best effort: never let the owner-notification bookkeeping break the join response."""
+    try:
+        if not _limit_request_pending(shop_id):   # one popup per unanswered request
+            supabase.table("queue_events").insert({"shop_id": shop_id, "event_type": "limit_blocked"}).execute()
+    except Exception as e:
+        logger.warning("Could not record limit-blocked join for shop %s: %s", shop_id, e)
+
+
+def resolve_limit_request(shop_id: str, owner_id: str, action: str) -> dict:
+    """Owner's answer to the 'customer wants to join but limit reached' popup."""
+    if not _is_owner(shop_id, owner_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if action == "reset":
+        supabase.table("shops").update({"max_queue_size": None}).eq("id", shop_id).execute()
+    supabase.table("queue_events").insert({"shop_id": shop_id, "event_type": "limit_ack"}).execute()
+    return {
+        "shop_id": shop_id,
+        "action": action,
+        "max_queue_size": None if action == "reset" else _current_limit(shop_id),
+    }
+
+
+def _current_limit(shop_id: str) -> Optional[int]:
+    row = execute_one(supabase.table("shops").select("max_queue_size").eq("id", shop_id)).data or {}
+    return row.get("max_queue_size")
+
+
 # ── join queue ────────────────────────────────────────────────────────────────
 
 def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, service_ids: Optional[list] = None) -> dict:
@@ -201,9 +254,13 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
         if "SHOP_CLOSED" in error_msg:
             raise HTTPException(status_code=400, detail="Shop is currently closed")
         if "QUEUE_PAUSED" in error_msg:
-            raise HTTPException(status_code=400, detail="Queue is currently paused")
+            raise HTTPException(status_code=400, detail="Queue is paused by the owner.")
         if "QUEUE_FULL" in error_msg:
-            raise HTTPException(status_code=400, detail="Queue has reached its maximum capacity")
+            _record_limit_block(shop_id)
+            raise HTTPException(
+                status_code=400,
+                detail="The owner has set a limit for this queue. You are not able to join at this time.",
+            )
         if "NO_SUBSCRIPTION" in error_msg:
             raise HTTPException(status_code=400, detail="Shop does not have an active subscription")
         if "ALREADY_IN_QUEUE" in error_msg:
@@ -384,12 +441,20 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
     serving = next((e["token_number"] for e in entries if e["status"] == "serving"), None)
     waiting_count = sum(1 for e in entries if e["status"] == "waiting")
 
+    limit = shop.data.get("max_queue_size")
+    active_count = len(entries)  # waiting + serving: exactly what join_queue_v2 counts
+    limit_reached = limit is not None and active_count >= limit
+
     return {
         "shop_id": shop_id,
         "shop_name": shop.data["name"],
         "is_open": shop.data["is_open"],
         "queue_paused": shop.data.get("queue_paused", False),
-        "max_queue_size": shop.data.get("max_queue_size"),
+        "max_queue_size": limit,
+        "active_count": active_count,
+        "limit_reached": limit_reached,
+        # only meaningful while the limit is still reached
+        "limit_request_pending": limit_reached and _limit_request_pending(shop_id),
         "total_waiting": waiting_count,
         "now_serving_token": serving,
         "queue": queue_items,
@@ -583,7 +648,7 @@ def pause_queue(shop_id: str, owner_id: str) -> dict:
         raise HTTPException(status_code=403, detail="Not authorized")
     supabase.table("shops").update({"queue_paused": True}).eq("id", shop_id).execute()
     supabase.table("queue_events").insert({"shop_id": shop_id, "event_type": "paused"}).execute()
-    return {"shop_id": shop_id, "queue_paused": True, "message": "Queue paused"}
+    return {"shop_id": shop_id, "queue_paused": True, "message": "You paused the queue."}
 
 
 def resume_queue(shop_id: str, owner_id: str) -> dict:
@@ -597,7 +662,14 @@ def resume_queue(shop_id: str, owner_id: str) -> dict:
 def set_max_size(shop_id: str, owner_id: str, max_size: Optional[int]) -> dict:
     if not _is_owner(shop_id, owner_id):
         raise HTTPException(status_code=403, detail="Not authorized")
+    if max_size is not None and max_size < 1:
+        raise HTTPException(status_code=400, detail="Queue limit must be at least 1")
     supabase.table("shops").update({"max_queue_size": max_size}).eq("id", shop_id).execute()
+    # A new limit (or removing it) answers any customer who was turned away earlier.
+    try:
+        supabase.table("queue_events").insert({"shop_id": shop_id, "event_type": "limit_ack"}).execute()
+    except Exception as e:
+        logger.warning("Could not ack limit request for shop %s: %s", shop_id, e)
     return {"shop_id": shop_id, "max_queue_size": max_size}
 
 

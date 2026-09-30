@@ -110,7 +110,10 @@ def toggle_open(shop_id: str, current_user: dict = Depends(get_current_owner)):
 
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+# Each image must be <= 0.5 MB (the app compresses to this before uploading); with the
+# 5-image cap per shop that keeps a shop's photos within 2.5 MB in total.
+_MAX_IMAGE_BYTES = 512 * 1024
+_READ_CHUNK = 64 * 1024
 
 
 @router.post("/{shop_id}/images", response_model=ImageUploadResponse, status_code=201, summary="Upload a shop image (owner only)")
@@ -119,14 +122,27 @@ async def upload_shop_image(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_owner),
 ):
-    """Upload one image for the shop. Max 5 images, 5 MB each (the app compresses to ~0.5 MB), JPEG/PNG/WebP/GIF only."""
+    """Upload one image for the shop. Max 5 images, 0.5 MB each (the app compresses before uploading), JPEG/PNG/WebP/GIF only."""
     content_type = (file.content_type or "").lower()
     if content_type not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=415, detail="Only JPEG, PNG, WebP, or GIF images are allowed.")
 
-    file_data = await file.read()
-    if len(file_data) > _MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="Image must be 5 MB or smaller.")
+    # Read in chunks and bail out as soon as the limit is crossed, so an oversized
+    # upload never gets fully loaded into memory.
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > _MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Photo is too large. Each photo must be 0.5 MB or smaller (5 photos = 2.5 MB in total).",
+            )
+        chunks.append(chunk)
+    file_data = b"".join(chunks)
 
     return shop_service.upload_shop_image(
         shop_id,

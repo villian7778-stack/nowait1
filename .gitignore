@@ -42,3 +42,11 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Android signing secrets — never commit
+key.properties
+*.jks
+*.keystore
+
+# Scratch data
+tmp_*.json

@@ -83,6 +83,9 @@ class ShopModel {
 
   bool get canAcceptQueue => isOpen && hasActiveSubscription && !queuePaused;
 
+  /// Open and subscribed, but the owner has paused the queue: show "Queue is paused by the owner."
+  bool get isQueuePausedByOwner => isOpen && hasActiveSubscription && queuePaused;
+
   factory ShopModel.fromJson(Map<String, dynamic> json) {
     final allPromotions = json['active_promotions'] as List? ?? [];
     final schemeEntries = allPromotions
@@ -223,18 +226,6 @@ class SchemeModel {
       validUntil: DateTime.parse(json['valid_until']),
     );
   }
-}
-
-class CategoryProduct {
-  final String name;
-  final String icon;
-  final String priceFrom;
-
-  const CategoryProduct({
-    required this.name,
-    required this.icon,
-    required this.priceFrom,
-  });
 }
 
 class QueueEntry {

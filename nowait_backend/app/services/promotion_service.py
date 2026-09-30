@@ -17,7 +17,14 @@ def get_shop_promotions(shop_id: str, active_only: bool = False) -> dict:
     return {"promotions": result.data or []}
 
 
-def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate) -> dict:
+FEATURED_TITLE = "Featured Promotion"
+
+
+def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: bool = False) -> dict:
+    # "Featured Promotion" is the paid visibility boost; only the payment-verify flow
+    # (paid=True) may create one. Free callers can only create schemes/offers.
+    if data.title.strip() == FEATURED_TITLE and not paid:
+        raise HTTPException(status_code=403, detail="Featured Promotions can only be created through payment.")
     shop = execute_one(
         supabase.table("shops")
         .select("id, name, city")
@@ -81,7 +88,7 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate) -> dict
 def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) -> dict:
     promo = execute_one(
         supabase.table("promotions")
-        .select("shop_id")
+        .select("shop_id, title")
         .eq("id", promotion_id)
     )
     if not promo.data:
@@ -95,6 +102,12 @@ def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) ->
     )
     if not shop.data:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Paid boosts can't be edited (e.g. extending valid_until for free), and a free
+    # scheme can't be renamed into one.
+    new_title = (data.title or "").strip() if getattr(data, "title", None) else ""
+    if promo.data.get("title") == FEATURED_TITLE or new_title == FEATURED_TITLE:
+        raise HTTPException(status_code=403, detail="Featured Promotions can't be edited. Create a new one through payment.")
 
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     result = supabase.table("promotions").update(update_data).eq("id", promotion_id).execute()

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -11,11 +13,15 @@ class CreateOrderResponse(BaseModel):
 class SubscriptionOrderRequest(BaseModel):
     plan: str  # 'basic' or 'premium'
     duration_days: int = 30
+    # Must be true to buy while a subscription is still active (extends it).
+    extend: bool = False
 
 
 class SubscriptionVerifyRequest(BaseModel):
-    plan: str
-    duration_days: int = 30
+    # plan/duration_days are accepted for older app versions but ignored: the server
+    # uses what was stored when the order was created.
+    plan: Optional[str] = None
+    duration_days: Optional[int] = None
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
@@ -28,9 +34,10 @@ class PromotionOrderRequest(BaseModel):
 
 
 class PromotionVerifyRequest(BaseModel):
-    title: str
-    description: str
-    valid_until: str
+    # Ignored (kept for older app versions): the stored order metadata is used.
+    title: Optional[str] = None
+    description: Optional[str] = None
+    valid_until: Optional[str] = None
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str

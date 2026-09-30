@@ -26,6 +26,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   bool _isGoogleLoading = false;
   bool _isCheckingEmail = false;
   bool _emailNotFound = false;
+  // Email validation messages appear after the field is left or Continue is tapped.
+  bool _emailSubmitted = false;
+  bool _emailTouched = false;
+  final _emailFocus = FocusNode();
   // 0 = choose method, 1 = enter email, 2 = enter password
   int _step = 0;
   final _l = LocaleService.instance;
@@ -42,6 +46,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus && _emailController.text.isNotEmpty) setState(() => _emailTouched = true);
+    });
     _emailController.addListener(() {
       if (_emailNotFound) _emailNotFound = false;
       setState(() {});
@@ -80,6 +87,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   void dispose() {
     _l.removeListener(_onLocale);
     _emailController.dispose();
+    _emailFocus.dispose();
     _passwordController.dispose();
     _logoCtrl.dispose();
     _textCtrl.dispose();
@@ -148,6 +156,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
   bool get _isEmailValid =>
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_emailController.text.trim());
+
+  String? get _emailError {
+    final e = _emailController.text.trim();
+    if (e.isEmpty) return _emailSubmitted ? _l.tr('errEmailRequired') : null;
+    if (!_isEmailValid && (_emailSubmitted || _emailTouched)) return _l.tr('errEmailInvalid');
+    return null;
+  }
 
   void _showError(String msg) {
     if (!mounted) return;
@@ -270,6 +285,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           hint: _l.tr('emailAddress'),
           icon: Icons.mail_outline_rounded,
           keyboardType: TextInputType.emailAddress,
+          focusNode: _emailFocus,
+          errorText: _emailError,
         ),
         const SizedBox(height: 16),
         if (_emailNotFound) ...[
@@ -306,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 ? _loadingBar(gradient: true)
                 : GradientButton(
                     label: _l.tr('continueLabel'),
-                    onPressed: _isEmailValid ? _checkEmail : () {},
+                    onPressed: _isEmailValid ? _checkEmail : () => setState(() => _emailSubmitted = true),
                     icon: Icons.arrow_forward_rounded,
                   ),
           ),
@@ -519,6 +536,9 @@ class _AuthTextField extends StatelessWidget {
   final bool obscureText;
   final TextInputType? keyboardType;
   final Widget? suffixIcon;
+  final FocusNode? focusNode;
+  /// When set, the field gets a red outline and this message underneath.
+  final String? errorText;
 
   const _AuthTextField({
     required this.controller,
@@ -527,18 +547,42 @@ class _AuthTextField extends StatelessWidget {
     this.obscureText = false,
     this.keyboardType,
     this.suffixIcon,
+    this.focusNode,
+    this.errorText,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasError = errorText != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _box(hasError),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 12),
+            child: Text(
+              errorText!,
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.error),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _box(bool hasError) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outline.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: hasError ? AppColors.error : AppColors.outline.withValues(alpha: 0.4),
+          width: hasError ? 1.5 : 1,
+        ),
       ),
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         obscureText: obscureText,
         keyboardType: keyboardType,
         style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.onSurface),

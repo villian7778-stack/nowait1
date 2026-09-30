@@ -6,6 +6,7 @@ import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/category_theme.dart';
 import '../screens/customer/reviews_screen.dart';
+import 'queue_paused_note.dart';
 import 'status_badge.dart';
 
 class ShopCard extends StatelessWidget {
@@ -214,6 +215,10 @@ class ShopCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if (shop.isQueuePausedByOwner) ...[
+                    const SizedBox(height: 6),
+                    const QueuePausedNote(fontSize: 11),
+                  ],
                   if (shop.activeScheme != null &&
                       shop.activeScheme!.isActive) ...[
                     const SizedBox(height: 6),

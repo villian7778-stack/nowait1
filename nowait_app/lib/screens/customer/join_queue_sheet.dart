@@ -71,6 +71,9 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
         }
       } else if (e.statusCode == 403) {
         _showBanDialog(e.message);
+      } else if (e.statusCode == 400 &&
+          (e.message.contains('limit for this queue') || e.message.contains('paused by the owner'))) {
+        _showCannotJoinDialog(e.message);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
@@ -79,6 +82,35 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
     } catch (_) {
       if (mounted) setState(() => _isJoining = false);
     }
+  }
+
+  // Owner has paused the queue or set a limit that is already reached.
+  Future<void> _showCannotJoinDialog(String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.block_rounded, color: AppColors.error, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _l.tr('cannotJoinTitle'),
+                style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(message, style: GoogleFonts.inter(fontSize: 14, height: 1.5, color: AppColors.onSurfaceVariant)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   // Same-shop duplicate: offer to navigate to existing queue status

@@ -217,10 +217,15 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       );
 
       // Upload selected images to Supabase Storage
+      String? imageError;
       for (final img in _selectedImages) {
         try {
           await ShopService.instance.uploadImage(shop.id, img);
-        } catch (_) {}
+        } on ApiException catch (e) {
+          imageError ??= e.message;
+        } catch (_) {
+          imageError ??= 'A photo could not be uploaded.';
+        }
       }
 
       // Item 11: Track failed staff additions
@@ -238,7 +243,17 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
 
       if (!mounted) return;
 
-      if (failedStaff.isNotEmpty) {
+      if (imageError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Shop created, but some photos were not uploaded: $imageError'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 7),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else if (failedStaff.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Shop created, but staff ${failedStaff.join(', ')} could not be added'),

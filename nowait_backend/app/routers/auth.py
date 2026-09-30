@@ -58,7 +58,7 @@ def login(request: Request, body: LoginRequest):
 
 
 @router.post("/check-email", response_model=CheckEmailResponse, summary="Check whether an account exists for an email")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 def check_email(request: Request, body: CheckEmailRequest):
     """Used by the app's email-first login: existing email -> ask for password,
     unknown email -> offer to create an account."""

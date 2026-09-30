@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/queue_service.dart';
@@ -28,6 +29,11 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   bool _isCallingNext = false;
   bool _isTogglingOpen = false;
   bool _isTogglingPause = false;
+  // Live copies of the shop's pause flag and queue limit. They are refreshed from every
+  // queue poll so the screen stays right even if another device changed them.
+  late bool _paused;
+  int? _limit;
+  bool _limitDialogOpen = false;
   List<Map<String, dynamic>> _queueItems = [];
   bool _loadingQueue = false;
   int _unreadCount = 0;
@@ -39,6 +45,8 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   void initState() {
     super.initState();
     _shop = widget.shop;
+    _paused = _shop.queuePaused;
+    _limit = _shop.maxQueueSize;
     _l.addListener(_onLocale);
     WidgetsBinding.instance.addObserver(this);
     _loadQueue();
@@ -94,6 +102,8 @@ class _ManageShopScreenState extends State<ManageShopScreen>
             final s = e['status'] as String? ?? '';
             return s == 'waiting' || s == 'serving' || s == 'coming';
           }).length;
+          _paused = res['queue_paused'] as bool? ?? _paused;
+          _limit = res['max_queue_size'] as int?;
           // Update current serving token from the serving entry
           for (final e in _queueItems) {
             if (e['status'] == 'serving') {
@@ -103,6 +113,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
           }
           _loadingQueue = false;
         });
+        if (res['limit_request_pending'] == true) _showLimitRequestDialog();
       }
     } catch (_) {
       if (mounted) setState(() => _loadingQueue = false);
@@ -112,13 +123,24 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   Future<void> _togglePause() async {
     setState(() => _isTogglingPause = true);
     try {
-      if (_shop.queuePaused) {
+      final wasPaused = _paused;
+      if (wasPaused) {
         await QueueService.instance.resumeQueue(_shop.id);
       } else {
         await QueueService.instance.pauseQueue(_shop.id);
       }
       final updated = await ShopService.instance.getShop(_shop.id);
-      if (mounted) setState(() { _shop = updated; _isTogglingPause = false; });
+      if (!mounted) return;
+      setState(() {
+        _shop = updated;
+        _paused = !wasPaused;
+        _isTogglingPause = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(wasPaused ? _l.tr('queueResumed') : _l.tr('youPausedQueue')),
+        backgroundColor: wasPaused ? AppColors.tertiary : AppColors.onSurfaceVariant,
+        behavior: SnackBarBehavior.floating,
+      ));
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _isTogglingPause = false);
@@ -129,53 +151,188 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     }
   }
 
+  bool get _limitReached => _limit != null && _shop.queueCount >= _limit!;
+
+  void _toast(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? AppColors.error : AppColors.tertiary,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  /// Removes the limit so customers can join again.
+  Future<void> _resetLimit() async {
+    try {
+      await QueueService.instance.setMaxSize(_shop.id, null);
+      if (!mounted) return;
+      setState(() => _limit = null);
+      _toast(_l.tr('limitResetDone'));
+      _loadQueue();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    } catch (_) {
+      _toast(_l.tr('somethingWrong'), error: true);
+    }
+  }
+
+  /// Popup shown when a customer tried to join while the limit was reached.
+  Future<void> _showLimitRequestDialog() async {
+    if (_limitDialogOpen || !mounted) return;
+    _limitDialogOpen = true;
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _l.tr('limitPopupTitle'),
+                style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          _limit != null
+              ? '${_l.tr('limitPopupBody')}\n\n${_shop.queueCount}/$_limit'
+              : _l.tr('limitPopupBody'),
+          style: GoogleFonts.inter(fontSize: 14, height: 1.5, color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'skip'),
+            child: Text(_l.tr('skipAction'), style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'reset'),
+            child: Text(_l.tr('resetLimit'), style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'close'),
+            child: Text(_l.tr('closeAction'), style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    _limitDialogOpen = false;
+    if (!mounted) return;
+    final action = choice ?? 'close';
+    try {
+      await QueueService.instance.resolveLimitRequest(_shop.id, action);
+      if (action == 'reset' && mounted) {
+        setState(() => _limit = null);
+        _toast(_l.tr('limitResetDone'));
+      }
+      _loadQueue();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    } catch (_) {
+      _toast(_l.tr('somethingWrong'), error: true);
+    }
+  }
+
   void _showMaxSizeSheet() {
-    final ctrl = TextEditingController(text: _shop.maxQueueSize?.toString() ?? '');
+    final ctrl = TextEditingController(text: _limit?.toString() ?? '');
+    String? error;
+    bool saving = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 20),
-              Text('Max Queue Size', style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text('Leave empty for unlimited', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: 'e.g. 30',
-                  suffixText: 'customers',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> save() async {
+            final val = int.tryParse(ctrl.text.trim());
+            if (val == null || val < 1 || val > 1000) {
+              setSheet(() => error = _l.tr('queueLimitInvalid'));
+              return;
+            }
+            setSheet(() { error = null; saving = true; });
+            try {
+              await QueueService.instance.setMaxSize(_shop.id, val);
+              if (!mounted) return;
+              setState(() => _limit = val);
+              if (ctx.mounted) Navigator.pop(ctx);
+              _toast(_l.tr('limitSetDone'));
+              _loadQueue();
+            } on ApiException catch (e) {
+              setSheet(() { error = e.message; saving = false; });
+            } catch (_) {
+              setSheet(() { error = _l.tr('somethingWrong'); saving = false; });
+            }
+          }
+
+          Future<void> reset() async {
+            Navigator.pop(ctx);
+            await _resetLimit();
+          }
+
+          final count = _shop.queueCount;
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 20),
+                  Text(_l.tr('queueLimitTitle'), style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text(
+                    _limit != null
+                        ? _l.tr('queueLimitCurrent', params: {
+                            'count': '$count',
+                            'limit': '$_limit',
+                            'left': '${(_limit! - count).clamp(0, _limit!)}',
+                          })
+                        : _l.tr('queueLimitEmptyHint'),
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: ctrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                    onChanged: (_) { if (error != null) setSheet(() => error = null); },
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 30',
+                      suffixText: 'customers',
+                      errorText: error,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: saving
+                        ? const SizedBox(height: 52, child: Center(child: CircularProgressIndicator()))
+                        : GradientButton(label: _l.tr('setLimit'), onPressed: save),
+                  ),
+                  if (_limit != null) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: GhostButton(
+                        label: '${_l.tr('resetLimit')}  ·  ${_l.tr('resetLimitHint')}',
+                        onPressed: reset,
+                        icon: Icons.restart_alt_rounded,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: GradientButton(
-                  label: 'Set Limit',
-                  onPressed: () async {
-                    final val = int.tryParse(ctrl.text.trim());
-                    Navigator.pop(context);
-                    await QueueService.instance.setMaxSize(_shop.id, val);
-                    final updated = await ShopService.instance.getShop(_shop.id);
-                    if (mounted) setState(() => _shop = updated);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     ).whenComplete(ctrl.dispose);
   }
@@ -999,7 +1156,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: _shop.queuePaused ? AppColors.errorContainer : AppColors.surfaceContainerLow,
+                              color: _paused ? AppColors.errorContainer : AppColors.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: _isTogglingPause
@@ -1008,14 +1165,18 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
-                                        _shop.queuePaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                                        _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
                                         size: 18,
-                                        color: _shop.queuePaused ? AppColors.error : AppColors.onSurfaceVariant,
+                                        color: _paused ? AppColors.error : AppColors.onSurfaceVariant,
                                       ),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        _shop.queuePaused ? 'Resume Queue' : 'Pause Queue',
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _shop.queuePaused ? AppColors.error : AppColors.onSurfaceVariant),
+                                      Flexible(
+                                        child: Text(
+                                          _paused ? 'Resume Queue' : 'Pause Queue',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _paused ? AppColors.error : AppColors.onSurfaceVariant),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1027,14 +1188,19 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                         onTap: _showMaxSizeSheet,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(14)),
+                          decoration: BoxDecoration(
+                            color: _limitReached ? AppColors.errorContainer : AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.people_outline_rounded, size: 16, color: AppColors.onSurfaceVariant),
+                              Icon(Icons.people_outline_rounded, size: 16, color: _limitReached ? AppColors.error : AppColors.onSurfaceVariant),
                               const SizedBox(width: 6),
                               Text(
-                                _shop.maxQueueSize != null ? 'Max: ${_shop.maxQueueSize}' : 'No limit',
-                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+                                // "6/12" = people in the queue / limit
+                                _limit != null ? '${_shop.queueCount}/$_limit' : _l.tr('noLimitLabel'),
+                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _limitReached ? AppColors.error : AppColors.onSurfaceVariant),
                               ),
                             ],
                           ),
@@ -1042,6 +1208,23 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       ),
                     ],
                   ),
+                  if (_paused) ...[
+                    const SizedBox(height: 10),
+                    _InfoBanner(
+                      icon: Icons.pause_circle_outline_rounded,
+                      title: _l.tr('youPausedQueue'),
+                      subtitle: _l.tr('queuePausedOwnerHint'),
+                    ),
+                  ],
+                  if (_limitReached) ...[
+                    const SizedBox(height: 10),
+                    _InfoBanner(
+                      icon: Icons.group_off_outlined,
+                      title: _l.tr('queueLimitReached'),
+                      actionLabel: _l.tr('resetAction'),
+                      onAction: _resetLimit,
+                    ),
+                  ],
 
                   // ── Live queue ────────────────────────────────────────────
                   const SizedBox(height: 24),
@@ -1130,3 +1313,71 @@ class _MetricCell extends StatelessWidget {
   }
 }
 
+/// Notice strip used on the owner queue screen (queue paused / limit reached).
+/// The text wraps and the optional action never overflows, so it stays aligned
+/// on narrow screens and with longer Hindi/Marathi strings.
+class _InfoBanner extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _InfoBanner({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.errorContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20, color: AppColors.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.3),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant, height: 1.3),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (actionLabel != null) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.error,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(actionLabel!, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}

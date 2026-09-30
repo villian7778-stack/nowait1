@@ -211,12 +211,17 @@ class _EditShopScreenState extends State<EditShopScreen> {
       }
 
       // Upload new images
+      String? imageError;
       if (_newImages.isNotEmpty) {
         setState(() => _isUploadingImages = true);
         for (final img in _newImages) {
           try {
             await ShopService.instance.uploadImage(widget.shop.id, img);
-          } catch (_) {}
+          } on ApiException catch (e) {
+            imageError ??= e.message;
+          } catch (_) {
+            imageError ??= 'A photo could not be uploaded.';
+          }
         }
       }
       if (mounted) setState(() => _isUploadingImages = false);
@@ -263,8 +268,11 @@ class _EditShopScreenState extends State<EditShopScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✓  Shop details updated'),
-          backgroundColor: AppColors.tertiary,
+          content: Text(imageError == null
+              ? '✓  Shop details updated'
+              : 'Shop updated, but some photos were not uploaded: $imageError'),
+          duration: Duration(seconds: imageError == null ? 4 : 7),
+          backgroundColor: imageError == null ? AppColors.tertiary : AppColors.error,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

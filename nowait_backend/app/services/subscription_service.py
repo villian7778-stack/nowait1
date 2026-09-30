@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -6,6 +7,41 @@ from app.database import execute_one, supabase
 from app.schemas.subscription import SubscriptionCreate
 
 PLAN_PRICES = {"basic": 499, "premium": 999}
+VALID_DURATIONS = (30, 90, 365)
+
+
+def _parse_dt(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _days_left(expires_at: datetime, now: datetime) -> int:
+    """Whole days left, rounded up, so a fresh 30-day plan reads 30 (not 29)."""
+    return max(0, math.ceil((expires_at - now).total_seconds() / 86400))
+
+
+def active_expiry(shop_id: str) -> datetime | None:
+    """expires_at of the shop's subscription if it is currently active, else None."""
+    row = execute_one(supabase.table("subscriptions").select("*").eq("shop_id", shop_id)).data
+    if not row or row.get("status") != "active" or not row.get("expires_at"):
+        return None
+    expires_at = _parse_dt(row["expires_at"])
+    return expires_at if expires_at > datetime.now(timezone.utc) else None
+
+
+def validate_plan(plan: str, duration_days: int) -> None:
+    if plan not in PLAN_PRICES:
+        raise HTTPException(status_code=400, detail=f"Invalid plan. Choose from: {list(PLAN_PRICES.keys())}")
+    if duration_days not in VALID_DURATIONS:
+        raise HTTPException(status_code=400, detail="Duration must be 30, 90, or 365 days")
+
+
+def already_active_message(expires_at: datetime, duration_days: int) -> str:
+    length = {30: "1 month", 90: "3 months", 365: "1 year"}.get(duration_days, f"{duration_days} days")
+    new_end = expires_at + timedelta(days=duration_days)
+    return (
+        f"Your active subscription ends on {expires_at.strftime('%d %b %Y')}. "
+        f"Do you want to extend it by {length}? The new end date will be {new_end.strftime('%d %b %Y')}."
+    )
 
 
 def get_subscription(shop_id: str, owner_id: str) -> dict:
@@ -24,8 +60,8 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
 
     sub = result.data
     now = datetime.now(timezone.utc)
-    expires_at = datetime.fromisoformat(sub["expires_at"].replace("Z", "+00:00"))
-    days_remaining = max(0, (expires_at - now).days)
+    expires_at = _parse_dt(sub["expires_at"])
+    days_remaining = _days_left(expires_at, now)
 
     is_active = sub["status"] == "active" and expires_at > now
     sub_response = {**sub, "days_remaining": days_remaining}
@@ -43,27 +79,34 @@ def create_or_renew_subscription(shop_id: str, owner_id: str, data: Subscription
     if not shop.data:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
 
-    if data.plan not in PLAN_PRICES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid plan. Choose from: {list(PLAN_PRICES.keys())}",
-        )
-    if data.duration_days not in (30, 90, 365):
-        raise HTTPException(status_code=400, detail="Duration must be 30, 90, or 365 days")
+    validate_plan(data.plan, data.duration_days)
 
     now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(days=data.duration_days)
 
     existing = execute_one(
         supabase.table("subscriptions")
-        .select("id")
+        .select("*")
         .eq("shop_id", shop_id)
     )
+
+    # Extend from the current end date while the subscription is still active, so the
+    # days already paid for are never lost; otherwise start counting from now.
+    started_at = now
+    base = now
+    prev = existing.data or {}
+    if prev.get("status") == "active" and prev.get("expires_at"):
+        prev_expiry = _parse_dt(prev["expires_at"])
+        if prev_expiry > now:
+            base = prev_expiry
+            if prev.get("started_at"):
+                started_at = _parse_dt(prev["started_at"])
+    expires_at = base + timedelta(days=data.duration_days)
+
     sub_data = {
         "shop_id": shop_id,
         "plan": data.plan,
         "status": "active",
-        "started_at": now.isoformat(),
+        "started_at": started_at.isoformat(),
         "expires_at": expires_at.isoformat(),
     }
 
@@ -76,7 +119,7 @@ def create_or_renew_subscription(shop_id: str, owner_id: str, data: Subscription
         raise HTTPException(status_code=500, detail="Failed to create/renew subscription")
 
     sub = result.data[0]
-    days_remaining = data.duration_days
+    days_remaining = _days_left(expires_at, now)
     return {"has_active_subscription": True, "subscription": {**sub, "days_remaining": days_remaining}}
 
 

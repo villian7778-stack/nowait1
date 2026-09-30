@@ -416,110 +416,73 @@ ALTER TABLE queue_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_reviews         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_transactions ENABLE ROW LEVEL SECURITY;
 
--- Profiles
-DROP POLICY IF EXISTS "profiles_read_all"   ON profiles;
-CREATE POLICY "profiles_read_all"   ON profiles FOR SELECT USING (true);
-DROP POLICY IF EXISTS "profiles_update_own" ON profiles;
-CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE USING (auth.uid() = id);
-DROP POLICY IF EXISTS "profiles_insert_own" ON profiles;
-CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+-- No client-facing policies on purpose. The Flutter app only uses Supabase for sign-in;
+-- every data call goes through the FastAPI backend (service_role key bypasses RLS).
+-- See migrate_lockdown_rls.sql for the reasoning. Applied inline below so a fresh
+-- database and an existing one both end up locked down.
 
--- Shops
-DROP POLICY IF EXISTS "shops_read_all" ON shops;
-CREATE POLICY "shops_read_all"     ON shops FOR SELECT USING (true);
-DROP POLICY IF EXISTS "shops_insert_owner" ON shops;
-CREATE POLICY "shops_insert_owner" ON shops FOR INSERT WITH CHECK (auth.uid() = owner_id);
-DROP POLICY IF EXISTS "shops_update_owner" ON shops;
-CREATE POLICY "shops_update_owner" ON shops FOR UPDATE USING (auth.uid() = owner_id);
-DROP POLICY IF EXISTS "shops_delete_owner" ON shops;
-CREATE POLICY "shops_delete_owner" ON shops FOR DELETE USING (auth.uid() = owner_id);
+-- 1. Drop every policy on the app's tables (whatever it was named) ---------------
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN ('profiles','shops','services','subscriptions','promotions',
+                        'queue_entries','notifications','staff_members','queue_events',
+                        'shop_reviews','payment_transactions','shop_staff','reviews')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
+  END LOOP;
+END $$;
 
--- Services
-DROP POLICY IF EXISTS "services_read_all" ON services;
-CREATE POLICY "services_read_all"     ON services FOR SELECT USING (true);
-DROP POLICY IF EXISTS "services_modify_owner" ON services;
-CREATE POLICY "services_modify_owner" ON services FOR ALL USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
+-- 2. Make sure RLS is enabled everywhere (idempotent) ----------------------------
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['profiles','shops','services','subscriptions','promotions',
+                           'queue_entries','notifications','staff_members','queue_events',
+                           'shop_reviews','payment_transactions']
+  LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    END IF;
+  END LOOP;
+END $$;
 
--- Queue entries
-DROP POLICY IF EXISTS "queue_read_own" ON queue_entries;
-CREATE POLICY "queue_read_own" ON queue_entries FOR SELECT USING (
-    auth.uid() = user_id OR
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-DROP POLICY IF EXISTS "queue_insert_customer" ON queue_entries;
-CREATE POLICY "queue_insert_customer"   ON queue_entries FOR INSERT WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "queue_update_own_cancel" ON queue_entries;
-CREATE POLICY "queue_update_own_cancel" ON queue_entries FOR UPDATE USING (
-    auth.uid() = user_id OR
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
+-- 3. Belt and braces: client roles get no table privileges at all ----------------
+REVOKE ALL ON ALL TABLES    IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES    FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
 
--- Notifications
-DROP POLICY IF EXISTS "notifications_read_own" ON notifications;
-CREATE POLICY "notifications_read_own"   ON notifications FOR SELECT USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "notifications_update_own" ON notifications;
-CREATE POLICY "notifications_update_own" ON notifications FOR UPDATE USING (auth.uid() = user_id);
+-- 4. The queue functions are SECURITY DEFINER: only the backend may call them ----
+--    (otherwise anyone could POST /rest/v1/rpc/join_queue_v2 as any user).
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('join_queue','join_queue_v2','advance_queue_v2','skip_customer_v2')
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', r.sig);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', r.sig);
+    -- pin the search_path so a SECURITY DEFINER function can't be hijacked
+    EXECUTE format('ALTER FUNCTION %s SET search_path = public, pg_temp', r.sig);
+  END LOOP;
+END $$;
 
--- Subscriptions
-DROP POLICY IF EXISTS "subscriptions_read_owner" ON subscriptions;
-CREATE POLICY "subscriptions_read_owner"   ON subscriptions FOR SELECT USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-DROP POLICY IF EXISTS "subscriptions_insert_owner" ON subscriptions;
-CREATE POLICY "subscriptions_insert_owner" ON subscriptions FOR INSERT WITH CHECK (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-DROP POLICY IF EXISTS "subscriptions_update_owner" ON subscriptions;
-CREATE POLICY "subscriptions_update_owner" ON subscriptions FOR UPDATE USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
+-- 5. Storage: only the backend uploads/deletes shop images -----------------------
+--    (public READ stays: the bucket is public so image URLs load in the app.)
+DROP POLICY IF EXISTS "Authenticated users can upload" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can delete" ON storage.objects;
 
--- Promotions
-DROP POLICY IF EXISTS "promotions_read_all" ON promotions;
-CREATE POLICY "promotions_read_all"     ON promotions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "promotions_modify_owner" ON promotions;
-CREATE POLICY "promotions_modify_owner" ON promotions FOR ALL USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-
--- Staff members
-DROP POLICY IF EXISTS "staff_read_all" ON staff_members;
-CREATE POLICY "staff_read_all"     ON staff_members FOR SELECT USING (true);
-DROP POLICY IF EXISTS "staff_modify_owner" ON staff_members;
-CREATE POLICY "staff_modify_owner" ON staff_members FOR ALL USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-
--- Queue events
-DROP POLICY IF EXISTS "queue_events_read_owner" ON queue_events;
-CREATE POLICY "queue_events_read_owner" ON queue_events FOR SELECT USING (
-    auth.uid() = (SELECT owner_id FROM shops WHERE id = shop_id)
-);
-
--- Shop reviews — public read, owner-of-review write/delete
-DROP POLICY IF EXISTS "Public read reviews" ON shop_reviews;
-CREATE POLICY "Public read reviews"
-    ON shop_reviews FOR SELECT
-    USING (true);
-DROP POLICY IF EXISTS "Users insert own reviews" ON shop_reviews;
-CREATE POLICY "Users insert own reviews"
-    ON shop_reviews FOR INSERT
-    WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Users delete own reviews" ON shop_reviews;
-CREATE POLICY "Users delete own reviews"
-    ON shop_reviews FOR DELETE
-    USING (auth.uid() = user_id);
-
--- Payment transactions — shop owner can read their own; all writes go
--- through the backend's service-role key after signature verification.
-DROP POLICY IF EXISTS "Owners read own transactions" ON payment_transactions;
-CREATE POLICY "Owners read own transactions"
-    ON payment_transactions FOR SELECT
-    USING (auth.uid() = owner_id);
 
 -- ============================================================
--- Done. Every table, column, index, function, trigger, and RLS
--- policy in the current NOWAIT backend is now present.
+-- Done. Every table, column, index, function and trigger in the current
+-- NOWAIT backend is present, and client roles (anon/authenticated) are locked out.
 -- ============================================================

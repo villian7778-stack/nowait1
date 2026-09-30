@@ -60,6 +60,12 @@ class QueueService {
     await ApiClient.instance.post('/queues/shop/$shopId/resume');
   }
 
+  /// Owner's answer to the "customer wants to join but the limit is reached" popup.
+  /// [action] is 'skip', 'close' or 'reset' (reset removes the limit).
+  Future<void> resolveLimitRequest(String shopId, String action) async {
+    await ApiClient.instance.post('/queues/shop/$shopId/limit-request', body: {'action': action});
+  }
+
   Future<void> setMaxSize(String shopId, int? maxSize) async {
     await ApiClient.instance.put('/queues/shop/$shopId/max-size', body: {'max_size': maxSize});
   }

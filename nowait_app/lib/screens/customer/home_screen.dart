@@ -10,6 +10,7 @@ import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
+import '../../widgets/queue_paused_note.dart';
 import '../../widgets/shop_card.dart' show DirectionsChip, ShopRatingRow;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
@@ -1051,15 +1052,18 @@ class _CompactShopCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              '${shop.queueCount} in queue · ~${shop.queueCount * shop.avgWaitMinutes}m',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                color: AppColors.onSurfaceVariant,
+            if (shop.isQueuePausedByOwner)
+              const QueuePausedNote(fontSize: 10, fit: true)
+            else
+              Text(
+                '${shop.queueCount} in queue · ~${shop.queueCount * shop.avgWaitMinutes}m',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
             // Directions chip — only when shop has saved coordinates
             if (shop.latitude != null && shop.longitude != null) ...[
               const SizedBox(height: 6),

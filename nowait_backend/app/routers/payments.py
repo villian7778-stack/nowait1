@@ -34,7 +34,30 @@ def _require_shop_owner(shop_id: str, owner_id: str) -> None:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
 
 
-def _activate_or_explain(activate_fn, payment_id: str):
+def _check_signature_and_claim(body) -> None:
+    """Verifies Razorpay's signature, then atomically marks the order paid so the same
+    payment can never be applied twice."""
+    valid = razorpay_service.verify_signature(
+        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+    )
+    if not valid:
+        payment_transaction_service.mark_failed(
+            body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "We couldn't verify this payment. If Razorpay showed you a success screen, "
+                f"please contact support with reference {body.razorpay_payment_id} before trying again."
+            ),
+        )
+    if not payment_transaction_service.claim_paid(
+        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+    ):
+        raise HTTPException(status_code=409, detail="This payment has already been processed.")
+
+
+def _activate_or_explain(activate_fn, payment_id: str, order_id: str):
     """Runs the post-payment activation step (grant subscription / create promotion).
     By this point Razorpay has already captured the payment, so a failure here must
     never look like "payment failed" to the client — it's a distinct, actionable
@@ -42,6 +65,7 @@ def _activate_or_explain(activate_fn, payment_id: str):
     try:
         return activate_fn()
     except HTTPException as e:
+        payment_transaction_service.release_claim(order_id)
         logger.error("Activation rejected after payment %s was captured: %s", payment_id, e.detail)
         raise HTTPException(
             status_code=e.status_code,
@@ -51,6 +75,7 @@ def _activate_or_explain(activate_fn, payment_id: str):
             ),
         )
     except Exception as e:
+        payment_transaction_service.release_claim(order_id)
         logger.error("Activation failed after payment %s was captured: %s", payment_id, e)
         raise HTTPException(
             status_code=500,
@@ -70,6 +95,14 @@ def create_subscription_order(
     shop_id: str, body: SubscriptionOrderRequest, current_user: dict = Depends(get_current_owner)
 ):
     _require_shop_owner(shop_id, current_user["id"])
+    subscription_service.validate_plan(body.plan, body.duration_days)
+    expires_at = subscription_service.active_expiry(shop_id)
+    if expires_at and not body.extend:
+        # 409 + message: the app shows this and asks whether to extend.
+        raise HTTPException(
+            status_code=409,
+            detail=subscription_service.already_active_message(expires_at, body.duration_days),
+        )
     receipt = f"sub_{shop_id}_{uuid.uuid4().hex[:12]}"
     order = razorpay_service.create_order(TEST_AMOUNT_PAISE, receipt)
     payment_transaction_service.record_order(
@@ -87,26 +120,24 @@ def create_subscription_order(
 def verify_subscription_payment(
     shop_id: str, body: SubscriptionVerifyRequest, current_user: dict = Depends(get_current_owner)
 ):
-    valid = razorpay_service.verify_signature(
-        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+    txn = payment_transaction_service.get_order_for_verify(
+        body.razorpay_order_id, shop_id, current_user["id"], "subscription"
     )
-    payment_transaction_service.finalize(
-        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature,
-        "paid" if valid else "failed",
-    )
-    if not valid:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "We couldn't verify this payment. If Razorpay showed you a success screen, "
-                f"please contact support with reference {body.razorpay_payment_id} before trying again."
-            ),
-        )
+    _check_signature_and_claim(body)
 
-    sub_data = SubscriptionCreate(plan=body.plan, duration_days=body.duration_days)
+    meta = txn.get("metadata") or {}
+
+    # Plan and duration come from the stored order, never from the request body. Built
+    # inside the activation step so any problem releases the claim instead of leaving
+    # a paid-but-never-activated order that can't be retried.
+    def activate():
+        sub_data = SubscriptionCreate(plan=meta.get("plan"), duration_days=meta.get("duration_days"))
+        return subscription_service.create_or_renew_subscription(shop_id, current_user["id"], sub_data)
+
     return _activate_or_explain(
-        lambda: subscription_service.create_or_renew_subscription(shop_id, current_user["id"], sub_data),
+        activate,
         body.razorpay_payment_id,
+        body.razorpay_order_id,
     )
 
 
@@ -136,26 +167,21 @@ def create_promotion_order(
 def verify_promotion_payment(
     shop_id: str, body: PromotionVerifyRequest, current_user: dict = Depends(get_current_owner)
 ):
-    valid = razorpay_service.verify_signature(
-        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+    txn = payment_transaction_service.get_order_for_verify(
+        body.razorpay_order_id, shop_id, current_user["id"], "promotion"
     )
-    payment_transaction_service.finalize(
-        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature,
-        "paid" if valid else "failed",
-    )
-    if not valid:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "We couldn't verify this payment. If Razorpay showed you a success screen, "
-                f"please contact support with reference {body.razorpay_payment_id} before trying again."
-            ),
-        )
+    _check_signature_and_claim(body)
 
-    promo_data = PromotionCreate(
-        title=body.title, description=body.description, valid_until=body.valid_until
-    )
+    meta = txn.get("metadata") or {}
+
+    def activate():
+        promo_data = PromotionCreate(
+            title=meta.get("title"), description=meta.get("description"), valid_until=meta.get("valid_until")
+        )
+        return promotion_service.create_promotion(shop_id, current_user["id"], promo_data, paid=True)
+
     return _activate_or_explain(
-        lambda: promotion_service.create_promotion(shop_id, current_user["id"], promo_data),
+        activate,
         body.razorpay_payment_id,
+        body.razorpay_order_id,
     )

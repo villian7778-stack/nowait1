@@ -29,10 +29,12 @@ class SubscriptionService {
     String shopId, {
     required String plan,
     required int durationDays,
+    bool extend = false,
   }) async {
     return await ApiClient.instance.post('/payments/subscription/shop/$shopId/create-order', body: {
       'plan': plan,
       'duration_days': durationDays,
+      'extend': extend,
     });
   }
 

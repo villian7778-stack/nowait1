@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from pydantic_settings import BaseSettings
@@ -8,9 +9,13 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str
     SUPABASE_ANON_KEY: str
     SUPABASE_JWT_SECRET: str
-    # Comma-separated list of allowed CORS origins.
-    # Default "*" is safe for a mobile-only API; restrict to your domain in web deployments.
-    ALLOWED_ORIGINS: str = "*"
+    # Comma-separated list of allowed browser origins. The mobile app does not use CORS
+    # (CORS only applies to browsers), so the default is "none". Set ALLOWED_ORIGINS=*
+    # in a local .env only if you run the Flutter web build against this API.
+    ALLOWED_ORIGINS: str = ""
+    # "production" hides /docs, /redoc and /openapi.json. Render sets RENDER=true
+    # automatically, so a Render deploy counts as production without any extra config.
+    ENVIRONMENT: str = ""
     GOOGLE_MAP_KEY: str = ""
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
@@ -20,6 +25,10 @@ class Settings(BaseSettings):
     # Admin panel (/nowaitt_778admin) login — must be set in .env, no default.
     ADMIN_USERNAME: str = "778Admin"
     ADMIN_PASSWORD: str = ""
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() == "production" or os.getenv("RENDER", "").lower() == "true"
 
     @property
     def cors_origins(self) -> List[str]:

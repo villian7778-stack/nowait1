@@ -6,6 +6,7 @@ import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
+import '../../widgets/queue_paused_note.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip, ShopRatingRow;
 import 'shop_details_screen.dart';
 
@@ -134,54 +135,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Color get _categoryColor => CategoryTheme.color(widget.category);
   List<Color> get _categoryGradient => CategoryTheme.gradient(widget.category);
 
-  List<CategoryProduct> get _products {
-    switch (widget.category) {
-      case 'Salon': return const [
-        CategoryProduct(name: 'Trimmer', icon: '🪒', priceFrom: '₹799'),
-        CategoryProduct(name: 'Hair Gel', icon: '💧', priceFrom: '₹149'),
-        CategoryProduct(name: 'Shaving Foam', icon: '🫧', priceFrom: '₹99'),
-        CategoryProduct(name: 'Beard Oil', icon: '🛢️', priceFrom: '₹199'),
-        CategoryProduct(name: 'Hair Color', icon: '🎨', priceFrom: '₹299'),
-        CategoryProduct(name: 'Hair Wax', icon: '🍯', priceFrom: '₹249'),
-        CategoryProduct(name: 'Face Wash', icon: '🧴', priceFrom: '₹129'),
-        CategoryProduct(name: 'Comb Set', icon: '🪮', priceFrom: '₹79'),
-      ];
-      case 'Beauty Parlour': return const [
-        CategoryProduct(name: 'Face Wash', icon: '🧴', priceFrom: '₹149'),
-        CategoryProduct(name: 'Moisturizer', icon: '💧', priceFrom: '₹299'),
-        CategoryProduct(name: 'Sunscreen', icon: '☀️', priceFrom: '₹199'),
-        CategoryProduct(name: 'Serum', icon: '✨', priceFrom: '₹499'),
-        CategoryProduct(name: 'Lip Balm', icon: '💄', priceFrom: '₹79'),
-        CategoryProduct(name: 'Face Mask', icon: '🎭', priceFrom: '₹99'),
-        CategoryProduct(name: 'Toner', icon: '🫙', priceFrom: '₹249'),
-        CategoryProduct(name: 'Eye Cream', icon: '👁️', priceFrom: '₹399'),
-      ];
-      case 'Hospital/Clinic': return const [
-        CategoryProduct(name: 'Thermometer', icon: '🌡️', priceFrom: '₹249'),
-        CategoryProduct(name: 'BP Monitor', icon: '💉', priceFrom: '₹899'),
-        CategoryProduct(name: 'Sanitizer', icon: '🧼', priceFrom: '₹89'),
-        CategoryProduct(name: 'Vitamins', icon: '💊', priceFrom: '₹199'),
-        CategoryProduct(name: 'First Aid', icon: '🩹', priceFrom: '₹149'),
-        CategoryProduct(name: 'Face Mask', icon: '😷', priceFrom: '₹49'),
-        CategoryProduct(name: 'Glucometer', icon: '🩸', priceFrom: '₹699'),
-        CategoryProduct(name: 'Protein', icon: '💪', priceFrom: '₹999'),
-      ];
-      default: return const [
-        CategoryProduct(name: 'Engine Oil', icon: '🛢️', priceFrom: '₹399'),
-        CategoryProduct(name: 'Helmet', icon: '⛑️', priceFrom: '₹899'),
-        CategoryProduct(name: 'Car Polish', icon: '✨', priceFrom: '₹249'),
-        CategoryProduct(name: 'Wiper Blade', icon: '🌧️', priceFrom: '₹199'),
-        CategoryProduct(name: 'Air Freshener', icon: '🌸', priceFrom: '₹99'),
-        CategoryProduct(name: 'Phone Mount', icon: '📱', priceFrom: '₹149'),
-        CategoryProduct(name: 'Jump Cable', icon: '⚡', priceFrom: '₹349'),
-        CategoryProduct(name: 'Tyre Gauge', icon: '🔧', priceFrom: '₹129'),
-      ];
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final products = _products;
     final filtered = _isLoading ? <ShopModel>[] : _filteredShops;
 
     return Scaffold(
@@ -255,35 +210,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── SECTION 1: Products related to this category ──────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Text(
-                    'Products',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 90,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: products.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 10),
-                    itemBuilder: (context, i) => _ProductChip(
-                      product: products[i],
-                      color: _categoryColor,
-                    ),
-                  ),
-                ),
-
-                // ── SECTION 2: Filter section ─────────────────────────────────
-                const SizedBox(height: 24),
+                // ── Filter section ────────────────────────────────────────────
+                const SizedBox(height: 16),
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
                   padding: const EdgeInsets.all(16),
@@ -524,53 +452,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 }
 
-// ─── Product chip ─────────────────────────────────────────────────────────────
-
-class _ProductChip extends StatelessWidget {
-  final CategoryProduct product;
-  final Color color;
-
-  const _ProductChip({required this.product, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 80,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(product.icon, style: const TextStyle(fontSize: 22)),
-          const SizedBox(height: 4),
-          Text(
-            product.name,
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            product.priceFrom,
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ─── Promoted shop card (horizontal scroll) ───────────────────────────────────
 
 class _PromotedShopCard extends StatelessWidget {
@@ -726,6 +607,10 @@ class _PromotedShopCard extends StatelessWidget {
                         DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
                     ],
                   ),
+                  if (shop.isQueuePausedByOwner) ...[
+                    const SizedBox(height: 6),
+                    const QueuePausedNote(fontSize: 10),
+                  ],
                   // Scheme badge
                   if (shop.activeScheme != null &&
                       shop.activeScheme!.isActive) ...[
@@ -923,6 +808,10 @@ class _ShopListCard extends StatelessWidget {
                         DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
                     ],
                   ),
+                  if (shop.isQueuePausedByOwner) ...[
+                    const SizedBox(height: 6),
+                    const QueuePausedNote(fontSize: 10),
+                  ],
                   if (shop.activeScheme != null &&
                       shop.activeScheme!.isActive) ...[
                     const SizedBox(height: 6),

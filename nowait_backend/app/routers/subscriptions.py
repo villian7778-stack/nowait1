@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_current_owner
 from app.schemas.subscription import SubscriptionCreate, SubscriptionStatus
@@ -36,7 +36,13 @@ def create_or_renew(shop_id: str, body: SubscriptionCreate, current_user: dict =
     }
     ```
     """
-    return subscription_service.create_or_renew_subscription(shop_id, current_user["id"], body)
+    # Subscriptions are only granted after a verified payment (POST
+    # /payments/subscription/shop/{id}/verify). Leaving this open let any owner
+    # activate a plan for free.
+    raise HTTPException(
+        status_code=403,
+        detail="Subscriptions can only be activated through payment.",
+    )
 
 
 @router.delete("/shop/{shop_id}", response_model=SubscriptionStatus, summary="Cancel subscription")

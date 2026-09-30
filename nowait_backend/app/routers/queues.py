@@ -7,6 +7,8 @@ from app.schemas.queue import (
     AdvanceQueueResponse,
     CancelQueueResponse,
     JoinQueueRequest,
+    LimitRequestAction,
+    MaxSizeRequest,
     PublicQueueResponse,
     QueueEntryResponse,
     ShopQueueResponse,
@@ -75,9 +77,14 @@ def resume_queue(shop_id: str, current_user: dict = Depends(get_current_owner)):
 
 
 @router.put("/shop/{shop_id}/max-size", summary="Set max queue size (owner only, null = unlimited)")
-def set_max_size(shop_id: str, body: dict, current_user: dict = Depends(get_current_owner)):
-    max_size = body.get("max_size")
-    return queue_service.set_max_size(shop_id, current_user["id"], max_size)
+def set_max_size(shop_id: str, body: MaxSizeRequest, current_user: dict = Depends(get_current_owner)):
+    return queue_service.set_max_size(shop_id, current_user["id"], body.max_size)
+
+
+@router.post("/shop/{shop_id}/limit-request", summary="Answer the 'queue limit reached' popup (owner only)")
+def resolve_limit_request(shop_id: str, body: LimitRequestAction, current_user: dict = Depends(get_current_owner)):
+    """action: `skip` / `close` dismiss the popup; `reset` removes the limit."""
+    return queue_service.resolve_limit_request(shop_id, current_user["id"], body.action)
 
 
 @router.get("/history", summary="Customer's visit history")
