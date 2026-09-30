@@ -140,7 +140,7 @@ def api_shops(admin_session: str | None = Cookie(default=None), page: int = 1, q
     if not _is_authed(admin_session):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     limit, offset = 20, (page - 1) * 20
-    query = supabase.table("shops").select("id, name, category, city, state, is_open, queue_paused, queue_count, avg_wait_minutes, rating, owner_id, created_at").order("created_at", desc=True)
+    query = supabase.table("shops").select("id, name, category, city, state, is_open, queue_paused, avg_wait_minutes, rating, owner_id, created_at").order("created_at", desc=True)
     if q:
         query = query.ilike("name", f"%{q}%")
     total_r = supabase.table("shops").select("id", count="exact").execute()
@@ -175,7 +175,7 @@ def api_delete_shop(shop_id: str, admin_session: str | None = Cookie(default=Non
     supabase.table("subscriptions").delete().eq("shop_id", shop_id).execute()
     supabase.table("promotions").delete().eq("shop_id", shop_id).execute()
     supabase.table("services").delete().eq("shop_id", shop_id).execute()
-    supabase.table("shop_staff").delete().eq("shop_id", shop_id).execute()
+    supabase.table("staff_members").delete().eq("shop_id", shop_id).execute()
     supabase.table("notifications").delete().eq("shop_id", shop_id).execute()
     supabase.table("shops").delete().eq("id", shop_id).execute()
     return {"success": True}
@@ -188,7 +188,7 @@ def api_queues(admin_session: str | None = Cookie(default=None), page: int = 1, 
     if not _is_authed(admin_session):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     limit, offset = 30, (page - 1) * 30
-    query = supabase.table("queue_entries").select("id, shop_id, user_id, token_number, status, position, created_at, service_ids").in_("status", ["waiting", "serving"]).order("created_at", desc=True)
+    query = supabase.table("queue_entries").select("id, shop_id, user_id, token_number, status, joined_at, service_ids").in_("status", ["waiting", "serving"]).order("joined_at", desc=True)
     if shop_id:
         query = query.eq("shop_id", shop_id)
     total_r = supabase.table("queue_entries").select("id", count="exact").in_("status", ["waiting", "serving"]).execute()
