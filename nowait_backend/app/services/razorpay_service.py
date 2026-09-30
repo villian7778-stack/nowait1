@@ -105,3 +105,14 @@ def verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(generated, signature)
+
+
+def captured_payment_for_order(order_id: str) -> dict | None:
+    """Asks Razorpay (authenticated with our secret, so this is trustworthy without a
+    checkout signature) whether the order has a captured payment. Returns it, or None."""
+    try:
+        items = _get_client().order.payments(order_id).get("items", [])
+    except Exception as e:
+        logger.error("Could not fetch payments for order %s from Razorpay: %s", order_id, describe_error(e))
+        return None
+    return next((p for p in items if p.get("status") == "captured"), None)

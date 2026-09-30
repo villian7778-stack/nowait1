@@ -44,6 +44,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   void _onLocale() => setState(() {});
 
   Future<void> _fetchSubscription() async {
+    // Picks up any earlier payment Razorpay captured but we never activated.
+    try {
+      await SubscriptionService.instance.reconcilePayments(widget.shop.id);
+    } catch (_) {}
     try {
       final res = await SubscriptionService.instance.getSubscription(widget.shop.id);
       if (mounted && !_subscriptionJustActivated) {
@@ -225,7 +229,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 errorMsg = paymentCaptured
                     ? 'Your payment may have gone through, but something went wrong confirming it. Please contact support before trying again.'
                     : 'Something went wrong. Please try again.';
-              } finally {
+              }
+              // Razorpay took the money but verify failed: ask the server to confirm it
+              // with Razorpay directly before telling the owner anything went wrong.
+              if (!success && paymentCaptured) {
+                try {
+                  success = await SubscriptionService.instance.reconcilePayments(widget.shop.id) > 0;
+                } catch (_) {}
+              }
+              {
                 if (mounted) {
                   if (success) {
                     setState(() {

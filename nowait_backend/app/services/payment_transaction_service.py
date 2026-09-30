@@ -83,3 +83,20 @@ def release_claim(order_id: str) -> None:
         ).eq("status", "paid").execute()
     except Exception as e:
         logger.error("Failed to release claim on order %s: %s", order_id, e)
+
+
+def unfinished_orders(shop_id: str, owner_id: str, since_iso: str) -> list[dict]:
+    """This owner's recent orders that were never activated — candidates for reconciling
+    against Razorpay when checkout succeeded but the app's verify call never landed."""
+    result = (
+        supabase.table("payment_transactions")
+        .select("*")
+        .eq("shop_id", shop_id)
+        .eq("owner_id", owner_id)
+        .in_("status", ["created", "failed"])
+        .gte("created_at", since_iso)
+        .order("created_at", desc=True)
+        .limit(10)
+        .execute()
+    )
+    return result.data or []

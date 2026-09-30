@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/promotion_service.dart';
+import '../../services/subscription_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
@@ -46,6 +47,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
   void _onLocale() => setState(() {});
 
   Future<void> _loadActivePromotion() async {
+    // Picks up any earlier payment Razorpay captured but we never activated.
+    try {
+      await SubscriptionService.instance.reconcilePayments(widget.shop.id);
+    } catch (_) {}
     setState(() => _loadingPromotion = true);
     try {
       final promos = await PromotionService.instance.getPromotions(
@@ -210,7 +215,25 @@ class _PromotionScreenState extends State<PromotionScreen> {
   /// Shown when Razorpay checkout succeeded but backend verification/activation
   /// afterward failed — a dialog the owner has to actively dismiss, not a
   /// snackbar that can be missed, since money has already been captured.
-  void _showPaymentCapturedDialog(String message) {
+  Future<void> _showPaymentCapturedDialog(String message) async {
+    // Razorpay took the money but verify failed: ask the server to confirm it with
+    // Razorpay directly before telling the owner anything went wrong.
+    try {
+      if (await SubscriptionService.instance.reconcilePayments(widget.shop.id) > 0) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓  Promotion activated for $_selectedDays days!'),
+            backgroundColor: AppColors.tertiary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        await _loadActivePromotion();
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(

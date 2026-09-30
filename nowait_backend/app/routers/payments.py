@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -90,6 +91,20 @@ def report_checkout_failure(body: CheckoutFailureReport, current_user: dict = De
     return {"logged": True}
 
 
+def _activate(txn: dict):
+    """Grants what a paid order bought, using only what was stored when the order was
+    created. Built inside the activation step so any problem releases the claim instead
+    of leaving a paid-but-never-activated order that can't be retried."""
+    meta = txn.get("metadata") or {}
+    if txn["purpose"] == "subscription":
+        sub_data = SubscriptionCreate(plan=meta.get("plan"), duration_days=meta.get("duration_days"))
+        return subscription_service.create_or_renew_subscription(txn["shop_id"], txn["owner_id"], sub_data)
+    promo_data = PromotionCreate(
+        title=meta.get("title"), description=meta.get("description"), valid_until=meta.get("valid_until")
+    )
+    return promotion_service.create_promotion(txn["shop_id"], txn["owner_id"], promo_data, paid=True)
+
+
 def _activate_or_explain(activate_fn, payment_id: str, order_id: str):
     """Runs the post-payment activation step (grant subscription / create promotion).
     By this point Razorpay has already captured the payment, so a failure here must
@@ -158,17 +173,9 @@ def verify_subscription_payment(
     )
     _check_signature_and_claim(body)
 
-    meta = txn.get("metadata") or {}
-
-    # Plan and duration come from the stored order, never from the request body. Built
-    # inside the activation step so any problem releases the claim instead of leaving
-    # a paid-but-never-activated order that can't be retried.
-    def activate():
-        sub_data = SubscriptionCreate(plan=meta.get("plan"), duration_days=meta.get("duration_days"))
-        return subscription_service.create_or_renew_subscription(shop_id, current_user["id"], sub_data)
-
+    # Plan and duration come from the stored order, never from the request body.
     return _activate_or_explain(
-        activate,
+        lambda: _activate(txn),
         body.razorpay_payment_id,
         body.razorpay_order_id,
     )
@@ -205,16 +212,38 @@ def verify_promotion_payment(
     )
     _check_signature_and_claim(body)
 
-    meta = txn.get("metadata") or {}
-
-    def activate():
-        promo_data = PromotionCreate(
-            title=meta.get("title"), description=meta.get("description"), valid_until=meta.get("valid_until")
-        )
-        return promotion_service.create_promotion(shop_id, current_user["id"], promo_data, paid=True)
-
     return _activate_or_explain(
-        activate,
+        lambda: _activate(txn),
         body.razorpay_payment_id,
         body.razorpay_order_id,
     )
+
+
+@router.post("/reconcile/shop/{shop_id}", summary="Activate orders Razorpay captured but the app never verified")
+def reconcile_payments(shop_id: str, current_user: dict = Depends(get_current_owner)):
+    """Safety net for "Razorpay shows the payment captured but nothing was activated":
+    checkout succeeded, but the app's verify call never reached us (app closed, network
+    drop, server error). We ask Razorpay directly, so no checkout signature is needed."""
+    _require_shop_owner(shop_id, current_user["id"])
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    activated = []
+    for txn in payment_transaction_service.unfinished_orders(shop_id, current_user["id"], since):
+        order_id = txn["razorpay_order_id"]
+        payment = razorpay_service.captured_payment_for_order(order_id)
+        if not payment:
+            continue
+        if payment.get("amount") != txn["amount_paise"]:
+            logger.error("RECONCILE amount mismatch order=%s paid=%s expected=%s — not activating",
+                         order_id, payment.get("amount"), txn["amount_paise"])
+            continue
+        if not payment_transaction_service.claim_paid(order_id, payment["id"], None):
+            continue
+        try:
+            _activate(txn)
+        except Exception as e:
+            payment_transaction_service.release_claim(order_id)
+            logger.error("RECONCILE activation failed order=%s payment=%s: %s", order_id, payment["id"], e)
+            continue
+        logger.info("RECONCILED order=%s payment=%s purpose=%s — activated", order_id, payment["id"], txn["purpose"])
+        activated.append({"order_id": order_id, "payment_id": payment["id"], "purpose": txn["purpose"]})
+    return {"activated": activated}
