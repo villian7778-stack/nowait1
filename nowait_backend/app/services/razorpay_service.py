@@ -31,7 +31,7 @@ def create_order(amount_paise: int, receipt: str, currency: str = "INR") -> dict
         order = client.order.create({
             "amount": amount_paise,
             "currency": currency,
-            "receipt": receipt,
+            "receipt": receipt[:40],   # Razorpay hard limit
             "payment_capture": 1,
         })
     except razorpay.errors.BadRequestError as e:
@@ -52,6 +52,10 @@ def create_order(amount_paise: int, receipt: str, currency: str = "INR") -> dict
         logger.error("Razorpay order creation failed unexpectedly: %s", e)
         raise HTTPException(status_code=500, detail="Failed to create payment order. Please try again.")
 
+    # Which mode the server is in (rzp_test_ / rzp_live_) — handy when checkout shows
+    # Razorpay's generic "payment could not be completed" page. Key id is public; no secret logged.
+    logger.info("Razorpay order %s created (%s mode, Rs %.2f)", order["id"],
+                "live" if settings.RAZORPAY_KEY_ID.startswith("rzp_live_") else "test", order["amount"] / 100)
     return {
         "order_id": order["id"],
         "amount": order["amount"],

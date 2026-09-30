@@ -289,3 +289,15 @@ class TestCorruptOrderMetadata:
                 payments.verify_subscription_payment(
                     "shop-001", _body(), {"id": "owner-001", "role": "owner"})
         release.assert_called_once_with("order_1")
+
+
+class TestRazorpayReceipt:
+    def test_receipt_fits_razorpays_40_char_limit(self):
+        import uuid
+        from app.routers.payments import _receipt
+        shop_id = str(uuid.uuid4())
+        for prefix in ("sub", "promo"):
+            r = _receipt(prefix, shop_id)
+            assert len(r) <= 40, r
+            assert r.startswith(prefix + "_")
+        assert _receipt("sub", shop_id) != _receipt("sub", shop_id)   # unique per order

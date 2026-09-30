@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 TEST_AMOUNT_PAISE = 100
 
 
+def _receipt(prefix: str, shop_id: str) -> str:
+    """Razorpay rejects receipts longer than 40 characters; the old "<prefix>_<uuid>_<12 hex>"
+    form was 53-55. This keeps the shop reference (16 hex) plus a unique suffix, <= 35 chars."""
+    return f"{prefix}_{shop_id.replace('-', '')[:16]}_{uuid.uuid4().hex[:12]}"
+
+
 def _require_shop_owner(shop_id: str, owner_id: str) -> None:
     shop = execute_one(
         supabase.table("shops").select("id").eq("id", shop_id).eq("owner_id", owner_id)
@@ -103,7 +109,7 @@ def create_subscription_order(
             status_code=409,
             detail=subscription_service.already_active_message(expires_at, body.duration_days),
         )
-    receipt = f"sub_{shop_id}_{uuid.uuid4().hex[:12]}"
+    receipt = _receipt("sub", shop_id)
     order = razorpay_service.create_order(TEST_AMOUNT_PAISE, receipt)
     payment_transaction_service.record_order(
         shop_id, current_user["id"], "subscription", order["order_id"], order["amount"],
@@ -150,7 +156,7 @@ def create_promotion_order(
     shop_id: str, body: PromotionOrderRequest, current_user: dict = Depends(get_current_owner)
 ):
     _require_shop_owner(shop_id, current_user["id"])
-    receipt = f"promo_{shop_id}_{uuid.uuid4().hex[:12]}"
+    receipt = _receipt("promo", shop_id)
     order = razorpay_service.create_order(TEST_AMOUNT_PAISE, receipt)
     payment_transaction_service.record_order(
         shop_id, current_user["id"], "promotion", order["order_id"], order["amount"],
