@@ -44,9 +44,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   void _onLocale() => setState(() {});
 
   Future<void> _fetchSubscription() async {
-    // Picks up any earlier payment Razorpay captured but we never activated.
+    if (mounted) setState(() => _isLoading = true);
+    // Picks up any earlier payment Razorpay captured but we never activated
+    // (e.g. UPI payment success when app was backgrounded, so verify never ran).
     try {
-      await SubscriptionService.instance.reconcilePayments(widget.shop.id);
+      final activated = await SubscriptionService.instance.reconcilePayments(widget.shop.id);
+      if (activated > 0 && mounted) {
+        // Let the getSubscription call below refresh the UI.
+        _subscriptionJustActivated = false;
+      }
     } catch (_) {}
     try {
       final res = await SubscriptionService.instance.getSubscription(widget.shop.id);
@@ -57,6 +63,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         });
       }
     } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
   }
 
   String _formatExpiry() {
@@ -224,6 +231,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               } on PaymentException catch (e) {
                 errorMsg = e.message;
               } on ApiException catch (e) {
+                // 409 = subscription is already active (e.g. reconcile just activated it
+                // while the user was looking at the screen). Refresh state and show the
+                // extend dialog instead of a red error.
+                if (e.statusCode == 409 && !paymentCaptured) {
+                  if (mounted) setState(() => _isLoading = false);
+                  await _fetchSubscription();
+                  if (mounted) _showPaymentDialog(extend: true);
+                  return;
+                }
                 errorMsg = e.message;
               } catch (_) {
                 errorMsg = paymentCaptured
