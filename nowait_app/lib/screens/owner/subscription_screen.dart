@@ -233,6 +233,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 // paid" error screen instead of the success callback. Money is on
                 // Razorpay's end — mark as captured and let reconcile activate it below.
                 paymentCaptured = true;
+                // Fallback message if reconcile also fails (e.g. Razorpay still processing).
+                errorMsg = 'Your payment was received. Please wait a moment, then open this screen again — your subscription will activate automatically.';
               } on PaymentException catch (e) {
                 errorMsg = e.message;
               } on ApiException catch (e) {
