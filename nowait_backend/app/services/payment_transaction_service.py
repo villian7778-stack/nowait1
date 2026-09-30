@@ -24,7 +24,10 @@ def record_order(shop_id: str, owner_id: str, purpose: str, order_id: str, amoun
             "metadata": metadata,
         }).execute()
     except Exception as e:
-        logger.error("Failed to record payment_transactions row for order %s: %s", order_id, e)
+        # Typical causes: table/column missing (run sql/final_consolidated.sql), or SUPABASE_SERVICE_KEY
+        # is not the service_role key. The Supabase error text says which.
+        logger.error("LEDGER WRITE FAILED for Razorpay order %s (shop=%s owner=%s purpose=%s): %s: %r",
+                     order_id, shop_id, owner_id, purpose, type(e).__name__, e)
         raise HTTPException(status_code=500, detail="Could not start the payment. Please try again.")
 
 
@@ -55,14 +58,18 @@ def claim_paid(order_id: str, payment_id: str, signature: str) -> bool:
     return bool(result.data)
 
 
-def mark_failed(order_id: str, payment_id: str, signature: str) -> None:
-    """Records a bad-signature attempt. Never touches a row that is already paid."""
+def mark_failed(order_id: str, payment_id: str | None, signature: str | None) -> None:
+    """Records a failed attempt (bad signature or app-reported checkout failure).
+    Never touches a row that is already paid."""
     try:
-        supabase.table("payment_transactions").update({
-            "razorpay_payment_id": payment_id,
-            "razorpay_signature": signature,
-            "status": "failed",
-        }).eq("razorpay_order_id", order_id).eq("status", "created").execute()
+        update = {"status": "failed"}
+        if payment_id:
+            update["razorpay_payment_id"] = payment_id
+        if signature:
+            update["razorpay_signature"] = signature
+        supabase.table("payment_transactions").update(update).eq(
+            "razorpay_order_id", order_id
+        ).eq("status", "created").execute()
     except Exception as e:
         logger.warning("Failed to mark payment_transactions row failed for order %s: %s", order_id, e)
 

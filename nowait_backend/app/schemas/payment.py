@@ -10,6 +10,18 @@ class CreateOrderResponse(BaseModel):
     key_id: str
 
 
+class CheckoutFailureReport(BaseModel):
+    razorpay_order_id: Optional[str] = None
+    purpose: Optional[str] = None       # 'subscription' | 'promotion'
+    step: Optional[str] = None          # 'create_order' | 'checkout' | 'verify'
+    source: Optional[str] = None        # e.g. 'razorpay_checkout'
+    code: Optional[str] = None
+    reason: Optional[str] = None
+    description: Optional[str] = None
+    message: Optional[str] = None
+    raw: Optional[str] = None
+
+
 class SubscriptionOrderRequest(BaseModel):
     plan: str  # 'basic' or 'premium'
     duration_days: int = 30

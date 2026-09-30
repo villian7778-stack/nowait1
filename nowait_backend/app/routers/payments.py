@@ -3,9 +3,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.config import settings
 from app.database import execute_one, supabase
 from app.dependencies import get_current_owner
 from app.schemas.payment import (
+    CheckoutFailureReport,
     CreateOrderResponse,
     PromotionOrderRequest,
     PromotionVerifyRequest,
@@ -47,6 +49,13 @@ def _check_signature_and_claim(body) -> None:
         body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
     )
     if not valid:
+        # Bad signature usually = KEY_SECRET on the server doesn't match the KEY_ID that created the order
+        # (e.g. test key id with a live secret, or a stale secret after regenerating keys).
+        logger.error(
+            "SIGNATURE MISMATCH order=%s payment=%s mode=%s secret_set=%s sig_len=%d",
+            body.razorpay_order_id, body.razorpay_payment_id, razorpay_service.key_mode(),
+            bool(settings.RAZORPAY_KEY_SECRET), len(body.razorpay_signature or ""),
+        )
         payment_transaction_service.mark_failed(
             body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
         )
@@ -60,7 +69,25 @@ def _check_signature_and_claim(body) -> None:
     if not payment_transaction_service.claim_paid(
         body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
     ):
+        logger.warning("Order %s already claimed as paid; rejecting duplicate verify (payment %s)",
+                       body.razorpay_order_id, body.razorpay_payment_id)
         raise HTTPException(status_code=409, detail="This payment has already been processed.")
+    logger.info("Payment VERIFIED order=%s payment=%s — activating", body.razorpay_order_id, body.razorpay_payment_id)
+
+
+@router.post("/report-failure", summary="App reports a checkout failure so it appears in server logs")
+def report_checkout_failure(body: CheckoutFailureReport, current_user: dict = Depends(get_current_owner)):
+    """Checkout runs on the phone, so Razorpay's failure reason never reaches the server on its own.
+    The app posts it here; we log it and mark the order failed (never touches an already-paid order)."""
+    logger.error(
+        "CHECKOUT FAILED (reported by app) owner=%s order=%s purpose=%s mode=%s | code=%s reason=%s source=%s step=%s | "
+        "description=%s | message=%s | raw=%s",
+        current_user["id"], body.razorpay_order_id, body.purpose, razorpay_service.key_mode(),
+        body.code, body.reason, body.source, body.step, body.description, body.message, (body.raw or "")[:1000],
+    )
+    if body.razorpay_order_id:
+        payment_transaction_service.mark_failed(body.razorpay_order_id, None, None)
+    return {"logged": True}
 
 
 def _activate_or_explain(activate_fn, payment_id: str, order_id: str):

@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'api_client.dart';
 
 class PaymentException implements Exception {
   final String message;
@@ -26,6 +29,8 @@ class PaymentService {
 
   Razorpay? _razorpay;
   Completer<PaymentResult>? _completer;
+  String? _orderId;
+  String _purpose = 'subscription';
 
   Future<PaymentResult> openCheckout({
     required String keyId,
@@ -35,8 +40,11 @@ class PaymentService {
     required String description,
     String? contact,
     String? email,
+    String purpose = 'subscription',
   }) {
     _razorpay?.clear();
+    _orderId = orderId;
+    _purpose = purpose;
     final completer = Completer<PaymentResult>();
     _completer = completer;
 
@@ -78,9 +86,56 @@ class PaymentService {
   void _onError(PaymentFailureResponse response) {
     // code == Razorpay.PAYMENT_CANCELLED when the user dismisses the modal.
     final cancelled = response.code == Razorpay.PAYMENT_CANCELLED;
+    debugPrint('Razorpay failure: code=${response.code} message=${response.message} body=${response.error}');
+    if (!cancelled) _reportFailure(response);
     _completer?.completeError(
-      PaymentException(cancelled ? 'Payment cancelled' : (response.message ?? 'Payment failed')),
+      PaymentException(cancelled ? 'Payment cancelled' : describeFailure(response.message, response.error)),
     );
+  }
+
+  /// Checkout runs on the phone, so the server never sees Razorpay's failure reason.
+  /// Send it to the backend so it appears in the server logs. Fire-and-forget.
+  void _reportFailure(PaymentFailureResponse response) {
+    final body = response.error;
+    final err = body?['error'] is Map ? body!['error'] as Map : body;
+    ApiClient.instance.post('/payments/report-failure', body: {
+      'razorpay_order_id': _orderId,
+      'purpose': _purpose,
+      'step': 'checkout',
+      'source': err?['source']?.toString() ?? 'razorpay_checkout',
+      'code': (err?['code'] ?? response.code)?.toString(),
+      'reason': err?['reason']?.toString(),
+      'description': err?['description']?.toString(),
+      'message': response.message,
+      'raw': body?.toString(),
+    }).catchError((Object e) {
+      debugPrint('Could not report Razorpay failure: $e');
+      return null;
+    });
+  }
+
+  /// Razorpay often returns its reason as a JSON string ({"error":{"description":...,"reason":...}})
+  /// or in the response body. Pull the human-readable parts out so the real cause is visible
+  /// (e.g. "international_transaction_not_allowed") instead of a generic "Payment failed".
+  @visibleForTesting
+  static String describeFailure(String? message, Map<dynamic, dynamic>? body) {
+    Map<dynamic, dynamic>? err = body?['error'] is Map ? body!['error'] as Map : body;
+    if (err == null && message != null && message.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(message);
+        if (decoded is Map) err = decoded['error'] is Map ? decoded['error'] as Map : decoded;
+      } catch (_) {}
+    }
+    final description = err?['description']?.toString();
+    final reason = err?['reason']?.toString();
+    final code = err?['code']?.toString();
+    final parts = <String>[
+      if (description != null && description.isNotEmpty) description
+      else if (message != null && message.isNotEmpty && !message.trim().startsWith('{')) message,
+      if (reason != null && reason.isNotEmpty) '($reason)'
+      else if (code != null && code.isNotEmpty) '($code)',
+    ];
+    return parts.isEmpty ? 'Payment failed' : 'Payment failed: ${parts.join(' ')}';
   }
 
   void _onExternalWallet(ExternalWalletResponse response) {

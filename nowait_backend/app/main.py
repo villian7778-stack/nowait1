@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -6,6 +8,17 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.rate_limit import limiter
 from app.routers import admin, analytics, auth, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
+
+# uvicorn only prints its own loggers, so our INFO lines (e.g. "Razorpay order ... created
+# (test mode)") were invisible on Render. Attach a handler to the "app" loggers only —
+# not the root logger, which would also turn on httpx's per-request URL logging.
+_app_log = logging.getLogger("app")
+if not _app_log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s:     %(name)s - %(message)s"))
+    _app_log.addHandler(_h)
+_app_log.setLevel(logging.INFO)
+_app_log.propagate = False
 
 app = FastAPI(
     title="NOWAIT API",
