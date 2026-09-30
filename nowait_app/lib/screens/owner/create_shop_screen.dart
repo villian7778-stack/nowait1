@@ -123,12 +123,14 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
   }
 
   // Item 4: Pick images from gallery
+  static const _maxImages = 5;
+
   Future<void> _pickImages() async {
     final picker = ImagePicker();
     final images = await picker.pickMultiImage(imageQuality: 80);
     if (images.isNotEmpty) {
       setState(() {
-        final remaining = 10 - _selectedImages.length;
+        final remaining = _maxImages - _selectedImages.length;
         _selectedImages.addAll(images.take(remaining));
       });
     }
@@ -437,7 +439,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                               mainAxisSpacing: 8,
                               childAspectRatio: 1,
                             ),
-                            itemCount: _selectedImages.length + (_selectedImages.length < 10 ? 1 : 0),
+                            itemCount: _selectedImages.length + (_selectedImages.length < _maxImages ? 1 : 0),
                             itemBuilder: (_, i) {
                               if (i == _selectedImages.length) {
                                 return GestureDetector(
@@ -499,7 +501,7 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                'Tap + to add up to 10 photos',
+                                'Tap + to add up to 5 photos',
                                 style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                               ),
                             ),

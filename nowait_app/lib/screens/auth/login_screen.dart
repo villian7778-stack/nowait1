@@ -263,6 +263,45 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         ),
                       ),
                       const SizedBox(height: 24),
+                      // Google sign-in (recommended)
+                      SizedBox(
+                        width: double.infinity,
+                        child: _isGoogleLoading
+                            ? Container(
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: _googleRed,
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 22, height: 22,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2.5),
+                                  ),
+                                ),
+                              )
+                            : _GoogleButton(
+                                label: _l.tr('continueWithGoogle'),
+                                recommendedLabel: _l.tr('recommended'),
+                                onPressed: _continueWithGoogle,
+                              ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              _l.tr('orLoginWithEmail'),
+                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
                       // Email input
                       _AuthTextField(
                         controller: _emailController,
@@ -327,43 +366,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 label: _l.tr('login'),
                                 onPressed: _isValid ? _login : () {},
                                 icon: Icons.login_rounded,
-                              ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              _l.tr('orContinueWith'),
-                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: AppColors.outline.withValues(alpha: 0.3))),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: _isGoogleLoading
-                            ? Container(
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerLowest,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: AppColors.outline.withValues(alpha: 0.4)),
-                                ),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 22, height: 22,
-                                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                                  ),
-                                ),
-                              )
-                            : _GoogleButton(
-                                label: _l.tr('continueWithGoogle'),
-                                onPressed: _continueWithGoogle,
                               ),
                       ),
                       const SizedBox(height: 12),
@@ -470,47 +472,81 @@ class _AuthTextField extends StatelessWidget {
   }
 }
 
+const _googleRed = Color(0xFFDB4437);
+
 class _GoogleButton extends StatelessWidget {
   final String label;
+  final String recommendedLabel;
   final VoidCallback onPressed;
-  const _GoogleButton({required this.label, required this.onPressed});
+  const _GoogleButton({
+    required this.label,
+    required this.recommendedLabel,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: AppColors.outline.withValues(alpha: 0.4)),
-          backgroundColor: AppColors.surfaceContainerLowest,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 20,
-              height: 20,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-              child: Text(
-                'G',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF4285F4),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _googleRed,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                  child: Text(
+                    'G',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: _googleRed,
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: -10,
+          right: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.tertiary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              recommendedLabel,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
@@ -12,7 +13,7 @@ class RegisterResult {
   RegisterResult({required this.emailConfirmationRequired, this.message});
 }
 
-class AuthService {
+class AuthService extends ChangeNotifier {
   static final AuthService instance = AuthService._();
   AuthService._();
 
@@ -46,6 +47,7 @@ class AuthService {
     if (refreshToken != null) await _secureStorage.write(key: 'refresh_token', value: refreshToken!);
     final prefs = await SharedPreferences.getInstance();
     if (profile != null) await prefs.setString('user_profile', jsonEncode(profile));
+    notifyListeners(); // lets main.dart re-pick the home screen after login
   }
 
   Future<void> logout() async {
@@ -55,6 +57,7 @@ class AuthService {
     await _secureStorage.deleteAll();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    notifyListeners();
     try {
       await sb.Supabase.instance.client.auth.signOut();
     } catch (_) {

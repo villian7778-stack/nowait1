@@ -26,7 +26,7 @@ class ShopCreate(BaseModel):
     state: str = Field(default="", max_length=100)
     avg_wait_minutes: int = Field(default=10, ge=1, le=240)
     opening_hours: Optional[str] = Field(default=None, max_length=100)
-    images: List[str] = Field(default=[], max_length=10)
+    images: List[str] = Field(default=[], max_length=5)
     description: str = Field(default="", max_length=1000)
     services: List[ServiceCreate] = []
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
@@ -41,7 +41,7 @@ class ShopUpdate(BaseModel):
     state: Optional[str] = Field(default=None, max_length=100)
     avg_wait_minutes: Optional[int] = Field(default=None, ge=1, le=240)
     opening_hours: Optional[str] = Field(default=None, max_length=100)
-    images: Optional[List[str]] = Field(default=None, max_length=10)
+    images: Optional[List[str]] = Field(default=None, max_length=5)
     description: Optional[str] = Field(default=None, max_length=1000)
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)

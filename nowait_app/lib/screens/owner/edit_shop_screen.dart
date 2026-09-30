@@ -84,6 +84,8 @@ class _EditShopScreenState extends State<EditShopScreen> {
     });
   }
 
+  static const _maxImages = 5;
+
   int get _totalImageCount => _existingImages.length + _newImages.length;
 
   Future<void> _pickNewImages() async {
@@ -91,7 +93,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
     final picked = await picker.pickMultiImage(imageQuality: 80);
     if (picked.isNotEmpty) {
       setState(() {
-        final remaining = 10 - _totalImageCount;
+        final remaining = _maxImages - _totalImageCount;
         _newImages.addAll(picked.take(remaining));
       });
     }
@@ -559,7 +561,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                         _sectionTitle('Gallery'),
                         const SizedBox(height: 6),
                         Text(
-                          'Up to 10 photos. Changes are saved when you tap Save Changes.',
+                          'Up to 5 photos. Changes are saved when you tap Save Changes.',
                           style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                         ),
                         const SizedBox(height: 14),
@@ -587,7 +589,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                               mainAxisSpacing: 8,
                               childAspectRatio: 1,
                             ),
-                            itemCount: _totalImageCount + (_totalImageCount < 10 ? 1 : 0),
+                            itemCount: _totalImageCount + (_totalImageCount < _maxImages ? 1 : 0),
                             itemBuilder: (_, i) {
                               // Add button
                               if (i == _totalImageCount) {
@@ -695,7 +697,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                'Tap + to add up to 10 photos',
+                                'Tap + to add up to 5 photos',
                                 style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                               ),
                             ),

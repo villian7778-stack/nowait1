@@ -970,6 +970,36 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
   bool _isLoading = false;
   bool _hasError = false; // Item 16
   String _period = 'today';
+  DateTime? _fromDate;
+  DateTime? _toDate;
+
+  bool get _isCustom => _period == 'custom';
+
+  String _fmt(DateTime? d) => d == null
+      ? 'Select'
+      : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final now = DateTime.now();
+    final initial = (isFrom ? _fromDate : _toDate) ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: DateTime(2024),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _fromDate = picked;
+        if (_toDate != null && _toDate!.isBefore(picked)) _toDate = picked;
+      } else {
+        _toDate = picked;
+        if (_fromDate != null && _fromDate!.isAfter(picked)) _fromDate = picked;
+      }
+    });
+    if (_fromDate != null && _toDate != null) _load();
+  }
 
   @override
   void didUpdateWidget(_AnalyticsTab old) {
@@ -985,11 +1015,14 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
 
   Future<void> _load() async {
     if (widget.shop == null) return; // Item 7
+    if (_isCustom && (_fromDate == null || _toDate == null)) return;
     setState(() { _isLoading = true; _hasError = false; });
     try {
+      final from = _isCustom ? _fromDate : null;
+      final to = _isCustom ? _toDate : null;
       final results = await Future.wait([
-        AnalyticsService.instance.getSummary(widget.shop!.id, period: _period),
-        AnalyticsService.instance.getHourlyStats(widget.shop!.id),
+        AnalyticsService.instance.getSummary(widget.shop!.id, period: _period, fromDate: from, toDate: to),
+        AnalyticsService.instance.getHourlyStats(widget.shop!.id, fromDate: from, toDate: to),
         AnalyticsService.instance.getStaffPerformance(widget.shop!.id),
       ]);
       if (mounted) {
@@ -1055,7 +1088,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                   // Period selector
                   Row(
                     children: [
-                      for (final p in ['today', 'week', 'month'])
+                      for (final p in ['today', 'week', 'month', 'custom'])
                         Expanded(
                           child: GestureDetector(
                             onTap: () { setState(() => _period = p); _load(); },
@@ -1078,6 +1111,22 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                         ),
                     ],
                   ),
+                  if (_isCustom) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: _DateField(label: 'From date', value: _fmt(_fromDate), onTap: () => _pickDate(isFrom: true))),
+                        const SizedBox(width: 12),
+                        Expanded(child: _DateField(label: 'To date', value: _fmt(_toDate), onTap: () => _pickDate(isFrom: false))),
+                      ],
+                    ),
+                    if (_fromDate == null || _toDate == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text('Pick both dates to see records for that range.',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                      ),
+                  ],
                   const SizedBox(height: 20),
                   if (_isLoading)
                     const Center(child: CircularProgressIndicator())
@@ -1712,6 +1761,43 @@ class _OnboardingStep extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+  const _DateField({required this.label, required this.value, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant)),
+                  Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

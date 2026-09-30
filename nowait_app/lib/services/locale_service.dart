@@ -117,6 +117,8 @@ class LocaleService extends ChangeNotifier {
     'login': 'Login',
     'forgotPassword': 'Forgot Password?',
     'orContinueWith': 'or continue with',
+    'orLoginWithEmail': 'or login with email',
+    'recommended': 'Recommended',
     'continueWithGoogle': 'Continue with Google',
     'googleSignInFailed': 'Google sign-in failed. Please try again.',
     'createAccount': 'Create Account',

@@ -35,6 +35,8 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 # Android emulator default: http://10.0.2.2:8000
 ```
 
+**Stray files:** `tmp_cust_user.json` / `tmp_owner_user.json` at the repo root are scratch data, not used by the code. `nowait_backend/sql/` holds many legacy `migrate_*.sql`/`schema.sql` files; only `final_consolidated.sql` is authoritative. `nowait_backend/README.md` is outdated (still describes OTP/phone auth) — trust this file instead.
+
 **Root data:** `india_state_city.json` at the repo root provides the state→city mapping loaded by `searchable_picker_sheet.dart` for address fields. It is bundled into the Flutter app via `assets/data/`.
 
 **Architecture:**
@@ -122,7 +124,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload  # http://localhost:8000
 ```
 
-Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `PASSWORD_RESET_REDIRECT_URL` (default `io.nowait.app://auth-callback` — the app's deep link, embedded in password-reset emails; must match the intent-filter in `AndroidManifest.xml` and the Redirect URL allow-listed in the Supabase dashboard). **No `.env.example` is committed** — create `.env` from scratch using the variable names above.
+Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `PASSWORD_RESET_REDIRECT_URL` (default `io.nowait.app://auth-callback` — the app's deep link, embedded in password-reset emails; must match the intent-filter in `AndroidManifest.xml` and the Redirect URL allow-listed in the Supabase dashboard). `.env.example` lists the core Supabase vars plus `GOOGLE_MAP_KEY` (for `/maps/*`); Razorpay vars (see Payments) are not in it. `nowait_app/.env.example` also exists (`GOOGLE_MAP_KEY`).
 
 Run `sql/final_consolidated.sql` once in Supabase's SQL Editor — it's the union of every incremental migration (idempotent, safe on a fresh database or an existing one at any prior state) and creates all tables, indexes, RLS policies, and the atomic `join_queue` function in one shot. Interactive docs at `/docs`.
 
@@ -134,7 +136,7 @@ pytest tests/                          # Run all backend tests
 pytest tests/test_queue_service.py     # Run a single test file
 pytest tests/ -k "test_join_queue"     # Run tests matching a name
 ```
-Test files: `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
+Test files (`nowait_backend/tests/`): `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
 
 The `conftest.py` patches `supabase.create_client` before any imports, so no real Supabase credentials are needed. Each test module must patch its own local `supabase` binding (e.g. `patch("app.services.queue_service.supabase", ...)`), not just `app.database.supabase`.
 
@@ -253,7 +255,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 
 ### Admin Panel
 
-`app/routers/admin.py` mounts a standalone HTML dashboard at `/nowaitt_778admin` (credentials: `778Admin` / `Admin@nowait778`). It uses its own cookie-based session (`_VALID_SESSIONS` in-memory set — resets on server restart) completely separate from Supabase JWT auth. Capabilities: view stats; CRUD on users, shops, queue entries, subscriptions, and promotions; manually grant subscriptions to any shop by UUID. Do not delete or rename the route prefix — it is intentionally obscure.
+`app/routers/admin.py` mounts a standalone HTML dashboard at `/nowaitt_778admin` (username/password come from `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `app/config.py`, overridable via `.env`; `ADMIN_PASSWORD` defaults to empty, so set it in `.env`). It uses its own cookie-based session (`_VALID_SESSIONS` in-memory set — resets on server restart) completely separate from Supabase JWT auth. Capabilities: view stats; CRUD on users, shops, queue entries, subscriptions, and promotions; manually grant subscriptions to any shop by UUID. Do not delete or rename the route prefix — it is intentionally obscure.
 
 ### Database Tables
 

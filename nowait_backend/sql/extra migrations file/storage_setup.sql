@@ -38,4 +38,4 @@ USING (bucket_id = 'shop-images');
 -- Bucket name referenced in backend: app/services/shop_service.py → _STORAGE_BUCKET = "shop-images"
 -- Images are stored at path: {shop_id}/{uuid}.{ext}
 -- Public URL format: https://<project>.supabase.co/storage/v1/object/public/shop-images/{shop_id}/{uuid}.{ext}
--- Max images per shop: 10 (enforced in shop_service.py → MAX_SHOP_IMAGES)
+-- Max images per shop: 5 (enforced in shop_service.py → MAX_SHOP_IMAGES)

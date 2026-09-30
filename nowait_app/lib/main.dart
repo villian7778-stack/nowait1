@@ -50,6 +50,7 @@ class _NoWaitAppState extends State<NoWaitApp> {
   void initState() {
     super.initState();
     LocaleService.instance.addListener(_onLocaleChanged);
+    AuthService.instance.addListener(_onLocaleChanged);
     // Give the monitor the global key so it can show sheets from anywhere.
     QueueMonitorService.instance.navigatorKey = _navigatorKey;
 
@@ -61,6 +62,7 @@ class _NoWaitAppState extends State<NoWaitApp> {
   @override
   void dispose() {
     LocaleService.instance.removeListener(_onLocaleChanged);
+    AuthService.instance.removeListener(_onLocaleChanged);
     QueueMonitorService.instance.stop();
     _authSub?.cancel();
     super.dispose();

@@ -20,19 +20,45 @@ def _period_start(period: str) -> str:
     return start.isoformat()
 
 
-def get_summary(shop_id: str, actor_id: str, period: str = "today") -> dict:
+def _parse_day(value: str, end: bool = False) -> datetime:
+    try:
+        d = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    return d + timedelta(days=1) if end else d
+
+
+def _range_bounds(from_date: Optional[str], to_date: Optional[str]):
+    """Returns (start_iso, end_iso_exclusive_or_None) for an inclusive from/to day range."""
+    if not from_date and not to_date:
+        return None
+    start = _parse_day(from_date) if from_date else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    end = _parse_day(to_date, end=True) if to_date else None
+    if end and end <= start:
+        raise HTTPException(status_code=400, detail="'to_date' must not be before 'from_date'")
+    return start.isoformat(), end.isoformat() if end else None
+
+
+def get_summary(
+    shop_id: str,
+    actor_id: str,
+    period: str = "today",
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> dict:
     if not _is_owner(shop_id, actor_id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    since = _period_start(period)
-
-    result = (
-        supabase.table("queue_entries")
-        .select("status, joined_at")
-        .eq("shop_id", shop_id)
-        .gte("joined_at", since)
-        .execute()
-    )
+    bounds = _range_bounds(from_date, to_date)
+    query = supabase.table("queue_entries").select("status, joined_at").eq("shop_id", shop_id)
+    if bounds:
+        query = query.gte("joined_at", bounds[0])
+        if bounds[1]:
+            query = query.lt("joined_at", bounds[1])
+        period = "custom"
+    else:
+        query = query.gte("joined_at", _period_start(period))
+    result = query.execute()
     entries = result.data or []
 
     total_joined = len(entries)
@@ -69,18 +95,25 @@ def get_summary(shop_id: str, actor_id: str, period: str = "today") -> dict:
     }
 
 
-def get_hourly_stats(shop_id: str, actor_id: str, days: int = 7) -> list:
+def get_hourly_stats(
+    shop_id: str,
+    actor_id: str,
+    days: int = 7,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> list:
     if not _is_owner(shop_id, actor_id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    result = (
-        supabase.table("queue_entries")
-        .select("joined_at, status")
-        .eq("shop_id", shop_id)
-        .gte("joined_at", since)
-        .execute()
-    )
+    bounds = _range_bounds(from_date, to_date)
+    query = supabase.table("queue_entries").select("joined_at, status").eq("shop_id", shop_id)
+    if bounds:
+        query = query.gte("joined_at", bounds[0])
+        if bounds[1]:
+            query = query.lt("joined_at", bounds[1])
+    else:
+        query = query.gte("joined_at", (datetime.now(timezone.utc) - timedelta(days=days)).isoformat())
+    result = query.execute()
 
     # Build hour → count dict (0-23)
     hourly: dict[int, int] = {h: 0 for h in range(24)}

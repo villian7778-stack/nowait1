@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import 'api_client.dart';
@@ -113,9 +115,15 @@ class ShopService {
 
   /// Uploads a single image to the shop. Returns the new public URL.
   Future<String> uploadImage(String shopId, XFile file) async {
-    final bytes = await file.readAsBytes();
-    final filename = file.name.isNotEmpty ? file.name : 'image.jpg';
-    final mimeType = _mimeFromFilename(filename);
+    final original = await file.readAsBytes();
+    var filename = file.name.isNotEmpty ? file.name : 'image.jpg';
+    var mimeType = _mimeFromFilename(filename);
+    final bytes = await _compress(original);
+    if (!identical(bytes, original)) {
+      // Compressed output is always JPEG.
+      filename = '${filename.split('.').first}.jpg';
+      mimeType = 'image/jpeg';
+    }
     final res = await ApiClient.instance.multipartPost(
       '/shops/$shopId/images',
       fileBytes: bytes,
@@ -123,6 +131,38 @@ class ShopService {
       mimeType: mimeType,
     );
     return res['url'] as String;
+  }
+
+  static const _maxImageBytes = 512 * 1024; // 0.5 MB per image
+
+  /// Shrinks [input] to at most ~0.5 MB (JPEG), lowering quality then
+  /// dimensions until it fits. Returns [input] unchanged if already small
+  /// enough or if compression fails.
+  Future<Uint8List> _compress(Uint8List input) async {
+    if (input.lengthInBytes <= _maxImageBytes) return input;
+    try {
+      var quality = 85;
+      var side = 1920;
+      Uint8List out = input;
+      for (var i = 0; i < 8; i++) {
+        out = await FlutterImageCompress.compressWithList(
+          input,
+          minWidth: side,
+          minHeight: side,
+          quality: quality,
+          format: CompressFormat.jpeg,
+        );
+        if (out.lengthInBytes <= _maxImageBytes) return out;
+        if (quality > 50) {
+          quality -= 10;
+        } else {
+          side = (side * 0.8).round();
+        }
+      }
+      return out;
+    } catch (_) {
+      return input;
+    }
   }
 
   /// Deletes an image URL from the shop.

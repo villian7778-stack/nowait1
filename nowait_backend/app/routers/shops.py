@@ -119,7 +119,7 @@ async def upload_shop_image(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_owner),
 ):
-    """Upload one image for the shop. Max 10 images, 5 MB each, JPEG/PNG/WebP/GIF only."""
+    """Upload one image for the shop. Max 5 images, 5 MB each (the app compresses to ~0.5 MB), JPEG/PNG/WebP/GIF only."""
     content_type = (file.content_type or "").lower()
     if content_type not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=415, detail="Only JPEG, PNG, WebP, or GIF images are allowed.")

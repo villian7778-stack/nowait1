@@ -11,7 +11,7 @@ from app.services import review_service
 
 logger = logging.getLogger(__name__)
 
-MAX_SHOP_IMAGES = 10
+MAX_SHOP_IMAGES = 5
 _STORAGE_BUCKET = "shop-images"
 
 
