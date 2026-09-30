@@ -116,3 +116,12 @@ def captured_payment_for_order(order_id: str) -> dict | None:
         logger.error("Could not fetch payments for order %s from Razorpay: %s", order_id, describe_error(e))
         return None
     return next((p for p in items if p.get("status") == "captured"), None)
+
+
+def order_is_paid(order_id: str) -> bool:
+    """True once Razorpay has captured the full amount for this order."""
+    try:
+        return _get_client().order.fetch(order_id).get("status") == "paid"
+    except Exception as e:
+        logger.warning("Could not fetch order %s from Razorpay: %s", order_id, describe_error(e))
+        return False

@@ -74,3 +74,24 @@ class TestReconcile:
         subs.create_or_renew_subscription.side_effect = RuntimeError("db down")
         assert self._run()["activated"] == []
         pts.release_claim.assert_called_once_with("order_1")
+
+
+@patch("app.routers.payments.razorpay_service")
+@patch("app.routers.payments.execute_one")
+class TestOrderStatus:
+    def _run(self, owner="owner-1"):
+        from app.routers.payments import order_status
+        return order_status("order_1", {"id": owner})
+
+    def test_reports_paid(self, one, rzp):
+        one.return_value = MagicMock(data={"owner_id": "owner-1"})
+        rzp.order_is_paid.return_value = True
+        assert self._run() == {"paid": True}
+
+    def test_hides_other_owners_orders(self, one, rzp):
+        from fastapi import HTTPException
+        one.return_value = MagicMock(data={"owner_id": "someone-else"})
+        with pytest.raises(HTTPException) as e:
+            self._run()
+        assert e.value.status_code == 404
+        rzp.order_is_paid.assert_not_called()

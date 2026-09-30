@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'api_client.dart';
 
@@ -38,6 +39,10 @@ class PaymentService {
 
   Razorpay? _razorpay;
   Completer<PaymentResult>? _completer;
+  Timer? _paidPoll;
+
+  // Closes Razorpay's checkout from native code (see MainActivity.kt).
+  static const _nativeChannel = MethodChannel('nowait/razorpay');
   String? _orderId;
   String _purpose = 'subscription';
 
@@ -78,13 +83,53 @@ class PaymentService {
       'theme': {'color': '#1f4cdd'},
     });
 
+    _startPaidPoll(orderId, completer);
+
     return completer.future.whenComplete(() {
+      _paidPoll?.cancel();
+      _paidPoll = null;
       razorpay.clear();
       if (_razorpay == razorpay) _razorpay = null;
     });
   }
 
+  /// With UPI, Razorpay's checkout can take the money and then sit on its own "order is
+  /// already paid" screen without ever calling back. While the checkout is open, ask the
+  /// backend (which asks Razorpay) whether the order is paid; once it is, close the
+  /// checkout ourselves and let the caller activate it via reconcile.
+  void _startPaidPoll(String orderId, Completer<PaymentResult> completer) {
+    var busy = false;
+    var polls = 0;
+    _paidPoll?.cancel();
+    _paidPoll = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (busy) return;
+      if (completer.isCompleted || ++polls > 200) { // ~10 minutes
+        timer.cancel();
+        return;
+      }
+      busy = true;
+      try {
+        final res = await ApiClient.instance.get('/payments/order/$orderId/status');
+        if (res is Map && res['paid'] == true && !completer.isCompleted) {
+          timer.cancel();
+          debugPrint('Razorpay: order $orderId is paid (seen by poll) — closing checkout');
+          completer.completeError(PaymentAlreadyCaptured(orderId));
+          try {
+            await _nativeChannel.invokeMethod('closeCheckout');
+          } catch (e) {
+            debugPrint('Could not close Razorpay checkout: $e');
+          }
+        }
+      } catch (_) {
+        // Network hiccup — try again on the next tick.
+      } finally {
+        busy = false;
+      }
+    });
+  }
+
   void _onSuccess(PaymentSuccessResponse response) {
+    if (_completer?.isCompleted ?? true) return;
     _completer?.complete(PaymentResult(
       orderId: response.orderId ?? '',
       paymentId: response.paymentId ?? '',
@@ -93,6 +138,9 @@ class PaymentService {
   }
 
   void _onError(PaymentFailureResponse response) {
+    // Already resolved (e.g. the poll saw the payment and closed the checkout, which
+    // Razorpay then reports as a cancel) — nothing more to do.
+    if (_completer?.isCompleted ?? true) return;
     // code == Razorpay.PAYMENT_CANCELLED when the user dismisses the modal.
     final cancelled = response.code == Razorpay.PAYMENT_CANCELLED;
     debugPrint('Razorpay failure: code=${response.code} message=${response.message} body=${response.error}');
@@ -170,6 +218,7 @@ class PaymentService {
   }
 
   void _onExternalWallet(ExternalWalletResponse response) {
+    if (_completer?.isCompleted ?? true) return;
     _completer?.completeError(PaymentException('Selected external wallet: ${response.walletName}'));
   }
 }

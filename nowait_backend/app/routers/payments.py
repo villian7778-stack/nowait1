@@ -219,6 +219,19 @@ def verify_promotion_payment(
     )
 
 
+@router.get("/order/{order_id}/status", summary="Whether Razorpay has taken payment for this order")
+def order_status(order_id: str, current_user: dict = Depends(get_current_owner)):
+    """Polled by the app while Razorpay's checkout is open. With UPI, the checkout can
+    capture the payment and then sit on its own "order is already paid" screen without
+    ever calling back, so the app watches the order here and closes the checkout itself."""
+    row = execute_one(
+        supabase.table("payment_transactions").select("owner_id").eq("razorpay_order_id", order_id)
+    ).data
+    if not row or row["owner_id"] != current_user["id"]:
+        raise HTTPException(status_code=404, detail="Unknown payment order.")
+    return {"paid": razorpay_service.order_is_paid(order_id)}
+
+
 @router.post("/reconcile/shop/{shop_id}", summary="Activate orders Razorpay captured but the app never verified")
 def reconcile_payments(shop_id: str, current_user: dict = Depends(get_current_owner)):
     """Safety net for "Razorpay shows the payment captured but nothing was activated":
