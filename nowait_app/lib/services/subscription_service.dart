@@ -39,11 +39,12 @@ class SubscriptionService {
   }
 
   /// Asks the backend to check Razorpay for this shop's paid-but-not-activated orders
-  /// (checkout succeeded but verify never landed) and activate them. Returns how many
-  /// were activated. Covers both subscriptions and Featured Promotions.
-  Future<int> reconcilePayments(String shopId) async {
+  /// (checkout succeeded but verify never landed) and activate them. Returns the purpose
+  /// ('subscription' / 'promotion') of each order it activated.
+  Future<List<String>> reconcilePayments(String shopId) async {
     final res = await ApiClient.instance.post('/payments/reconcile/shop/$shopId');
-    return ((res as Map<String, dynamic>)['activated'] as List?)?.length ?? 0;
+    final activated = (res as Map<String, dynamic>)['activated'] as List? ?? const [];
+    return [for (final a in activated) (a as Map)['purpose'].toString()];
   }
 
   /// Verifies the Razorpay payment signature and, if valid, activates the subscription.

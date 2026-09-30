@@ -180,11 +180,32 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   _showPaymentCapturedDialog('Checking your payment status...');
                 }
               } on PaymentException catch (e) {
+                // With UPI, Razorpay can capture the money and still close via its
+                // error/cancel path (e.g. its "order is already paid" screen, then X).
+                // Ask the server before telling the owner the payment failed.
+                var activated = false;
+                try {
+                  activated = (await SubscriptionService.instance.reconcilePayments(widget.shop.id))
+                      .contains('promotion');
+                } catch (_) {}
                 if (mounted) {
-                  setState(() => _isLoading = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-                  );
+                  if (activated) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✓  Promotion activated for $_selectedDays days!'),
+                        backgroundColor: AppColors.tertiary,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                    await _loadActivePromotion();
+                    setState(() => _isLoading = false);
+                  } else {
+                    setState(() => _isLoading = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                    );
+                  }
                 }
               } on ApiException catch (e) {
                 if (mounted) {
@@ -226,7 +247,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
     // Razorpay took the money but verify failed: ask the server to confirm it with
     // Razorpay directly before telling the owner anything went wrong.
     try {
-      if (await SubscriptionService.instance.reconcilePayments(widget.shop.id) > 0) {
+      if ((await SubscriptionService.instance.reconcilePayments(widget.shop.id)).contains('promotion')) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

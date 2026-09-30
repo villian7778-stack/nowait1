@@ -49,7 +49,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     // (e.g. UPI payment success when app was backgrounded, so verify never ran).
     try {
       final activated = await SubscriptionService.instance.reconcilePayments(widget.shop.id);
-      if (activated > 0 && mounted) {
+      if (activated.isNotEmpty && mounted) {
         // Let the getSubscription call below refresh the UI.
         _subscriptionJustActivated = false;
       }
@@ -202,6 +202,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               // Once Razorpay checkout succeeds, money is captured — a failure
               // after that point needs very different messaging than one before it.
               bool paymentCaptured = false;
+              // True once the Razorpay checkout was opened and closed without a success
+              // callback. With UPI, Razorpay can capture the money and still close via its
+              // error/cancel path (e.g. its "order is already paid" screen, then X), so we
+              // must ask the server before telling the owner the payment failed.
+              bool checkoutClosedWithoutSuccess = false;
               try {
                 final order = await SubscriptionService.instance.createPaymentOrder(
                   widget.shop.id,
@@ -236,6 +241,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 // Fallback message if reconcile also fails (e.g. Razorpay still processing).
                 errorMsg = 'Your payment was received. Please wait a moment, then open this screen again — your subscription will activate automatically.';
               } on PaymentException catch (e) {
+                checkoutClosedWithoutSuccess = true;
                 errorMsg = e.message;
               } on ApiException catch (e) {
                 // 409 = subscription is already active (e.g. reconcile just activated it
@@ -255,9 +261,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               }
               // Razorpay took the money but verify failed / delivered "already paid"
               // error: ask the server to confirm with Razorpay directly.
-              if (!success && paymentCaptured) {
+              if (!success && (paymentCaptured || checkoutClosedWithoutSuccess)) {
                 try {
-                  success = await SubscriptionService.instance.reconcilePayments(widget.shop.id) > 0;
+                  success = (await SubscriptionService.instance.reconcilePayments(widget.shop.id))
+                      .contains('subscription');
                 } catch (_) {}
               }
               {
