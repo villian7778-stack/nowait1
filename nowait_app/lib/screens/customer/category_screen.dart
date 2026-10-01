@@ -6,6 +6,7 @@ import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
+import '../../widgets/locked_shop_card.dart';
 import '../../widgets/queue_paused_note.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip, ShopRatingRow;
 import 'shop_details_screen.dart';
@@ -122,8 +123,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
         }
       }).toList();
     }
-    // Promoted shops always float to top
+    // Unsubscribed (locked) shops go last; promoted shops float to top
     shops.sort((a, b) {
+      if (a.hasActiveSubscription != b.hasActiveSubscription) return a.hasActiveSubscription ? -1 : 1;
       if (a.isPromoted && !b.isPromoted) return -1;
       if (!a.isPromoted && b.isPromoted) return 1;
       return 0;
@@ -703,6 +705,7 @@ class _ShopListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!shop.hasActiveSubscription) return LockedShopCard(shop: shop);
     final canJoin = shop.canAcceptQueue;
 
     return GestureDetector(

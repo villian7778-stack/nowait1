@@ -6,6 +6,7 @@ import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/category_theme.dart';
 import '../screens/customer/reviews_screen.dart';
+import 'locked_shop_card.dart';
 import 'queue_paused_note.dart';
 import 'status_badge.dart';
 
@@ -26,6 +27,7 @@ class ShopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!shop.hasActiveSubscription && !hideDirections) return LockedShopCard(shop: shop);
     return GestureDetector(
       onTap: onTap,
       child: Container(

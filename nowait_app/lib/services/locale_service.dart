@@ -240,6 +240,7 @@ class LocaleService extends ChangeNotifier {
     'inactive': 'Inactive',
     'open': 'Open',
     'closed': 'Closed',
+    'unavailable': 'Unavailable',
     'inQueue': 'in queue',
     'subscriptionInactive': 'Subscription inactive — shop is closed & not accepting queues',
 
@@ -536,6 +537,7 @@ class LocaleService extends ChangeNotifier {
     'inactive': 'निष्क्रिय',
     'open': 'खुला',
     'closed': 'बंद',
+    'unavailable': 'उपलब्ध नहीं',
     'inQueue': 'कतार में',
     'subscriptionInactive': 'सदस्यता निष्क्रिय — दुकान बंद है और कतार स्वीकार नहीं कर रही',
 
@@ -825,6 +827,7 @@ class LocaleService extends ChangeNotifier {
     'inactive': 'निष्क्रिय',
     'open': 'उघडे',
     'closed': 'बंद',
+    'unavailable': 'उपलब्ध नाही',
     'inQueue': 'रांगेत',
     'subscriptionInactive': 'सदस्यता निष्क्रिय — दुकान बंद आहे आणि रांग स्वीकारत नाही',
 

@@ -80,6 +80,7 @@ class _SalonListScreenState extends State<SalonListScreen> {
 
     // Sort: promoted always float to top, then by active filter within each group
     shops.sort((a, b) {
+      if (a.hasActiveSubscription != b.hasActiveSubscription) return a.hasActiveSubscription ? -1 : 1;
       if (a.isPromoted != b.isPromoted) return a.isPromoted ? -1 : 1;
       switch (_activeFilter) {
         case 'Top Rated':
@@ -322,7 +323,7 @@ class _SalonListScreenState extends State<SalonListScreen> {
   }
 
   Widget _buildPromotedSection(BuildContext context) {
-    final promoted = _filteredShops.where((s) => s.isPromoted).toList();
+    final promoted = _filteredShops.where((s) => s.isPromoted && s.hasActiveSubscription).toList();
     if (promoted.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

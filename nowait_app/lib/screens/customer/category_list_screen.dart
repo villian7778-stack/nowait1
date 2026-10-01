@@ -98,7 +98,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   }
 
   List<ShopModel> get _filteredShops {
-    return _shops.where((s) {
+    final list = _shops.where((s) {
       final matchesCategory = _selectedCategory == 'All' || s.category == _selectedCategory;
       final query = _searchController.text.toLowerCase();
       final matchesSearch = query.isEmpty ||
@@ -108,6 +108,12 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
           s.city.toLowerCase().contains(query);
       return matchesCategory && matchesSearch;
     }).toList();
+    // Locked (unsubscribed) shops go last
+    list.sort((a, b) {
+      if (a.hasActiveSubscription == b.hasActiveSubscription) return 0;
+      return a.hasActiveSubscription ? -1 : 1;
+    });
+    return list;
   }
 
   @override

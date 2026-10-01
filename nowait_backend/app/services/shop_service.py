@@ -64,6 +64,8 @@ def _enrich_shop(shop: dict) -> dict:
     stats = _get_queue_stats(shop["id"])
     return {
         **shop,
+        # A shop without an active subscription is never shown as open
+        "is_open": bool(shop["is_open"]) and has_sub,
         "has_active_subscription": has_sub,
         "can_accept_queue": shop["is_open"] and has_sub and not shop.get("queue_paused", False),
         "is_promoted": is_promoted,
@@ -137,6 +139,8 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
     for shop in raw_shops:
         sid = shop["id"]
         has_sub = sid in shops_with_sub
+        if open_only and not has_sub:
+            continue
         active_promotions = promos_by_shop.get(sid, [])
         is_promoted = any(p.get("title") == _PROMOTION_BOOST_TITLE for p in active_promotions)
         entries = queue_by_shop.get(sid, [])
@@ -145,6 +149,7 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
         rev = review_summaries.get(sid, {"avg_review_rating": 0.0, "review_count": 0})
         shops.append({
             **shop,
+            "is_open": bool(shop["is_open"]) and has_sub,
             "has_active_subscription": has_sub,
             "can_accept_queue": shop["is_open"] and has_sub and not shop.get("queue_paused", False),
             "is_promoted": is_promoted,
@@ -247,6 +252,8 @@ def toggle_open(shop_id: str, owner_id: str) -> dict:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
 
     new_state = not existing.data["is_open"]
+    if new_state and not _has_active_subscription(shop_id):
+        raise HTTPException(status_code=403, detail="An active subscription is required to open your shop.")
     supabase.table("shops").update({"is_open": new_state}).eq("id", shop_id).execute()
     return {
         "shop_id": shop_id,
