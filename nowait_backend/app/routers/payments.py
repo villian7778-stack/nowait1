@@ -1,12 +1,15 @@
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import execute_one, supabase
 from app.dependencies import get_current_owner
+from app.rate_limit import per_owner_limit
 from app.schemas.payment import (
     CheckoutFailureReport,
     CreateOrderResponse,
@@ -75,17 +78,31 @@ def _check_signature_and_claim(body) -> None:
     logger.info("Payment VERIFIED order=%s payment=%s — activating", body.razorpay_order_id, body.razorpay_payment_id)
 
 
-@router.post("/report-failure", summary="App reports a checkout failure so it appears in server logs")
+_log_safe_limit = 300
+
+
+def _clip(value) -> str:
+    """App-supplied text, made safe for a log line: one line, bounded length."""
+    return " ".join(str(value if value is not None else "").split())[:_log_safe_limit]
+
+
+@router.post(
+    "/report-failure",
+    summary="App reports a checkout failure so it appears in server logs",
+    dependencies=[Depends(per_owner_limit("report", 20))],
+)
 def report_checkout_failure(body: CheckoutFailureReport, current_user: dict = Depends(get_current_owner)):
     """Checkout runs on the phone, so Razorpay's failure reason never reaches the server on its own.
     The app posts it here; we log it and mark the order failed (never touches an already-paid order)."""
     logger.error(
         "CHECKOUT FAILED (reported by app) owner=%s order=%s purpose=%s mode=%s | code=%s reason=%s source=%s step=%s | "
         "description=%s | message=%s | raw=%s",
-        current_user["id"], body.razorpay_order_id, body.purpose, razorpay_service.key_mode(),
-        body.code, body.reason, body.source, body.step, body.description, body.message, (body.raw or "")[:1000],
+        current_user["id"], _clip(body.razorpay_order_id), _clip(body.purpose), razorpay_service.key_mode(),
+        _clip(body.code), _clip(body.reason), _clip(body.source), _clip(body.step),
+        _clip(body.description), _clip(body.message), _clip(body.raw),
     )
-    if body.razorpay_order_id:
+    # Only ever touch the caller's own orders.
+    if body.razorpay_order_id and payment_transaction_service.owns_order(body.razorpay_order_id, current_user["id"]):
         payment_transaction_service.mark_failed(body.razorpay_order_id, None, None)
     return {"logged": True}
 
@@ -139,6 +156,7 @@ def _activate_or_explain(activate_fn, payment_id: str, order_id: str):
     "/subscription/shop/{shop_id}/create-order",
     response_model=CreateOrderResponse,
     summary="Create a Razorpay order for a subscription payment",
+    dependencies=[Depends(per_owner_limit("create-order", 10))],
 )
 def create_subscription_order(
     shop_id: str, body: SubscriptionOrderRequest, current_user: dict = Depends(get_current_owner)
@@ -165,6 +183,7 @@ def create_subscription_order(
     "/subscription/shop/{shop_id}/verify",
     response_model=SubscriptionStatus,
     summary="Verify a subscription payment and activate the subscription",
+    dependencies=[Depends(per_owner_limit("verify", 20))],
 )
 def verify_subscription_payment(
     shop_id: str, body: SubscriptionVerifyRequest, current_user: dict = Depends(get_current_owner)
@@ -186,6 +205,7 @@ def verify_subscription_payment(
     "/promotion/shop/{shop_id}/create-order",
     response_model=CreateOrderResponse,
     summary="Create a Razorpay order for a Featured Promotion payment",
+    dependencies=[Depends(per_owner_limit("create-order", 10))],
 )
 def create_promotion_order(
     shop_id: str, body: PromotionOrderRequest, current_user: dict = Depends(get_current_owner)
@@ -210,6 +230,7 @@ def create_promotion_order(
     "/promotion/shop/{shop_id}/verify",
     response_model=PromotionResponse,
     summary="Verify a promotion payment and create the Featured Promotion",
+    dependencies=[Depends(per_owner_limit("verify", 20))],
 )
 def verify_promotion_payment(
     shop_id: str, body: PromotionVerifyRequest, current_user: dict = Depends(get_current_owner)
@@ -226,20 +247,50 @@ def verify_promotion_payment(
     )
 
 
-@router.get("/order/{order_id}/status", summary="Whether Razorpay has taken payment for this order")
+@router.get(
+    "/order/{order_id}/status",
+    summary="Whether Razorpay has taken payment for this order",
+    dependencies=[Depends(per_owner_limit("order-status", 60))],
+)
 def order_status(order_id: str, current_user: dict = Depends(get_current_owner)):
     """Polled by the app while Razorpay's checkout is open. With UPI, the checkout can
     capture the payment and then sit on its own "order is already paid" screen without
     ever calling back, so the app watches the order here and closes the checkout itself."""
-    row = execute_one(
-        supabase.table("payment_transactions").select("owner_id").eq("razorpay_order_id", order_id)
-    ).data
-    if not row or row["owner_id"] != current_user["id"]:
+    if not payment_transaction_service.owns_order(order_id, current_user["id"]):
         raise HTTPException(status_code=404, detail="Unknown payment order.")
     return {"paid": razorpay_service.order_is_paid(order_id)}
 
 
-@router.post("/reconcile/shop/{shop_id}", summary="Activate orders Razorpay captured but the app never verified")
+def _activate_if_paid(txn: dict, source: str) -> dict | None:
+    """Asks Razorpay (authenticated API call) whether this order has a captured payment and, if
+    it matches what we charged, activates what it bought. Safe to call any number of times and
+    from several places at once: the paid-claim is atomic, so an order is activated only once.
+    Returns {"order_id", "payment_id", "purpose"} when it activated the order, else None."""
+    order_id = txn["razorpay_order_id"]
+    payment = razorpay_service.captured_payment_for_order(order_id)
+    if not payment:
+        return None
+    if payment.get("amount") != txn["amount_paise"] or payment.get("currency", "INR") != "INR":
+        logger.error("%s amount/currency mismatch order=%s paid=%s %s expected=%s INR — not activating",
+                     source, order_id, payment.get("amount"), payment.get("currency"), txn["amount_paise"])
+        return None
+    if not payment_transaction_service.claim_paid(order_id, payment["id"], None):
+        return None  # already activated (by verify, reconcile or an earlier webhook)
+    try:
+        _activate(txn)
+    except Exception as e:
+        payment_transaction_service.release_claim(order_id)
+        logger.error("%s activation failed order=%s payment=%s: %s", source, order_id, payment["id"], e)
+        return None
+    logger.info("%s order=%s payment=%s purpose=%s — activated", source, order_id, payment["id"], txn["purpose"])
+    return {"order_id": order_id, "payment_id": payment["id"], "purpose": txn["purpose"]}
+
+
+@router.post(
+    "/reconcile/shop/{shop_id}",
+    summary="Activate orders Razorpay captured but the app never verified",
+    dependencies=[Depends(per_owner_limit("reconcile", 30))],
+)
 def reconcile_payments(shop_id: str, current_user: dict = Depends(get_current_owner)):
     """Safety net for "Razorpay shows the payment captured but nothing was activated":
     checkout succeeded, but the app's verify call never reached us (app closed, network
@@ -248,22 +299,66 @@ def reconcile_payments(shop_id: str, current_user: dict = Depends(get_current_ow
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     activated = []
     for txn in payment_transaction_service.unfinished_orders(shop_id, current_user["id"], since):
-        order_id = txn["razorpay_order_id"]
-        payment = razorpay_service.captured_payment_for_order(order_id)
-        if not payment:
-            continue
-        if payment.get("amount") != txn["amount_paise"]:
-            logger.error("RECONCILE amount mismatch order=%s paid=%s expected=%s — not activating",
-                         order_id, payment.get("amount"), txn["amount_paise"])
-            continue
-        if not payment_transaction_service.claim_paid(order_id, payment["id"], None):
-            continue
-        try:
-            _activate(txn)
-        except Exception as e:
-            payment_transaction_service.release_claim(order_id)
-            logger.error("RECONCILE activation failed order=%s payment=%s: %s", order_id, payment["id"], e)
-            continue
-        logger.info("RECONCILED order=%s payment=%s purpose=%s — activated", order_id, payment["id"], txn["purpose"])
-        activated.append({"order_id": order_id, "payment_id": payment["id"], "purpose": txn["purpose"]})
+        done = _activate_if_paid(txn, "RECONCILED")
+        if done:
+            activated.append(done)
     return {"activated": activated}
+
+
+# ── Webhook: Razorpay tells the server about payments, even if the app never does ──────────
+
+_MAX_WEBHOOK_BYTES = 64 * 1024
+
+
+def _handle_webhook_event(event: dict) -> dict:
+    name = event.get("event")
+    payload = event.get("payload") or {}
+    payment = (payload.get("payment") or {}).get("entity") or {}
+    order = (payload.get("order") or {}).get("entity") or {}
+    order_id = payment.get("order_id") or order.get("id")
+
+    if name == "payment.failed":
+        # Razorpay's own explanation of why a payment failed - the most useful line in the logs.
+        logger.error(
+            "WEBHOOK payment.failed order=%s payment=%s method=%s | code=%s reason=%s source=%s step=%s | %s",
+            _clip(order_id), _clip(payment.get("id")), _clip(payment.get("method")),
+            _clip(payment.get("error_code")), _clip(payment.get("error_reason")), _clip(payment.get("error_source")),
+            _clip(payment.get("error_step")), _clip(payment.get("error_description")),
+        )
+        return {"received": True}
+
+    if name in ("payment.captured", "order.paid") and order_id:
+        txn = payment_transaction_service.get_order(order_id)
+        if not txn:
+            logger.warning("WEBHOOK %s for unknown order %s — ignored", name, _clip(order_id))
+        elif txn["status"] == "paid":
+            logger.info("WEBHOOK %s order=%s — already activated", name, order_id)
+        else:
+            # The webhook is only a nudge: we still confirm with Razorpay before activating.
+            _activate_if_paid(txn, "WEBHOOK")
+    return {"received": True}
+
+
+@router.post("/webhook", summary="Razorpay -> server payment notifications (signature-verified)")
+async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = Header(default=None)):
+    """Called by Razorpay itself (no login), so the signature is the only authentication.
+    Add it in the Razorpay dashboard: Settings -> Webhooks, URL `<server>/payments/webhook`, a secret
+    of your choice (= `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `order.paid`,
+    `payment.failed`. A valid request always gets 200 so Razorpay does not keep retrying."""
+    if not settings.RAZORPAY_WEBHOOK_SECRET:
+        logger.error("Webhook received but RAZORPAY_WEBHOOK_SECRET is not set")
+        raise HTTPException(status_code=503, detail="Webhook is not configured.")
+    raw = await request.body()
+    if len(raw) > _MAX_WEBHOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large.")
+    if not razorpay_service.verify_webhook_signature(raw, x_razorpay_signature):
+        logger.warning("WEBHOOK rejected: bad or missing signature (%d bytes)", len(raw))
+        raise HTTPException(status_code=400, detail="Invalid signature.")
+    try:
+        event = json.loads(raw)
+        if not isinstance(event, dict):
+            raise ValueError("not an object")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload.")
+    # The database work is blocking, so keep it off the event loop.
+    return await run_in_threadpool(_handle_webhook_event, event)

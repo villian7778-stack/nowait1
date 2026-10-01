@@ -77,20 +77,20 @@ class TestReconcile:
 
 
 @patch("app.routers.payments.razorpay_service")
-@patch("app.routers.payments.execute_one")
+@patch("app.routers.payments.payment_transaction_service")
 class TestOrderStatus:
     def _run(self, owner="owner-1"):
         from app.routers.payments import order_status
         return order_status("order_1", {"id": owner})
 
-    def test_reports_paid(self, one, rzp):
-        one.return_value = MagicMock(data={"owner_id": "owner-1"})
+    def test_reports_paid(self, pts, rzp):
+        pts.owns_order.return_value = True
         rzp.order_is_paid.return_value = True
         assert self._run() == {"paid": True}
 
-    def test_hides_other_owners_orders(self, one, rzp):
+    def test_hides_other_owners_orders(self, pts, rzp):
         from fastapi import HTTPException
-        one.return_value = MagicMock(data={"owner_id": "someone-else"})
+        pts.owns_order.return_value = False
         with pytest.raises(HTTPException) as e:
             self._run()
         assert e.value.status_code == 404

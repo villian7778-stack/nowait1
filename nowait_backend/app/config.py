@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     GOOGLE_MAP_KEY: str = ""
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
+    # Payments are TEST MODE ONLY. With live (rzp_live_) keys real money would move, so the
+    # backend refuses to talk to Razorpay unless this is explicitly set to true.
+    RAZORPAY_ALLOW_LIVE: bool = False
+    # Secret you choose when adding the webhook in the Razorpay dashboard (Settings -> Webhooks).
+    # It is NOT the API key secret. Without it POST /payments/webhook answers 503.
+    RAZORPAY_WEBHOOK_SECRET: str = ""
     # Deep link the app registers (AndroidManifest intent-filter) to catch the
     # password-recovery callback. Supabase embeds this in the reset email link.
     PASSWORD_RESET_REDIRECT_URL: str = "io.nowait.app://auth-callback"

@@ -31,6 +31,21 @@ def record_order(shop_id: str, owner_id: str, purpose: str, order_id: str, amoun
         raise HTTPException(status_code=500, detail="Could not start the payment. Please try again.")
 
 
+def get_order(order_id: str) -> dict | None:
+    """The ledger row for an order, or None."""
+    return execute_one(
+        supabase.table("payment_transactions").select("*").eq("razorpay_order_id", order_id)
+    ).data
+
+
+def owns_order(order_id: str, owner_id: str) -> bool:
+    """True if this order was created by this owner."""
+    row = execute_one(
+        supabase.table("payment_transactions").select("owner_id").eq("razorpay_order_id", order_id)
+    ).data
+    return bool(row) and row["owner_id"] == owner_id
+
+
 def get_order_for_verify(order_id: str, shop_id: str, owner_id: str, purpose: str) -> dict:
     """Loads the ledger row for an order and checks it belongs to this owner, shop and
     purpose and has not already been paid out. Returns the row (with its metadata)."""

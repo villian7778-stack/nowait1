@@ -14,6 +14,10 @@ _client: razorpay.Client | None = None
 
 def _get_client() -> razorpay.Client:
     global _client
+    if settings.RAZORPAY_KEY_ID.startswith("rzp_live_") and not settings.RAZORPAY_ALLOW_LIVE:
+        # Checked on every call (not just when the client is first built) so it can never be bypassed.
+        logger.error("REFUSING to use Razorpay LIVE keys: payments are test-mode only (set RAZORPAY_ALLOW_LIVE=true to override)")
+        raise HTTPException(status_code=503, detail="Payments are in test mode only right now.")
     if _client is None:
         if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
             logger.error("Razorpay credentials NOT configured: RAZORPAY_KEY_ID set=%s, RAZORPAY_KEY_SECRET set=%s",
@@ -97,7 +101,8 @@ def create_order(amount_paise: int, receipt: str, currency: str = "INR") -> dict
 
 def verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
     """Recomputes HMAC-SHA256(order_id|payment_id, KEY_SECRET) and compares to the signature returned by checkout."""
-    if not order_id or not payment_id or not signature:
+    # With no secret configured an HMAC with an empty key is trivially forgeable - never accept.
+    if not settings.RAZORPAY_KEY_SECRET or not order_id or not payment_id or not signature:
         return False
     generated = hmac.new(
         settings.RAZORPAY_KEY_SECRET.encode(),
@@ -105,6 +110,16 @@ def verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(generated, signature)
+
+
+def verify_webhook_signature(raw_body: bytes, signature: str | None) -> bool:
+    """Razorpay signs the exact bytes of a webhook with HMAC-SHA256 using the webhook secret
+    chosen in the dashboard, and sends the hex digest in the X-Razorpay-Signature header."""
+    secret = settings.RAZORPAY_WEBHOOK_SECRET
+    if not secret or not signature:
+        return False
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature.strip())
 
 
 def captured_payment_for_order(order_id: str) -> dict | None:
