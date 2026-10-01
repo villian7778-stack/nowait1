@@ -394,49 +394,93 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   void _cancel() {
+    final confirmCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Cancel Subscription?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your shop will immediately be closed and customers will not be able to join the queue.',
-              style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final confirmed = confirmCtrl.text.trim() == 'CANCEL';
+          Widget point(String text) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.circle, size: 6, color: AppColors.error),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(text, style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface, height: 1.4))),
+                  ],
+                ),
+              );
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Cancel Subscription?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+              ],
             ),
-            const SizedBox(height: 12),
-            const NoRefundNotice(),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              setState(() => _isLoading = true);
-              try {
-                await SubscriptionService.instance.cancelSubscription(widget.shop.id);
-                if (mounted) setState(() { _isActive = false; _isLoading = false; });
-              } on ApiException catch (e) {
-                if (mounted) {
-                  setState(() => _isLoading = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-                  );
-                }
-              } catch (_) {
-                if (mounted) setState(() => _isLoading = false);
-              }
-            },
-            child: Text('Cancel Subscription', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
-          ),
-        ],
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  point('Your subscription will be cancelled right away.'),
+                  point('There will be NO REFUND for the days you have left.'),
+                  point('Your shop will become inactive and be closed. Customers will not be able to find it or join its queue.'),
+                  point('You will not be able to manage it as an active shop until you subscribe again.'),
+                  const SizedBox(height: 8),
+                  Text('Type CANCEL below to confirm.', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirmCtrl,
+                    autocorrect: false,
+                    textCapitalization: TextCapitalization.characters,
+                    onChanged: (_) => setDialog(() {}),
+                    decoration: const InputDecoration(hintText: 'CANCEL'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+              ),
+              TextButton(
+                onPressed: !confirmed
+                    ? null
+                    : () async {
+                        Navigator.pop(ctx);
+                        setState(() => _isLoading = true);
+                        try {
+                          await SubscriptionService.instance.cancelSubscription(widget.shop.id);
+                          if (mounted) {
+                            setState(() { _isActive = false; _subscriptionData = null; _isLoading = false; });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Subscription cancelled. Your shop is now inactive.'), behavior: SnackBarBehavior.floating),
+                            );
+                            _fetchSubscription();
+                          }
+                        } on ApiException catch (e) {
+                          if (mounted) {
+                            setState(() => _isLoading = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+                            );
+                          }
+                        } catch (_) {
+                          if (mounted) setState(() => _isLoading = false);
+                        }
+                      },
+                child: Text('Cancel Subscription', style: GoogleFonts.inter(color: confirmed ? AppColors.error : AppColors.onSurfaceVariant.withValues(alpha: 0.5), fontWeight: FontWeight.w600)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

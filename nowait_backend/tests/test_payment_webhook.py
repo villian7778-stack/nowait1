@@ -148,7 +148,7 @@ class TestActivation:
         world.rzp.captured_payment_for_order.return_value = {"id": "pay_1", "amount": 7000, "currency": "INR"}
         with patch("app.routers.payments.promotion_service") as promo:
             assert _post(client, _captured(amount=7000)).status_code == 200
-        promo.create_promotion.assert_called_once()
+        promo.activate_featured.assert_called_once()
 
 
 class TestFailureLogging:

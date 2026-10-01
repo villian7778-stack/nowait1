@@ -42,12 +42,28 @@ class AuthService extends ChangeNotifier {
   /// this service (e.g. ApiClient's silent token refresh on a 401).
   Future<void> persistTokens() => _saveToStorage();
 
+  /// True while an email/password login or registration request is in flight, so a stale
+  /// Supabase session event (from an old Google sign-in) can't swap the tokens mid-login.
+  bool authRequestInProgress = false;
+
   Future<void> _saveToStorage() async {
-    if (accessToken != null) await _secureStorage.write(key: 'access_token', value: accessToken!);
-    if (refreshToken != null) await _secureStorage.write(key: 'refresh_token', value: refreshToken!);
-    final prefs = await SharedPreferences.getInstance();
-    if (profile != null) await prefs.setString('user_profile', jsonEncode(profile));
+    // The in-memory session is already set, so tell listeners first: a slow or failing
+    // secure-storage write must never leave the user stuck on the login screen.
     notifyListeners(); // lets main.dart re-pick the home screen after login
+    try {
+      if (accessToken != null) {
+        await _secureStorage.write(key: 'access_token', value: accessToken!).timeout(const Duration(seconds: 5));
+      }
+      if (refreshToken != null) {
+        await _secureStorage.write(key: 'refresh_token', value: refreshToken!).timeout(const Duration(seconds: 5));
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (profile != null) await prefs.setString('user_profile', jsonEncode(profile));
+    } catch (e) {
+      // Not persisted: the user stays logged in for this session but will have to log in
+      // again after a restart.
+      debugPrint('Could not persist session: $e');
+    }
   }
 
   Future<void> logout() async {
@@ -104,19 +120,24 @@ class AuthService extends ChangeNotifier {
   /// (should not normally happen for email/password login, since register()
   /// creates the profile in the same call — kept for forward-compatibility).
   Future<bool> login(String email, String password) async {
-    final res = await ApiClient.instance.post('/auth/login', body: {
-      'email': email,
-      'password': password,
-    });
-    accessToken = res['access_token'];
-    refreshToken = res['refresh_token'];
-    if (res['profile'] != null) {
-      profile = Map<String, dynamic>.from(res['profile']);
+    authRequestInProgress = true;
+    try {
+      final res = await ApiClient.instance.post('/auth/login', body: {
+        'email': email,
+        'password': password,
+      });
+      accessToken = res['access_token'];
+      refreshToken = res['refresh_token'];
+      if (res['profile'] != null) {
+        profile = Map<String, dynamic>.from(res['profile']);
+        await _saveToStorage();
+        return true;
+      }
       await _saveToStorage();
-      return true;
+      return false;
+    } finally {
+      authRequestInProgress = false;
     }
-    await _saveToStorage();
-    return false;
   }
 
   /// Whether an account already exists for [email] (drives the email-first login).

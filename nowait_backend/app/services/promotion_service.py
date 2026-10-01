@@ -72,6 +72,10 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: b
     shop_name = shop.data.get("name", "A shop")
     shop_city = shop.data.get("city", "")
 
+    # Only one scheme can be active at a time: a new scheme replaces the previous one.
+    if data.title.strip() != FEATURED_TITLE:
+        supabase.table("promotions").delete().eq("shop_id", shop_id).neq("title", FEATURED_TITLE).execute()
+
     result = supabase.table("promotions").insert({
         "shop_id": shop_id,
         "title": data.title,
@@ -118,6 +122,55 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: b
         logger.warning("Failed to fetch city customers for notifications: %s", e)
 
     return promotion
+
+
+def _parse_dt(value: str) -> datetime:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def activate_featured(shop_id: str, owner_id: str, days: int) -> dict:
+    """Grants a paid Featured Promotion. If one is still running, its end date is pushed out by
+    the paid days (nothing already paid for is lost); otherwise a new one starts now."""
+    now = datetime.now(timezone.utc)
+    current = (
+        supabase.table("promotions")
+        .select("*")
+        .eq("shop_id", shop_id)
+        .eq("title", FEATURED_TITLE)
+        .eq("is_active", True)
+        .gt("valid_until", now.isoformat())
+        .order("valid_until", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if current.data:
+        row = current.data[0]
+        new_end = _parse_dt(row["valid_until"]) + timedelta(days=days)
+        total = max(1, round((new_end - _parse_dt(row["created_at"])).total_seconds() / 86400))
+        plural = "" if days == 1 else "s"
+        result = (
+            supabase.table("promotions")
+            .update({
+                "valid_until": new_end.isoformat(),
+                "description": f"Shop promoted for {total} days in total (extended by {days} day{plural})",
+            })
+            .eq("id", row["id"])
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to extend promotion")
+        return result.data[0]
+    plural = "" if days == 1 else "s"
+    return create_promotion(
+        shop_id, owner_id,
+        PromotionCreate(
+            title=FEATURED_TITLE,
+            description=f"Shop promoted for {days} day{plural}",
+            valid_until=(now + timedelta(days=days)).isoformat(),
+        ),
+        paid=True,
+    )
 
 
 def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) -> dict:

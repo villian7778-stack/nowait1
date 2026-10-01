@@ -31,6 +31,19 @@ class PromotionService {
     });
   }
 
+  Future<Map<String, dynamic>> updatePromotion(
+    String promotionId, {
+    String? title,
+    String? description,
+    String? validUntil,
+  }) async {
+    return await ApiClient.instance.put('/promotions/$promotionId', body: {
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (validUntil != null) 'valid_until': validUntil,
+    });
+  }
+
   Future<void> deletePromotion(String promotionId) async {
     await ApiClient.instance.delete('/promotions/$promotionId');
   }

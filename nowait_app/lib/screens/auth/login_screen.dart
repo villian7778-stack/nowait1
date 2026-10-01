@@ -2,6 +2,8 @@ import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import '../customer/home_screen.dart';
+import '../owner/owner_dashboard_screen.dart';
 import '../../config/app_config.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
@@ -114,9 +116,15 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         );
         return;
       }
-      // Home/OwnerDashboard routing happens centrally in main.dart on rebuild
-      // once AuthService.isLoggedIn flips true — pop back to the app root.
-      Navigator.of(context).popUntil((r) => r.isFirst);
+      // main.dart normally swaps the home screen as soon as AuthService notifies (which
+      // also unmounts this screen). If we are still here, go to the right home explicitly
+      // so login never depends on a rebuild or an app restart.
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => AuthService.instance.isOwner ? const OwnerDashboardScreen() : const HomeScreen(),
+        ),
+        (route) => false,
+      );
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

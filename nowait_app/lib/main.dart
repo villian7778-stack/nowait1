@@ -87,6 +87,9 @@ class _NoWaitAppState extends State<NoWaitApp> {
       // Email/password login never touches the Supabase client directly, so a
       // signedIn event here always means the Google OAuth deep link just landed.
       if (AuthService.instance.accessToken == session.accessToken) return;
+      // Already logged in, or an email/password login is mid-flight: this is a stale
+      // Supabase session, not a Google sign-in — don't let it replace the real tokens.
+      if (AuthService.instance.isLoggedIn || AuthService.instance.authRequestInProgress) return;
       final profileComplete = await AuthService.instance.adoptSupabaseSession(session);
       setState(() {}); // reflect the new session in `home` below
       final nav = _navigatorKey.currentState;

@@ -351,12 +351,49 @@ class TestPromotionOrder:
         from app.routers import payments
         txn = {"purpose": "promotion", "shop_id": "s", "owner_id": "o",
                "metadata": {"title": "Featured Promotion", "description": "d", "days": 7}}
-        with patch.object(payments.promotion_service, "create_promotion") as create:
+        with patch.object(payments.promotion_service, "activate_featured") as activate:
             payments._activate(txn)
-        data = create.call_args[0][2]
-        end = datetime.fromisoformat(data.valid_until)
-        assert abs((end - (datetime.now(timezone.utc) + timedelta(days=7))).total_seconds()) < 5
+        activate.assert_called_once_with("s", "o", 7)
+
+
+class _Chain:
+    """Supabase query-builder stand-in: every call returns itself; execute() returns data."""
+    def __init__(self, data):
+        self.data, self.calls = data, []
+
+    def __getattr__(self, name):
+        def call(*a, **k):
+            self.calls.append((name, a, k))
+            return self
+        return call
+
+    def execute(self):
+        return type("R", (), {"data": self.data})()
+
+
+class TestActivateFeatured:
+    def test_extends_a_running_promotion_from_its_end_date(self):
+        from app.services import promotion_service as ps
+        now = datetime.now(timezone.utc)
+        row = {"id": "p1", "created_at": (now - timedelta(days=2)).isoformat(),
+               "valid_until": (now + timedelta(days=5)).isoformat()}
+        q = _Chain([row])
+        with patch.object(ps, "supabase") as sb:
+            sb.table.return_value = q
+            ps.activate_featured("s", "o", 3)
+        upd = next(a for n, a, k in q.calls if n == "update")[0]
+        end = datetime.fromisoformat(upd["valid_until"])
+        assert abs((end - (now + timedelta(days=8))).total_seconds()) < 5
+        assert "extended by 3 days" in upd["description"]
+
+    def test_starts_a_new_one_when_none_is_running(self):
+        from app.services import promotion_service as ps
+        with patch.object(ps, "supabase") as sb, patch.object(ps, "create_promotion") as create:
+            sb.table.return_value = _Chain([])
+            ps.activate_featured("s", "o", 7)
         assert create.call_args.kwargs == {"paid": True}
+        end = datetime.fromisoformat(create.call_args[0][2].valid_until)
+        assert abs((end - (datetime.now(timezone.utc) + timedelta(days=7))).total_seconds()) < 5
 
 
 class TestSchemeLength:

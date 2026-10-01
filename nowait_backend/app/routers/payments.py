@@ -118,7 +118,9 @@ def _activate(txn: dict):
     # The promotion runs for the paid number of days from when it is activated (orders made by
     # older app builds stored a fixed end date instead).
     days = meta.get("days")
-    valid_until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat() if days else meta.get("valid_until")
+    if days:
+        return promotion_service.activate_featured(txn["shop_id"], txn["owner_id"], days)
+    valid_until = meta.get("valid_until")
     promo_data = PromotionCreate(title=meta.get("title"), description=meta.get("description"), valid_until=valid_until)
     return promotion_service.create_promotion(txn["shop_id"], txn["owner_id"], promo_data, paid=True)
 

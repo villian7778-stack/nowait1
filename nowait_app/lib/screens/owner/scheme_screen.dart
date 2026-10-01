@@ -24,6 +24,8 @@ class _SchemeScreenState extends State<SchemeScreen> {
   bool _isCancelling = false;
   final _l = LocaleService.instance;
   SchemeModel? _scheme;
+  // True while the owner is editing the active scheme (form shown instead of the summary).
+  bool _editing = false;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
       _titleController.text = existing.title;
       _descController.text = existing.description;
     }
+    _reloadScheme(); // the shop passed in may be stale
   }
 
   Future<void> _reloadScheme() async {
@@ -52,29 +55,59 @@ class _SchemeScreenState extends State<SchemeScreen> {
     return '${l.day} ${months[l.month - 1]} ${l.year}';
   }
 
+  int _daysLeft(DateTime end) {
+    final hours = end.difference(DateTime.now()).inHours;
+    return hours <= 0 ? 0 : (hours / 24).ceil();
+  }
+
   Widget _activeSchemeCard(SchemeModel s) {
+    final left = _daysLeft(s.validUntil);
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.tertiaryFixed.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle_rounded, color: AppColors.tertiary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Scheme active · ${s.title}',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.tertiary)),
-                const SizedBox(height: 2),
-                Text('Active until ${_formatDate(s.validUntil)} (${s.validityText})',
-                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
-              ],
-            ),
+          Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppColors.tertiary, size: 20),
+              const SizedBox(width: 8),
+              Text('Scheme is active',
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.tertiary)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(s.title, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+          if (s.description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(s.description, style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant, height: 1.4)),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Days left', style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant)),
+                    Text('$left', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Expires on', style: GoogleFonts.inter(fontSize: 10, color: AppColors.onSurfaceVariant)),
+                    Text(_formatDate(s.validUntil), style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -114,17 +147,29 @@ class _SchemeScreenState extends State<SchemeScreen> {
           .add(Duration(days: _durationDays))
           .toUtc()
           .toIso8601String();
-      await PromotionService.instance.createPromotion(
-        widget.shop.id,
-        title: _titleController.text.trim(),
-        description: _descController.text.trim(),
-        validUntil: validUntil,
-      );
+      final updating = _scheme != null;
+      if (updating) {
+        await PromotionService.instance.updatePromotion(
+          _scheme!.id,
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          validUntil: validUntil,
+        );
+      } else {
+        await PromotionService.instance.createPromotion(
+          widget.shop.id,
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          validUntil: validUntil,
+        );
+      }
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() { _isLoading = false; _editing = false; });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓  Scheme saved for $_durationDays days'),
+          content: Text(updating
+              ? '✓  Scheme updated — active for $_durationDays days'
+              : '✓  Scheme active for $_durationDays days'),
           backgroundColor: AppColors.tertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -169,10 +214,12 @@ class _SchemeScreenState extends State<SchemeScreen> {
               try {
                 await PromotionService.instance.deletePromotion(schemeId);
                 if (mounted) {
+                  _titleController.clear();
+                  _descController.clear();
+                  setState(() { _scheme = null; _editing = false; _isCancelling = false; });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Scheme cancelled'), behavior: SnackBarBehavior.floating),
                   );
-                  Navigator.pop(context);
                 }
               } on ApiException catch (e) {
                 if (mounted) {
@@ -215,9 +262,12 @@ class _SchemeScreenState extends State<SchemeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_scheme != null) _activeSchemeCard(_scheme!),
+                if (_scheme == null || _editing) ...[
                 // Info
                 Text(
-                  'Create a scheme or offer that customers will see on your shop card.',
+                  _scheme != null
+                      ? 'Change the offer below. Validity restarts from today for the days you pick.'
+                      : 'Create a scheme or offer that customers will see on your shop card. Only one scheme can be active at a time.',
                   style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5),
                 ),
                 const SizedBox(height: 20),
@@ -369,6 +419,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                   ),
                 ),
               ],
+              ],
             ),
           ),
           Positioned(
@@ -401,12 +452,33 @@ class _SchemeScreenState extends State<SchemeScreen> {
                             ),
                           )
                         : GradientButton(
-                            label: _scheme != null ? 'Update Scheme' : 'Save Scheme',
-                            onPressed: _save,
-                            icon: Icons.check_rounded,
+                            label: _scheme == null
+                                ? 'Save Scheme'
+                                : (_editing ? 'Update Scheme' : 'Edit Scheme'),
+                            onPressed: (_scheme != null && !_editing)
+                                ? () {
+                                    _titleController.text = _scheme!.title;
+                                    _descController.text = _scheme!.description;
+                                    setState(() => _editing = true);
+                                  }
+                                : _save,
+                            icon: (_scheme != null && !_editing) ? Icons.edit_rounded : Icons.check_rounded,
                           ),
                   ),
-                  if (_scheme != null && !_isCancelling) ...[
+                  if (_scheme != null && _editing && !_isLoading) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () => setState(() => _editing = false),
+                        child: Text(
+                          'Discard changes',
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_scheme != null && !_editing && !_isCancelling) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
