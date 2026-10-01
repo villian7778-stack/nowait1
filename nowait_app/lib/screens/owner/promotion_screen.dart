@@ -28,6 +28,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
   // Active promotion loaded from API
   Map<String, dynamic>? _activePromotion;
   bool _loadingPromotion = true;
+  Object? _validUntilBeforePayment;
 
   final _l = LocaleService.instance;
 
@@ -125,6 +126,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
             onPressed: () async {
               Navigator.pop(context);
               setState(() => _isLoading = true);
+              _validUntilBeforePayment = _activePromotion?['valid_until'];
               // Once Razorpay checkout succeeds, money is captured — a failure
               // after that point needs very different messaging than one before it.
               bool paymentCaptured = false;
@@ -176,6 +178,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   activated = (await SubscriptionService.instance.reconcilePayments(widget.shop.id))
                       .contains('promotion');
                 } catch (_) {}
+                if (!activated) {
+                  await _loadActivePromotion();
+                  activated = _activePromotion?['valid_until'] != _validUntilBeforePayment;
+                }
                 if (mounted) {
                   if (activated) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -234,21 +240,26 @@ class _PromotionScreenState extends State<PromotionScreen> {
   Future<void> _showPaymentCapturedDialog(String message) async {
     // Razorpay took the money but verify failed: ask the server to confirm it with
     // Razorpay directly before telling the owner anything went wrong.
+    // The webhook may already have activated it, in which case reconcile reports
+    // nothing new — so also check the promotion itself.
+    var activated = false;
     try {
-      if ((await SubscriptionService.instance.reconcilePayments(widget.shop.id)).contains('promotion')) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓  Promotion activated for $_selectedDays days!'),
-            backgroundColor: AppColors.tertiary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-        await _loadActivePromotion();
-        return;
-      }
+      activated = (await SubscriptionService.instance.reconcilePayments(widget.shop.id)).contains('promotion');
     } catch (_) {}
+    await _loadActivePromotion();
+    if (_activePromotion?['valid_until'] != _validUntilBeforePayment) activated = true;
+    if (activated) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓  Promotion activated for $_selectedDays days!'),
+          backgroundColor: AppColors.tertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     showDialog(
       context: context,

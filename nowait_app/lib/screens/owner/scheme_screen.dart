@@ -23,16 +23,62 @@ class _SchemeScreenState extends State<SchemeScreen> {
   bool _isLoading = false;
   bool _isCancelling = false;
   final _l = LocaleService.instance;
+  SchemeModel? _scheme;
 
   @override
   void initState() {
     super.initState();
     _l.addListener(_onLocale);
     final existing = widget.shop.activeScheme;
-    if (existing != null) {
+    if (existing != null && existing.isActive) {
+      _scheme = existing;
       _titleController.text = existing.title;
       _descController.text = existing.description;
     }
+  }
+
+  Future<void> _reloadScheme() async {
+    try {
+      final promos = await PromotionService.instance.getPromotions(widget.shop.id, activeOnly: true);
+      final schemes = promos.where((p) => p['title'] != 'Featured Promotion').toList();
+      if (!mounted) return;
+      setState(() => _scheme = schemes.isNotEmpty ? SchemeModel.fromJson(schemes.last) : null);
+    } catch (_) {}
+  }
+
+  String _formatDate(DateTime d) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final l = d.toLocal();
+    return '${l.day} ${months[l.month - 1]} ${l.year}';
+  }
+
+  Widget _activeSchemeCard(SchemeModel s) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.tertiaryFixed.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: AppColors.tertiary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Scheme active · ${s.title}',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.tertiary)),
+                const SizedBox(height: 2),
+                Text('Active until ${_formatDate(s.validUntil)} (${s.validityText})',
+                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onLocale() => setState(() {});
@@ -84,9 +130,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) Navigator.pop(context);
-      });
+      await _reloadScheme();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -102,7 +146,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
   }
 
   void _cancelScheme() {
-    final schemeId = widget.shop.activeScheme?.id;
+    final schemeId = _scheme?.id;
     if (schemeId == null || schemeId.isEmpty) return;
     showDialog(
       context: context,
@@ -170,6 +214,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_scheme != null) _activeSchemeCard(_scheme!),
                 // Info
                 Text(
                   'Create a scheme or offer that customers will see on your shop card.',
@@ -356,12 +401,12 @@ class _SchemeScreenState extends State<SchemeScreen> {
                             ),
                           )
                         : GradientButton(
-                            label: widget.shop.activeScheme != null ? 'Update Scheme' : 'Save Scheme',
+                            label: _scheme != null ? 'Update Scheme' : 'Save Scheme',
                             onPressed: _save,
                             icon: Icons.check_rounded,
                           ),
                   ),
-                  if (widget.shop.activeScheme != null && !_isCancelling) ...[
+                  if (_scheme != null && !_isCancelling) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,

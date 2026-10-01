@@ -29,6 +29,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _trialAvailable = false;
   Map<String, dynamic>? _subscriptionData;
   final _l = LocaleService.instance;
+  final _ctaKey = GlobalKey();
+
+  void _scrollToCta() {
+    final ctx = _ctaKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 400), curve: Curves.easeOut, alignment: 0.5);
+  }
 
   @override
   void initState() {
@@ -239,6 +246,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              final expiryBeforePayment = _subscriptionData?['expires_at'];
               setState(() => _isLoading = true);
               bool success = false;
               String? errorMsg;
@@ -282,7 +290,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 // Razorpay's end — mark as captured and let reconcile activate it below.
                 paymentCaptured = true;
                 // Fallback message if reconcile also fails (e.g. Razorpay still processing).
-                errorMsg = 'Your payment was received. Please wait a moment, then open this screen again — your subscription will activate automatically.';
+                errorMsg = 'Your payment was received and your subscription is being activated. It will show here shortly.';
               } on PaymentException catch (e) {
                 checkoutClosedWithoutSuccess = true;
                 errorMsg = e.message;
@@ -304,11 +312,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               }
               // Razorpay took the money but verify failed / delivered "already paid"
               // error: ask the server to confirm with Razorpay directly.
+              // The webhook may have activated it already (reconcile then reports nothing
+              // new), so also compare the expiry with what it was before paying, retrying
+              // briefly while Razorpay/webhook catch up.
               if (!success && (paymentCaptured || checkoutClosedWithoutSuccess)) {
-                try {
-                  success = (await SubscriptionService.instance.reconcilePayments(widget.shop.id))
-                      .contains('subscription');
-                } catch (_) {}
+                for (var attempt = 0; attempt < 4 && !success; attempt++) {
+                  if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
+                  try {
+                    success = (await SubscriptionService.instance.reconcilePayments(widget.shop.id))
+                        .contains('subscription');
+                    if (!success) {
+                      final res = await SubscriptionService.instance.getSubscription(widget.shop.id);
+                      final sub = res['subscription'] as Map<String, dynamic>?;
+                      success = sub != null && sub['expires_at'] != expiryBeforePayment;
+                    }
+                  } catch (_) {}
+                  if (!paymentCaptured) break; // plain cancel: one check is enough
+                }
               }
               {
                 if (mounted) {
@@ -321,7 +341,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     _fetchSubscription();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: const Text('✓  Subscription activated! Your shop is now live.'),
+                        content: Text(extend
+                            ? '✓  Payment completed! Your subscription has been extended.'
+                            : '✓  Payment completed! Subscription is active and your shop is live.'),
                         backgroundColor: AppColors.tertiary,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -479,6 +501,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                 Text(
                                   '${widget.shop.name} is closed and not accepting queues. Subscribe to activate.',
                                   style: GoogleFonts.inter(fontSize: 12, color: AppColors.onErrorContainer, height: 1.4),
+                                ),
+                                const SizedBox(height: 10),
+                                GestureDetector(
+                                  onTap: _scrollToCta,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        trialOffer ? 'Try 1 month free trial' : 'Choose a plan',
+                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.arrow_downward_rounded, size: 16, color: AppColors.primary),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -674,6 +711,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         const SizedBox(height: 24),
 
                         // ── CTA ───────────────────────────────────────────────────
+                        SizedBox(key: _ctaKey, height: 0),
                         if (trialOffer)
                           SizedBox(
                             width: double.infinity,

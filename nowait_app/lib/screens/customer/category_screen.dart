@@ -358,22 +358,28 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 265,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _promotedShops.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 12),
-                      itemBuilder: (context, i) => _PromotedShopCard(
-                        shop: _promotedShops[i],
-                        gradient: _categoryGradient,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ShopDetailsScreen(shop: _promotedShops[i]),
-                          ),
-                        ),
+                  // Height follows the tallest card so there is no blank space below it
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < _promotedShops.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 12),
+                            _PromotedShopCard(
+                              shop: _promotedShops[i],
+                              gradient: _categoryGradient,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ShopDetailsScreen(shop: _promotedShops[i]),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
