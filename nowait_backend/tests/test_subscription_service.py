@@ -138,6 +138,11 @@ class TestCancelSubscription:
             sb.table.side_effect = table
             out = ss.cancel_subscription("shop-001", "owner-001")
         assert out["has_active_subscription"] is False
+        assert out["subscription"]["days_remaining"] == 0
+        # The router's response model must accept it (it used to 500 after the cancel had gone through).
+        from app.schemas.subscription import SubscriptionStatus
+        full = {**out["subscription"], "shop_id": "s", "plan": "basic", "started_at": "x", "expires_at": "x", "created_at": "x"}
+        SubscriptionStatus(has_active_subscription=False, subscription=full)
         tables["subscriptions"].update.assert_called_with({"status": "cancelled"})
         tables["shops"].update.assert_called_with({"is_open": False})
 

@@ -165,6 +165,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
       }
       if (!mounted) return;
       setState(() { _isLoading = false; _editing = false; });
+      ScaffoldMessenger.of(context).hideCurrentSnackBar(); // don't queue messages over the buttons
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(updating
@@ -254,10 +255,11 @@ class _SchemeScreenState extends State<SchemeScreen> {
         ),
         title: Text('Add / Edit Scheme', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700)),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+          Expanded(
+            child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -422,11 +424,8 @@ class _SchemeScreenState extends State<SchemeScreen> {
               ],
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
+          ),
+          Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -494,7 +493,6 @@ class _SchemeScreenState extends State<SchemeScreen> {
                 ],
               ),
             ),
-          ),
         ],
       ),
     );

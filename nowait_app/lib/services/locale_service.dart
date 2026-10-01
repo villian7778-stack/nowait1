@@ -208,7 +208,8 @@ class LocaleService extends ChangeNotifier {
     'detailsLocked': 'These details cannot be changed.',
 
     'helpSupport': 'Help & Support',
-    'aboutNowait': 'About NOWAIT',
+    'aboutNowait': 'About Nowaitt',
+    'aboutNowaittText': 'Nowaitt lets customers join shop queues from their phone and see their turn live, so nobody has to wait in line.\nShop owners manage their queue, staff, offers and promotions in one simple app.',
     'signOut': 'Sign Out',
     'deleteAccount': 'Delete Account',
     'deleteAccountWarning': 'This action is permanent and cannot be undone. All your data, queue history, and shop images will be permanently removed.',
@@ -508,7 +509,8 @@ class LocaleService extends ChangeNotifier {
     'detailsLocked': 'ये जानकारी बदली नहीं जा सकती।',
 
     'helpSupport': 'सहायता और समर्थन',
-    'aboutNowait': 'NOWAIT के बारे में',
+    'aboutNowait': 'Nowaitt के बारे में',
+    'aboutNowaittText': 'Nowaitt से ग्राहक फ़ोन से दुकान की कतार में शामिल होकर अपना नंबर लाइव देख सकते हैं, इसलिए लाइन में खड़े रहने की ज़रूरत नहीं।\nदुकानदार अपनी कतार, स्टाफ़, ऑफ़र और प्रमोशन एक ही आसान ऐप में संभालते हैं।',
     'signOut': 'साइन आउट',
     'deleteAccount': 'खाता हटाएं',
     'deleteAccountWarning': 'यह कार्य स्थायी है और पूर्ववत नहीं किया जा सकता। आपका सभी डेटा, कतार इतिहास और दुकान की छवियां स्थायी रूप से हटा दी जाएंगी।',
@@ -798,7 +800,8 @@ class LocaleService extends ChangeNotifier {
     'detailsLocked': 'ही माहिती बदलता येत नाही.',
 
     'helpSupport': 'मदत आणि आधार',
-    'aboutNowait': 'NOWAIT बद्दल',
+    'aboutNowait': 'Nowaitt बद्दल',
+    'aboutNowaittText': 'Nowaitt मुळे ग्राहक फोनवरून दुकानाच्या रांगेत सामील होऊन आपला नंबर लाइव्ह पाहू शकतात, त्यामुळे रांगेत उभे राहावे लागत नाही.\nदुकानदार आपली रांग, स्टाफ, ऑफर आणि प्रमोशन एकाच सोप्या ॲपमध्ये सांभाळतात.',
     'signOut': 'बाहेर पडा',
     'deleteAccount': 'खाते हटवा',
     'deleteAccountWarning': 'हे कृत्य कायमस्वरूपी आहे आणि पूर्ववत केले जाऊ शकत नाही। आपला सर्व डेटा, रांग इतिहास आणि दुकानाच्या प्रतिमा कायमस्वरूपी काढल्या जातील।',

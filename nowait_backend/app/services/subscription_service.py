@@ -177,4 +177,5 @@ def cancel_subscription(shop_id: str, owner_id: str) -> dict:
         raise HTTPException(status_code=404, detail="No subscription found to cancel")
     # No subscription = shop goes inactive: close it so it stops taking queues.
     supabase.table("shops").update({"is_open": False}).eq("id", shop_id).execute()
-    return {"has_active_subscription": False, "subscription": result.data[0]}
+    # The response model requires days_remaining; a cancelled plan has none left.
+    return {"has_active_subscription": False, "subscription": {**result.data[0], "days_remaining": 0}}

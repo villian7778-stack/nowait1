@@ -1589,7 +1589,17 @@ class _OwnerProfileTab extends StatelessWidget {
               context,
               MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
             )),
-            _tile(context, Icons.info_outline_rounded, l.tr('aboutNowait'), () {}),
+            _tile(context, Icons.info_outline_rounded, l.tr('aboutNowait'), () => showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: Text(l.tr('aboutNowait'), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                content: Text(l.tr('aboutNowaittText'), style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant, height: 1.5)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700))),
+                ],
+              ),
+            )),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,

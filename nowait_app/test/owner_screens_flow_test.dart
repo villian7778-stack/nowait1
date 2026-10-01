@@ -14,6 +14,7 @@ import 'package:nowait_app/screens/owner/subscription_screen.dart';
 /// real API (notably: promotions come back wrapped as {"promotions": [...]}).
 class _Backend {
   String subStatus = 'active';
+  bool failCancelAfterDoing = false;
   DateTime subEnd = DateTime.now().toUtc().add(const Duration(days: 20));
   final List<Map<String, dynamic>> promos = [];
   final calls = <String>[];
@@ -44,6 +45,7 @@ class _Backend {
     } else if (path.endsWith('/subscriptions/shop/s1')) {
       if (r.method == 'DELETE') {
         subStatus = 'cancelled';
+        if (failCancelAfterDoing) return http.Response('Internal Server Error', 500);
         body = {'has_active_subscription': false, 'subscription': _subStatusJson['subscription']};
       } else {
         body = _subStatusJson;
@@ -112,27 +114,46 @@ void main() {
   });
 
   group('Subscription cancel', () {
-    testWidgets('needs CANCEL typed, then the page itself flips to inactive', (tester) async {
+    testWidgets('needs exactly CANCEL, then returns to the shop page', (tester) async {
       final backend = _Backend();
-      await _open(tester, backend, SubscriptionScreen(shop: _shop()), () async {
-        expect(find.text('Subscription Active'), findsOneWidget);
-        expect(find.textContaining('Expires'), findsOneWidget);
+      tester.view.physicalSize = const Size(900, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await http.runWithClient(() async {
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop()))),
+                  child: const Text('My shop page'),
+                ),
+              ),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('My shop page'));
+        await tester.pumpAndSettle();
 
+        expect(find.text('Subscription Active'), findsOneWidget);
         await tester.tap(find.text('Cancel Subscription'));
         await tester.pumpAndSettle();
         expect(find.textContaining('NO REFUND'), findsOneWidget);
         expect(find.textContaining('inactive'), findsWidgets);
 
-        // The confirm button does nothing until CANCEL is typed.
-        await tester.tap(find.text('Cancel Subscription').last);
-        await tester.pumpAndSettle();
-        expect(backend.calls.where((c) => c.startsWith('DELETE')), isEmpty);
+        Future<void> tryConfirm(String typed) async {
+          await tester.enterText(find.byType(TextField), typed);
+          await tester.pump();
+          await tester.tap(find.text('Cancel Subscription').last, warnIfMissed: false);
+          await tester.pumpAndSettle();
+          expect(backend.calls.where((c) => c.startsWith('DELETE')), isEmpty, reason: '"$typed" must not confirm');
+        }
 
-        await tester.enterText(find.byType(TextField), 'cancel');
-        await tester.pump();
-        await tester.tap(find.text('Cancel Subscription').last);
-        await tester.pumpAndSettle();
-        expect(backend.calls.where((c) => c.startsWith('DELETE')), isEmpty, reason: 'lowercase must not confirm');
+        await tryConfirm('');
+        await tryConfirm('cancel');
+        await tryConfirm('CANCEL ');
+        await tryConfirm(' CANCEL');
+        await tryConfirm('CAN CEL');
 
         await tester.enterText(find.byType(TextField), 'CANCEL');
         await tester.pump();
@@ -140,11 +161,25 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(backend.calls.where((c) => c.startsWith('DELETE')), hasLength(1));
-        // Same screen, no going back needed: inactive banner, no active details.
+        // Straight back on the shop page, with the confirmation message.
+        expect(find.text('My shop page'), findsOneWidget);
+        expect(find.byType(SubscriptionScreen), findsNothing);
+        expect(find.textContaining('Subscription cancelled'), findsOneWidget);
+      }, () => MockClient(backend.handle));
+    });
+
+    testWidgets('if the server errors, the screen reloads the real state and shows the message', (tester) async {
+      final backend = _Backend()..failCancelAfterDoing = true;
+      await _open(tester, backend, SubscriptionScreen(shop: _shop()), () async {
+        await tester.tap(find.text('Cancel Subscription'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'CANCEL');
+        await tester.pump();
+        await tester.tap(find.text('Cancel Subscription').last);
+        await tester.pumpAndSettle();
+        // The cancel did go through on the server, so the reloaded screen shows inactive, not stuck.
         expect(find.text('Subscription Inactive'), findsOneWidget);
-        expect(find.text('Subscription Active'), findsNothing);
-        expect(find.textContaining('Expires'), findsNothing);
-        expect(find.text('Cancel Subscription'), findsNothing);
+        expect(find.textContaining('Something went wrong on our end'), findsOneWidget);
       });
     });
   });
@@ -230,7 +265,9 @@ void main() {
         expect(find.text('15'), findsOneWidget);
         expect(backend.calls.where((c) => c.startsWith('PUT')), hasLength(1));
 
-        // Cancel the scheme
+        // Cancel the scheme (let the success snackbar go away first, it floats over the buttons)
+        await tester.pump(const Duration(seconds: 6));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Cancel Scheme'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Cancel Scheme').last);

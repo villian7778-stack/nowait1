@@ -399,7 +399,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) {
-          final confirmed = confirmCtrl.text.trim() == 'CANCEL';
+          final confirmed = confirmCtrl.text == 'CANCEL'; // exact: no spaces, no lowercase
           Widget point(String text) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
@@ -455,26 +455,36 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     ? null
                     : () async {
                         Navigator.pop(ctx);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final navigator = Navigator.of(context);
                         setState(() => _isLoading = true);
+                        String? error;
                         try {
                           await SubscriptionService.instance.cancelSubscription(widget.shop.id);
-                          if (mounted) {
-                            setState(() { _isActive = false; _subscriptionData = null; _isLoading = false; });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Subscription cancelled. Your shop is now inactive.'), behavior: SnackBarBehavior.floating),
-                            );
-                            _fetchSubscription();
-                          }
                         } on ApiException catch (e) {
-                          if (mounted) {
-                            setState(() => _isLoading = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-                            );
-                          }
+                          error = e.message;
                         } catch (_) {
-                          if (mounted) setState(() => _isLoading = false);
+                          error = 'Something went wrong. Please try again.';
                         }
+                        if (!mounted) return;
+                        if (error == null) {
+                          // Cancelled: go straight back to the shop page, which reloads and shows it inactive.
+                          messenger.hideCurrentSnackBar();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: const Text('Subscription cancelled. Your shop is now inactive.'),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                          navigator.popUntil((r) => r.isFirst);
+                          return;
+                        }
+                        // The request may have gone through even though the reply failed, so
+                        // reload the real state instead of leaving the screen as it was.
+                        await _fetchSubscription();
+                        if (!mounted) return;
+                        messenger.showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
                       },
                 child: Text('Cancel Subscription', style: GoogleFonts.inter(color: confirmed ? AppColors.error : AppColors.onSurfaceVariant.withValues(alpha: 0.5), fontWeight: FontWeight.w600)),
               ),
