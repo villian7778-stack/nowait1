@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def get_shop_promotions(shop_id: str, active_only: bool = False) -> dict:
     query = supabase.table("promotions").select("*").eq("shop_id", shop_id)
     if active_only:
-        query = query.eq("is_active", True)
+        query = query.eq("is_active", True).gt("valid_until", datetime.now(timezone.utc).isoformat())
     result = query.order("created_at", desc=True).execute()
     return {"promotions": result.data or []}
 

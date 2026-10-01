@@ -12,8 +12,10 @@ class PromotionService {
       '/promotions/shop/$shopId',
       query: activeOnly ? {'active_only': 'true'} : null,
     );
-    if (res is List) {
-      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    // The API wraps the list: {"promotions": [...]}
+    final list = res is Map ? res['promotions'] : res;
+    if (list is List) {
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
     return [];
   }
