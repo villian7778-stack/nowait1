@@ -23,7 +23,7 @@ class CheckoutFailureReport(BaseModel):
 
 
 class SubscriptionOrderRequest(BaseModel):
-    plan: str  # 'basic' or 'premium'
+    plan: str  # 'basic'
     duration_days: int = 30
     # Must be true to buy while a subscription is still active (extends it).
     extend: bool = False
@@ -40,9 +40,9 @@ class SubscriptionVerifyRequest(BaseModel):
 
 
 class PromotionOrderRequest(BaseModel):
-    title: str
-    description: str
-    valid_until: str
+    # Featured Promotion length in days (3, 7 or 15). The title, description,
+    # end date and price are all worked out by the server from this.
+    days: int
 
 
 class PromotionVerifyRequest(BaseModel):

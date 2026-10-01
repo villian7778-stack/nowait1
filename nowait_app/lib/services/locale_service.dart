@@ -49,38 +49,41 @@ class LocaleService extends ChangeNotifier {
   }
 
   static const _faqsEn = <(String, String)>[
-    ('How do I join a queue?', 'Browse shops by category or search by name. Open a shop, tap "Join Queue & Get Token", and confirm. You\'ll receive a token number and can track your live position.'),
-    ('How do I cancel my queue spot?', 'Go to the "My Queue" tab, then tap "Cancel Queue" on your active token. You will immediately lose your spot in the queue.'),
-    ('How do I register my shop?', 'Create an account and choose "Shop Owner" as your role. Then go to the Shops tab and tap "Create New Shop" to set up your shop profile.'),
-    ('What is a subscription?', 'Shop owners need an active subscription to open their shop and accept queues. Go to Manage Shop → Subscription to activate or renew your plan.'),
-    ('Can I join multiple queues at once?', 'Yes, you can join queues at multiple shops simultaneously. Track all your active tokens from the "My Queue" tab.'),
-    ('What do the queue statuses mean?', '"Waiting" — you are in line. "Almost There" — 1 to 3 people ahead. "Your Turn" — the shop is ready for you. "Completed" — service is done.'),
-    ('How does the token number work?', 'Each token is a unique number assigned when you join a queue. Token numbers never reset — they always increase per shop, making it easy to track your position.'),
-    ('Is my personal data safe?', 'Yes. All data is securely stored using Supabase (PostgreSQL) with row-level security policies. We never share your personal information with third parties.'),
+    ('How do I join a queue?', 'Find a shop by browsing the categories or searching by name. Open the shop, tap "Join Queue & Get Token" and confirm. You will get a token number and can follow your place in the line at any time.'),
+    ('How do I cancel my place in the queue?', 'Open the "My Queue" tab and tap "Cancel Queue" on your token. Please note that you will lose your place in the line straight away.'),
+    ('How do I register my shop?', 'Create an account and choose "Shop Owner". Then open the Shops tab and tap "Create New Shop" to add your shop details.'),
+    ('Is there a free trial for shop owners?', 'Yes. Every new shop owner gets the first month free. After creating your shop, open Manage Shop → Subscription and tap "Activate Free Trial". The free month is given once to each owner and cannot be repeated by opening a new account with the same email or mobile number. To keep this fair, we keep an anonymous note (not your actual details) that a free month has been used.'),
+    ('What is a subscription and what does it cost?', 'A subscription keeps your shop open for customers. After the free month, it costs ₹49 for 1 month or ₹130 for 3 months. You can renew at any time from Manage Shop → Subscription, and the new period is added after your current one ends.'),
+    ('Can I join more than one queue at a time?', 'Yes. You can wait in the queues of several shops at the same time and follow all your tokens from the "My Queue" tab.'),
+    ('What do the queue statuses mean?', '"Waiting" means you are in line. "Almost There" means only 1 to 3 people are ahead of you. "Your Turn" means the shop is ready for you. "Completed" means your service is done.'),
+    ('How does the token number work?', 'You get a unique token number each time you join a queue. Numbers keep increasing for each shop and never start over, so it is easy to see where you stand.'),
+    ('Is my personal information safe?', 'Yes. We take your privacy seriously. Your details are kept secure and are used only to run the service, for example to show your name to a shop when you join its queue. We never sell your information. You can delete your account and your data at any time from your Profile.'),
     ('Can I get a refund?', 'All payments (subscription, renewal, extension and Featured Promotion) are final and non-refundable. No refund is given for unused days, cancellation or shop closure.'),
   ];
 
   static const _faqsHi = <(String, String)>[
-    ('कतार में कैसे शामिल हों?', 'श्रेणी के अनुसार दुकानें ब्राउज़ करें या नाम से खोजें। दुकान खोलें, "कतार में शामिल हों और टोकन पाएं" पर टैप करें और पुष्टि करें। आपको एक टोकन नंबर मिलेगा और आप अपनी लाइव स्थिति ट्रैक कर सकते हैं।'),
-    ('अपनी कतार की जगह कैसे रद्द करें?', '"मेरी कतार" टैब पर जाएं, फिर अपने सक्रिय टोकन पर "कतार रद्द करें" टैप करें। आप तुरंत कतार में अपनी जगह खो देंगे।'),
-    ('अपनी दुकान कैसे पंजीकृत करें?', 'खाता बनाएं और अपनी भूमिका के रूप में "दुकानदार" चुनें। फिर दुकानें टैब पर जाएं और अपनी दुकान प्रोफ़ाइल सेट करने के लिए "नई दुकान बनाएं" टैप करें।'),
-    ('सदस्यता क्या है?', 'दुकान मालिकों को अपनी दुकान खोलने और कतार स्वीकार करने के लिए सक्रिय सदस्यता की आवश्यकता है। अपनी योजना सक्रिय करने के लिए दुकान प्रबंधित करें → सदस्यता पर जाएं।'),
-    ('क्या मैं एक साथ कई कतारों में शामिल हो सकता हूं?', 'हां, आप एक साथ कई दुकानों की कतारों में शामिल हो सकते हैं। "मेरी कतार" टैब से अपने सभी सक्रिय टोकन ट्रैक करें।'),
-    ('कतार की स्थिति का क्या अर्थ है?', '"प्रतीक्षारत" — आप लाइन में हैं। "लगभग पहुंच गए" — 1 से 3 लोग आगे हैं। "आपकी बारी" — दुकान आपके लिए तैयार है। "पूर्ण" — सेवा हो गई।'),
-    ('टोकन नंबर कैसे काम करता है?', 'प्रत्येक टोकन एक अद्वितीय नंबर है जो कतार में शामिल होने पर असाइन किया जाता है। टोकन नंबर कभी रीसेट नहीं होते — वे प्रति दुकान हमेशा बढ़ते रहते हैं।'),
-    ('क्या मेरा व्यक्तिगत डेटा सुरक्षित है?', 'हां। सभी डेटा row-level security नीतियों के साथ सुरक्षित रूप से संग्रहीत किया जाता है। हम आपकी व्यक्तिगत जानकारी कभी भी तीसरे पक्ष के साथ साझा नहीं करते।'),
+    ('कतार में कैसे शामिल हों?', 'श्रेणी देखकर या नाम से खोजकर दुकान चुनें। दुकान खोलें, "कतार में शामिल हों और टोकन पाएं" पर टैप करें और पुष्टि करें। आपको एक टोकन नंबर मिलेगा और आप कभी भी कतार में अपनी जगह देख सकते हैं।'),
+    ('कतार में अपनी जगह कैसे रद्द करें?', '"मेरी कतार" टैब खोलें और अपने टोकन पर "कतार रद्द करें" टैप करें। ध्यान दें कि इससे कतार में आपकी जगह तुरंत चली जाएगी।'),
+    ('अपनी दुकान कैसे पंजीकृत करें?', 'खाता बनाएं और "दुकानदार" चुनें। फिर दुकानें टैब खोलें और अपनी दुकान की जानकारी जोड़ने के लिए "नई दुकान बनाएं" पर टैप करें।'),
+    ('क्या दुकानदारों के लिए मुफ़्त ट्रायल है?', 'हां। हर नए दुकानदार को पहला महीना मुफ़्त मिलता है। दुकान बनाने के बाद दुकान प्रबंधित करें → सदस्यता खोलें और "Activate Free Trial" पर टैप करें। यह मुफ़्त महीना हर दुकानदार को सिर्फ़ एक बार मिलता है और उसी ईमेल या मोबाइल नंबर से नया खाता बनाकर दोबारा नहीं लिया जा सकता। इसे निष्पक्ष रखने के लिए हम केवल एक गुमनाम नोट रखते हैं (आपकी असली जानकारी नहीं) कि मुफ़्त महीना इस्तेमाल हो चुका है।'),
+    ('सदस्यता क्या है और इसकी कीमत क्या है?', 'सदस्यता आपकी दुकान को ग्राहकों के लिए खुला रखती है। मुफ़्त महीने के बाद इसकी कीमत 1 महीने के लिए ₹49 या 3 महीने के लिए ₹130 है। आप दुकान प्रबंधित करें → सदस्यता से कभी भी नवीनीकरण कर सकते हैं; नई अवधि आपकी मौजूदा अवधि खत्म होने के बाद जुड़ती है।'),
+    ('क्या मैं एक साथ कई कतारों में शामिल हो सकता हूं?', 'हां। आप एक ही समय में कई दुकानों की कतारों में रह सकते हैं और अपने सभी टोकन "मेरी कतार" टैब में देख सकते हैं।'),
+    ('कतार की स्थिति का क्या मतलब है?', '"प्रतीक्षारत" का मतलब है कि आप कतार में हैं। "लगभग पहुंच गए" का मतलब है कि आपसे पहले केवल 1 से 3 लोग हैं। "आपकी बारी" का मतलब है कि दुकान आपके लिए तैयार है। "पूर्ण" का मतलब है कि आपकी सेवा हो गई।'),
+    ('टोकन नंबर कैसे काम करता है?', 'हर बार कतार में शामिल होने पर आपको एक अलग टोकन नंबर मिलता है। हर दुकान के लिए नंबर बढ़ते जाते हैं और कभी दोबारा शुरू नहीं होते, इसलिए आप आसानी से देख सकते हैं कि आपका नंबर कब आएगा।'),
+    ('क्या मेरी व्यक्तिगत जानकारी सुरक्षित है?', 'हां। हम आपकी निजता को गंभीरता से लेते हैं। आपकी जानकारी सुरक्षित रखी जाती है और केवल सेवा चलाने के लिए इस्तेमाल होती है, जैसे कतार में शामिल होने पर दुकान को आपका नाम दिखाना। हम आपकी जानकारी कभी नहीं बेचते। आप अपनी प्रोफ़ाइल से कभी भी अपना खाता और डेटा हटा सकते हैं।'),
     ('क्या मुझे रिफंड मिल सकता है?', 'सभी भुगतान (सदस्यता, नवीनीकरण, अवधि बढ़ाना और फीचर्ड प्रमोशन) अंतिम हैं और वापस नहीं किए जाएंगे। बचे हुए दिनों, रद्द करने या दुकान बंद करने पर कोई रिफंड नहीं मिलेगा।'),
   ];
 
   static const _faqsMr = <(String, String)>[
-    ('रांगेत कसे सामील व्हावे?', 'श्रेणीनुसार दुकाने ब्राउज़ करा किंवा नावाने शोधा। दुकान उघडा, "रांगेत सामील व्हा आणि टोकन मिळवा" वर टॅप करा आणि पुष्टी करा। तुम्हाला टोकन नंबर मिळेल आणि तुम्ही तुमची थेट स्थिती ट्रॅक करू शकता.'),
-    ('माझी रांगेची जागा कशी रद्द करावी?', '"माझी रांग" टॅबवर जा, नंतर तुमच्या सक्रिय टोकनवर "रांग रद्द करा" टॅप करा. तुम्ही लगेच रांगेतील तुमची जागा गमवाल.'),
-    ('माझे दुकान कसे नोंदवावे?', 'खाते तयार करा आणि तुमची भूमिका म्हणून "दुकानदार" निवडा. नंतर दुकाने टॅबवर जा आणि "नवीन दुकान तयार करा" टॅप करा.'),
-    ('सदस्यता म्हणजे काय?', 'दुकान मालकांना त्यांचे दुकान उघडण्यासाठी आणि रांग स्वीकारण्यासाठी सक्रिय सदस्यता आवश्यक आहे. दुकान व्यवस्थापित करा → सदस्यता वर जा.'),
-    ('मी एकाच वेळी अनेक रांगांमध्ये सामील होऊ शकतो का?', 'होय, तुम्ही एकाच वेळी अनेक दुकानांच्या रांगांमध्ये सामील होऊ शकता. "माझी रांग" टॅबमधून तुमचे सर्व सक्रिय टोकन ट्रॅक करा.'),
-    ('रांगेच्या स्थितींचा अर्थ काय?', '"प्रतीक्षेत" — तुम्ही रांगेत आहात. "जवळजवळ पोहोचलात" — 1 ते 3 जण पुढे आहेत. "तुमची पाळी" — दुकान तुमच्यासाठी तयार आहे. "पूर्ण" — सेवा झाली.'),
-    ('टोकन नंबर कसा कार्य करतो?', 'प्रत्येक टोकन हा एक अनन्य नंबर आहे जो रांगेत सामील झाल्यावर नियुक्त केला जातो. टोकन नंबर कधीही रीसेट होत नाहीत — ते प्रति दुकान नेहमी वाढत असतात.'),
-    ('माझा वैयक्तिक डेटा सुरक्षित आहे का?', 'होय. सर्व डेटा row-level security धोरणांसह सुरक्षितपणे संग्रहीत केला जातो. आम्ही तुमची वैयक्तिक माहिती कधीही तृतीय पक्षांशी सामायिक करत नाही.'),
+    ('रांगेत कसे सामील व्हावे?', 'श्रेणी पाहून किंवा नावाने शोधून दुकान निवडा. दुकान उघडा, "रांगेत सामील व्हा आणि टोकन मिळवा" वर टॅप करा आणि पुष्टी करा. तुम्हाला टोकन नंबर मिळेल आणि तुम्ही रांगेतील तुमची जागा कधीही पाहू शकता.'),
+    ('रांगेतील माझी जागा कशी रद्द करावी?', '"माझी रांग" टॅब उघडा आणि तुमच्या टोकनवर "रांग रद्द करा" टॅप करा. लक्षात ठेवा, यामुळे रांगेतील तुमची जागा लगेच जाईल.'),
+    ('माझे दुकान कसे नोंदवावे?', 'खाते तयार करा आणि "दुकानदार" निवडा. नंतर दुकाने टॅब उघडा आणि तुमच्या दुकानाची माहिती भरण्यासाठी "नवीन दुकान तयार करा" वर टॅप करा.'),
+    ('दुकानदारांसाठी मोफत ट्रायल आहे का?', 'होय. प्रत्येक नवीन दुकानदाराला पहिला महिना मोफत मिळतो. दुकान तयार केल्यानंतर दुकान व्यवस्थापित करा → सदस्यता उघडा आणि "Activate Free Trial" वर टॅप करा. हा मोफत महिना प्रत्येक दुकानदाराला फक्त एकदाच मिळतो आणि त्याच ईमेल किंवा मोबाइल नंबरने नवीन खाते उघडून पुन्हा घेता येत नाही. हे न्याय्य ठेवण्यासाठी आम्ही फक्त एक अनामिक नोंद ठेवतो (तुमची खरी माहिती नाही) की मोफत महिना वापरला गेला आहे.'),
+    ('सदस्यता म्हणजे काय आणि त्याची किंमत किती?', 'सदस्यता तुमचे दुकान ग्राहकांसाठी उघडे ठेवते. मोफत महिन्यानंतर त्याची किंमत 1 महिन्यासाठी ₹49 किंवा 3 महिन्यांसाठी ₹130 आहे. तुम्ही दुकान व्यवस्थापित करा → सदस्यता मधून कधीही नूतनीकरण करू शकता; नवीन कालावधी तुमचा सध्याचा कालावधी संपल्यानंतर जोडला जातो.'),
+    ('मी एकाच वेळी अनेक रांगांमध्ये सामील होऊ शकतो का?', 'होय. तुम्ही एकाच वेळी अनेक दुकानांच्या रांगांमध्ये थांबू शकता आणि तुमचे सर्व टोकन "माझी रांग" टॅबमध्ये पाहू शकता.'),
+    ('रांगेच्या स्थितींचा अर्थ काय?', '"प्रतीक्षेत" म्हणजे तुम्ही रांगेत आहात. "जवळजवळ पोहोचलात" म्हणजे तुमच्या पुढे फक्त 1 ते 3 जण आहेत. "तुमची पाळी" म्हणजे दुकान तुमच्यासाठी तयार आहे. "पूर्ण" म्हणजे तुमची सेवा झाली.'),
+    ('टोकन नंबर कसा कार्य करतो?', 'रांगेत सामील झाल्यावर प्रत्येक वेळी तुम्हाला वेगळा टोकन नंबर मिळतो. प्रत्येक दुकानासाठी नंबर वाढत जातात आणि कधीही पुन्हा सुरू होत नाहीत, त्यामुळे तुमचा नंबर कधी येईल हे सहज कळते.'),
+    ('माझी वैयक्तिक माहिती सुरक्षित आहे का?', 'होय. आम्ही तुमच्या गोपनीयतेला गांभीर्याने घेतो. तुमची माहिती सुरक्षित ठेवली जाते आणि फक्त सेवा चालवण्यासाठी वापरली जाते, उदा. रांगेत सामील झाल्यावर दुकानाला तुमचे नाव दाखवणे. आम्ही तुमची माहिती कधीही विकत नाही. तुम्ही तुमच्या प्रोफाइलमधून कधीही तुमचे खाते आणि डेटा हटवू शकता.'),
     ('मला परतावा मिळू शकतो का?', 'सर्व पेमेंट (सबस्क्रिप्शन, नूतनीकरण, मुदतवाढ आणि फीचर्ड प्रमोशन) अंतिम आहेत आणि परत केली जाणार नाहीत. उरलेले दिवस, रद्द करणे किंवा दुकान बंद केल्यास कोणताही परतावा मिळणार नाही.'),
   ];
 
@@ -195,6 +198,15 @@ class LocaleService extends ChangeNotifier {
     'city': 'City',
 
     // ── Customer profile ──
+    // ── Profile details (read-only) ──
+    'yourDetails': 'Your Details',
+    'detailName': 'Name',
+    'detailEmail': 'Email',
+    'detailMobile': 'Mobile Number',
+    'detailRole': 'Account Type',
+    'detailLocation': 'City & State',
+    'detailsLocked': 'These details cannot be changed.',
+
     'helpSupport': 'Help & Support',
     'aboutNowait': 'About NOWAIT',
     'signOut': 'Sign Out',
@@ -485,6 +497,15 @@ class LocaleService extends ChangeNotifier {
     'address': 'पता',
     'city': 'शहर',
 
+    // ── Profile details (read-only) ──
+    'yourDetails': 'आपकी जानकारी',
+    'detailName': 'नाम',
+    'detailEmail': 'ईमेल',
+    'detailMobile': 'मोबाइल नंबर',
+    'detailRole': 'खाते का प्रकार',
+    'detailLocation': 'शहर और राज्य',
+    'detailsLocked': 'ये जानकारी बदली नहीं जा सकती।',
+
     'helpSupport': 'सहायता और समर्थन',
     'aboutNowait': 'NOWAIT के बारे में',
     'signOut': 'साइन आउट',
@@ -764,6 +785,15 @@ class LocaleService extends ChangeNotifier {
     'name': 'नाव',
     'address': 'पत्ता',
     'city': 'शहर',
+
+    // ── Profile details (read-only) ──
+    'yourDetails': 'तुमची माहिती',
+    'detailName': 'नाव',
+    'detailEmail': 'ईमेल',
+    'detailMobile': 'मोबाइल नंबर',
+    'detailRole': 'खात्याचा प्रकार',
+    'detailLocation': 'शहर आणि राज्य',
+    'detailsLocked': 'ही माहिती बदलता येत नाही.',
 
     'helpSupport': 'मदत आणि आधार',
     'aboutNowait': 'NOWAIT बद्दल',

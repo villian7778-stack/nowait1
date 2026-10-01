@@ -70,7 +70,8 @@ class _PromotionScreenState extends State<PromotionScreen> {
     }
   }
 
-  int get _totalCost => _selectedDays * 20;
+  static const _pricePerDay = 10;
+  int get _totalCost => _selectedDays * _pricePerDay;
 
   String _formatExpiry(String? expiresAt) {
     if (expiresAt == null) return '';
@@ -101,7 +102,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('$_selectedDays days × ₹20/day', style: GoogleFonts.inter(color: Colors.white, fontSize: 13)),
+                  Text('$_selectedDays day${_selectedDays == 1 ? '' : 's'} × ₹$_pricePerDay/day', style: GoogleFonts.inter(color: Colors.white, fontSize: 13)),
                   Text('₹$_totalCost', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
                 ],
               ),
@@ -128,18 +129,8 @@ class _PromotionScreenState extends State<PromotionScreen> {
               // after that point needs very different messaging than one before it.
               bool paymentCaptured = false;
               try {
-                final validUntil = DateTime.now()
-                    .add(Duration(days: _selectedDays))
-                    .toUtc()
-                    .toIso8601String();
-                const title = 'Featured Promotion';
                 final description = 'Shop promoted for $_selectedDays day${_selectedDays == 1 ? '' : 's'}';
-                final order = await PromotionService.instance.createPaymentOrder(
-                  widget.shop.id,
-                  title: title,
-                  description: description,
-                  validUntil: validUntil,
-                );
+                final order = await PromotionService.instance.createPaymentOrder(widget.shop.id, days: _selectedDays);
                 final result = await PaymentService.instance.openCheckout(
                   keyId: order['key_id'] as String,
                   orderId: order['order_id'] as String,
@@ -153,9 +144,6 @@ class _PromotionScreenState extends State<PromotionScreen> {
                 paymentCaptured = true;
                 await PromotionService.instance.verifyPaymentAndActivate(
                   widget.shop.id,
-                  title: title,
-                  description: description,
-                  validUntil: validUntil,
                   razorpayOrderId: result.orderId,
                   razorpayPaymentId: result.paymentId,
                   razorpaySignature: result.signature,
@@ -431,7 +419,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: [1, 3, 7, 14, 30].map((days) {
+                    children: [3, 7, 15].map((days) {
                       final selected = _selectedDays == days;
                       return GestureDetector(
                         onTap: () => setState(() => _selectedDays = days),
@@ -497,7 +485,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text('Rate', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
-                            Text('₹20/day', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                            Text('₹$_pricePerDay/day', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                             Text('for $_selectedDays day${_selectedDays == 1 ? '' : 's'}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
                           ],
                         ),

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
@@ -20,11 +21,45 @@ def get_shop_promotions(shop_id: str, active_only: bool = False) -> dict:
 FEATURED_TITLE = "Featured Promotion"
 
 
+# Featured Promotion: bought for a fixed number of days at a fixed daily rate. The server
+# works out the price from the days, never from anything the client sends.
+PROMOTION_DAYS = (3, 7, 15)
+PROMOTION_PRICE_PER_DAY = 10  # rupees
+
+# Customer-facing schemes run for at most 15 days (the app offers 3/7/15). A day of
+# slack covers clock/timezone differences between phone and server.
+SCHEME_MAX_DAYS = 15
+
+
+def validate_promotion_days(days: int) -> None:
+    if days not in PROMOTION_DAYS:
+        raise HTTPException(status_code=400, detail="Choose 3, 7 or 15 days.")
+
+
+def promotion_price_paise(days: int) -> int:
+    return days * PROMOTION_PRICE_PER_DAY * 100
+
+
+def _check_scheme_length(valid_until: str | None) -> None:
+    if not valid_until:
+        return
+    try:
+        end = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return
+    if end > datetime.now(timezone.utc) + timedelta(days=SCHEME_MAX_DAYS + 1):
+        raise HTTPException(status_code=400, detail="A scheme can run for at most 15 days.")
+
+
 def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: bool = False) -> dict:
     # "Featured Promotion" is the paid visibility boost; only the payment-verify flow
     # (paid=True) may create one. Free callers can only create schemes/offers.
     if data.title.strip() == FEATURED_TITLE and not paid:
         raise HTTPException(status_code=403, detail="Featured Promotions can only be created through payment.")
+    if data.title.strip() != FEATURED_TITLE:
+        _check_scheme_length(data.valid_until)
     shop = execute_one(
         supabase.table("shops")
         .select("id, name, city")
@@ -109,6 +144,7 @@ def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) ->
     if promo.data.get("title") == FEATURED_TITLE or new_title == FEATURED_TITLE:
         raise HTTPException(status_code=403, detail="Featured Promotions can't be edited. Create a new one through payment.")
 
+    _check_scheme_length(data.valid_until)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     result = supabase.table("promotions").update(update_data).eq("id", promotion_id).execute()
     return result.data[0]

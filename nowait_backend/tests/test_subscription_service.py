@@ -77,11 +77,11 @@ class TestCreateOrRenewSubscription:
              patch("app.services.subscription_service.supabase") as mock_sup:
             mock_sup.table = chain.table
             result = subscription_service.create_or_renew_subscription(
-                "shop-001", "owner-001", _sub_body(plan="premium", duration=365)
+                "shop-001", "owner-001", _sub_body(plan="basic", duration=90)
             )
 
         assert len(updates) == 1
-        assert updates[0]["plan"] == "premium"
+        assert updates[0]["plan"] == "basic"
 
 
 class TestGetSubscription:

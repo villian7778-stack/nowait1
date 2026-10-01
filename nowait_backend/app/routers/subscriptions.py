@@ -13,23 +13,35 @@ def get_subscription(shop_id: str, current_user: dict = Depends(get_current_owne
     return subscription_service.get_subscription(shop_id, current_user["id"])
 
 
+@router.post(
+    "/shop/{shop_id}/start-trial",
+    response_model=SubscriptionStatus,
+    status_code=201,
+    summary="Activate the one-time free month",
+)
+def start_trial(shop_id: str, current_user: dict = Depends(get_current_owner)):
+    """Starts the 30-day free trial. Allowed once per email / mobile number, and only for a
+    shop that has never had a plan. `GET /subscriptions/shop/{id}` reports `trial_available`."""
+    return subscription_service.start_free_trial(shop_id, current_user["id"])
+
+
 @router.post("/shop/{shop_id}", response_model=SubscriptionStatus, status_code=201, summary="Create or renew subscription")
 def create_or_renew(shop_id: str, body: SubscriptionCreate, current_user: dict = Depends(get_current_owner)):
     """
     Create a new subscription or renew existing one.
-    Plans: `basic` (Rs. 499/mo), `premium` (Rs. 999/mo).
-    Duration: 30, 90, or 365 days.
+    Plans: 1 month (30 days, Rs. 49) or 3 months (90 days, Rs. 130). New owners can start
+    one free month with `POST /subscriptions/shop/{id}/start-trial`.
 
     **Sample Request:**
     ```json
-    {"plan": "premium", "duration_days": 30}
+    {"plan": "basic", "duration_days": 30}
     ```
     **Sample Response:**
     ```json
     {
       "has_active_subscription": true,
       "subscription": {
-        "plan": "premium",
+        "plan": "basic",
         "status": "active",
         "days_remaining": 30
       }

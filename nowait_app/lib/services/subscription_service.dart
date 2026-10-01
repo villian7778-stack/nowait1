@@ -38,6 +38,12 @@ class SubscriptionService {
     });
   }
 
+  /// Starts the one-time free month (30 days). Allowed once per email / mobile number and only
+  /// for a shop that has never had a plan; the backend says 409 if it was already used.
+  Future<Map<String, dynamic>> startTrial(String shopId) async {
+    return await ApiClient.instance.post('/subscriptions/shop/$shopId/start-trial');
+  }
+
   /// Asks the backend to check Razorpay for this shop's paid-but-not-activated orders
   /// (checkout succeeded but verify never landed) and activate them. Returns the purpose
   /// ('subscription' / 'promotion') of each order it activated.

@@ -277,7 +277,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: [3, 7, 14, 30, 60].map((d) {
+                  children: [3, 7, 15].map((d) {
                     final sel = _durationDays == d;
                     return GestureDetector(
                       onTap: () => setState(() => _durationDays = d),

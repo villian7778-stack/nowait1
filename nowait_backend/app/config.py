@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Admin panel (/nowaitt_778admin) login — must be set in .env, no default.
     ADMIN_USERNAME: str = "778Admin"
     ADMIN_PASSWORD: str = ""
+    # Key used to hash emails / mobile numbers in trial_claims (the "one free month per
+    # person" record). Set a long random value in .env and never change it afterwards:
+    # changing it makes every earlier claim unrecognisable, so people could claim again.
+    TRIAL_HASH_KEY: str = "nowait-free-trial-v1"
 
     @property
     def is_production(self) -> bool:

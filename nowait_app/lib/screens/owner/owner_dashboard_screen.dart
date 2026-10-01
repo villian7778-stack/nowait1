@@ -10,6 +10,7 @@ import '../../services/shop_service.dart';
 import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/profile_details_card.dart';
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'manage_shop_screen.dart';
@@ -1575,7 +1576,9 @@ class _OwnerProfileTab extends StatelessWidget {
             const SizedBox(height: 10),
             Text(_name, style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
             Text(l.tr('shopOwner'), style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
+            const ProfileDetailsCard(),
+            const SizedBox(height: 24),
             _tile(context, Icons.language_rounded, l.tr('changeLanguage'), () => _showLanguageSheet(context),
               trailing: Text(
                 l.lang == kLangEn ? l.tr('english') : l.lang == kLangHi ? l.tr('hindi') : l.tr('marathi'),

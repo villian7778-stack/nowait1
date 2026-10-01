@@ -27,7 +27,7 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename IN ('profiles','shops','services','subscriptions','promotions',
                         'queue_entries','notifications','staff_members','queue_events',
-                        'shop_reviews','payment_transactions','shop_staff','reviews')
+                        'shop_reviews','payment_transactions','trial_claims','shop_staff','reviews')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
   END LOOP;
@@ -39,7 +39,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['profiles','shops','services','subscriptions','promotions',
                            'queue_entries','notifications','staff_members','queue_events',
-                           'shop_reviews','payment_transactions']
+                           'shop_reviews','payment_transactions','trial_claims']
   LOOP
     IF to_regclass('public.' || t) IS NOT NULL THEN
       EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);

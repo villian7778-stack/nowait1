@@ -175,6 +175,18 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     UNIQUE (razorpay_order_id)
 );
 
+-- One free month per owner. Holds only keyed hashes of the owner's email and mobile number
+-- (never the readable values) and deliberately has NO foreign key to profiles / auth.users,
+-- so deleting an account does not release the claim and the same person cannot sign up again
+-- for another free month. UNIQUE on each hash makes the claim atomic.
+CREATE TABLE IF NOT EXISTS trial_claims (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email_hash TEXT UNIQUE,
+    phone_hash TEXT UNIQUE,
+    claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (email_hash IS NOT NULL OR phone_hash IS NOT NULL)
+);
+
 -- ============================================================
 -- ADDITIVE COLUMNS (no-op on a fresh install; fills gaps on an
 -- existing database created before these were introduced)
@@ -213,6 +225,12 @@ ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS metadata JSONB;
 
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS service_ids            UUID[] NOT NULL DEFAULT '{}';
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER;
+
+-- Subscriptions: 'trial' marks the free first month. ('premium' stays allowed for rows created
+-- before the 1-month / 3-month plans.)
+ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
+ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
+    CHECK (plan IN ('basic', 'premium', 'trial'));
 
 -- Widen the notifications.type check to include 'scheme' (added after 'promotion')
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
@@ -433,6 +451,7 @@ ALTER TABLE staff_members        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE queue_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_reviews         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trial_claims         ENABLE ROW LEVEL SECURITY;
 
 -- No client-facing policies on purpose. The Flutter app only uses Supabase for sign-in;
 -- every data call goes through the FastAPI backend (service_role key bypasses RLS).
@@ -449,7 +468,7 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename IN ('profiles','shops','services','subscriptions','promotions',
                         'queue_entries','notifications','staff_members','queue_events',
-                        'shop_reviews','payment_transactions','shop_staff','reviews')
+                        'shop_reviews','payment_transactions','trial_claims','shop_staff','reviews')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
   END LOOP;
@@ -461,7 +480,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['profiles','shops','services','subscriptions','promotions',
                            'queue_entries','notifications','staff_members','queue_events',
-                           'shop_reviews','payment_transactions']
+                           'shop_reviews','payment_transactions','trial_claims']
   LOOP
     IF to_regclass('public.' || t) IS NOT NULL THEN
       EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);

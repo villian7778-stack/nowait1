@@ -11,6 +11,7 @@ import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
 import '../../widgets/queue_paused_note.dart';
+import '../../widgets/profile_details_card.dart';
 import '../../widgets/shop_card.dart' show DirectionsChip, ShopRatingRow;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
@@ -1738,6 +1739,8 @@ class _ProfileTab extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const ProfileDetailsCard(),
+                  const SizedBox(height: 24),
                   Text(
                     l.tr('profile').toUpperCase(),
                     style: GoogleFonts.inter(

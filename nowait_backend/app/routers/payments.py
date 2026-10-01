@@ -23,10 +23,9 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 
 logger = logging.getLogger(__name__)
 
-# Razorpay test-mode integration: every order is fixed at Rs. 1 regardless of the
-# selected plan/duration so the checkout flow can be verified end-to-end without
-# moving real money. Swap this for real plan/promotion pricing before going live.
-TEST_AMOUNT_PAISE = 100
+# Orders are charged at their real price - subscriptions from subscription_service.DURATION_PRICES,
+# Featured Promotions at promotion_service.PROMOTION_PRICE_PER_DAY per day. With Razorpay *test*
+# keys no real money moves.
 
 
 def _receipt(prefix: str, shop_id: str) -> str:
@@ -99,9 +98,11 @@ def _activate(txn: dict):
     if txn["purpose"] == "subscription":
         sub_data = SubscriptionCreate(plan=meta.get("plan"), duration_days=meta.get("duration_days"))
         return subscription_service.create_or_renew_subscription(txn["shop_id"], txn["owner_id"], sub_data)
-    promo_data = PromotionCreate(
-        title=meta.get("title"), description=meta.get("description"), valid_until=meta.get("valid_until")
-    )
+    # The promotion runs for the paid number of days from when it is activated (orders made by
+    # older app builds stored a fixed end date instead).
+    days = meta.get("days")
+    valid_until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat() if days else meta.get("valid_until")
+    promo_data = PromotionCreate(title=meta.get("title"), description=meta.get("description"), valid_until=valid_until)
     return promotion_service.create_promotion(txn["shop_id"], txn["owner_id"], promo_data, paid=True)
 
 
@@ -152,7 +153,7 @@ def create_subscription_order(
             detail=subscription_service.already_active_message(expires_at, body.duration_days),
         )
     receipt = _receipt("sub", shop_id)
-    order = razorpay_service.create_order(TEST_AMOUNT_PAISE, receipt)
+    order = razorpay_service.create_order(subscription_service.price_paise(body.duration_days), receipt)
     payment_transaction_service.record_order(
         shop_id, current_user["id"], "subscription", order["order_id"], order["amount"],
         {"plan": body.plan, "duration_days": body.duration_days},
@@ -190,11 +191,17 @@ def create_promotion_order(
     shop_id: str, body: PromotionOrderRequest, current_user: dict = Depends(get_current_owner)
 ):
     _require_shop_owner(shop_id, current_user["id"])
+    promotion_service.validate_promotion_days(body.days)
     receipt = _receipt("promo", shop_id)
-    order = razorpay_service.create_order(TEST_AMOUNT_PAISE, receipt)
+    order = razorpay_service.create_order(promotion_service.promotion_price_paise(body.days), receipt)
+    plural = "" if body.days == 1 else "s"
     payment_transaction_service.record_order(
         shop_id, current_user["id"], "promotion", order["order_id"], order["amount"],
-        {"title": body.title, "description": body.description, "valid_until": body.valid_until},
+        {
+            "title": promotion_service.FEATURED_TITLE,
+            "description": f"Shop promoted for {body.days} day{plural}",
+            "days": body.days,
+        },
     )
     return order
 

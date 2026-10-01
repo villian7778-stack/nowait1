@@ -24,6 +24,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String _selectedPlan = 'monthly';
   bool _isLoading = false;
   bool _subscriptionJustActivated = false;
+  // True while this shop has never had a plan and its owner hasn't had their one free month:
+  // the screen then offers "Activate Free Trial" and keeps the paid plans out of the way.
+  bool _trialAvailable = false;
   Map<String, dynamic>? _subscriptionData;
   final _l = LocaleService.instance;
 
@@ -60,10 +63,46 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         setState(() {
           _isActive = res['has_active_subscription'] as bool? ?? _isActive;
           _subscriptionData = res['subscription'] as Map<String, dynamic>?;
+          _trialAvailable = res['trial_available'] as bool? ?? false;
         });
       }
     } catch (_) {}
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  /// "Activate Free Trial": the shop goes live for 30 days with no payment. Afterwards the
+  /// 1-month / 3-month plans show and paying for one extends from the end of the trial.
+  Future<void> _startTrial() async {
+    setState(() => _isLoading = true);
+    String? error;
+    try {
+      final res = await SubscriptionService.instance.startTrial(widget.shop.id);
+      if (!mounted) return;
+      setState(() {
+        _isActive = res['has_active_subscription'] as bool? ?? true;
+        _subscriptionData = res['subscription'] as Map<String, dynamic>?;
+        _trialAvailable = false;
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('✓  Free trial activated! Your shop is now live for 1 month.'),
+          backgroundColor: AppColors.tertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    } on ApiException catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'Something went wrong. Please try again.';
+    }
+    // Not started (e.g. already used): reload so the screen shows the paid plans instead.
+    await _fetchSubscription();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+    }
   }
 
   String _formatExpiry() {
@@ -83,17 +122,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
   }
 
-  int get _price => _selectedPlan == 'yearly' ? 2999 : 300;
-  String get _period => _selectedPlan == 'yearly' ? '/year' : '/month';
-  int get _durationDays => _selectedPlan == 'yearly' ? 365 : 30;
+  // Two plans: 1 month (₹49) and 3 months (₹130). The server charges these same amounts.
+  int get _price => _selectedPlan == 'quarterly' ? 130 : 49;
+  String get _period => _selectedPlan == 'quarterly' ? '/3 months' : '/month';
+  int get _durationDays => _selectedPlan == 'quarterly' ? 90 : 30;
+  String get _planName => _selectedPlan == 'quarterly' ? '3-month' : 'Monthly';
+  // The free first month given to new owners (plan == 'trial').
+  bool get _isTrial => _subscriptionData?['plan'] == 'trial';
   // Backend expects 'basic' or 'premium', not the UI label
-  String get _backendPlan => _selectedPlan == 'yearly' ? 'premium' : 'basic';
+  String get _backendPlan => 'basic';
 
   final _benefits = [
     (Icons.queue_rounded, 'Accept Customer Queues', 'Customers can join your queue', true),
     (Icons.toggle_on_rounded, 'Open/Close Shop Control', 'Manage your shop status', true),
     (Icons.bar_chart_rounded, 'Queue Analytics', 'Daily traffic & wait insights', true),
-    (Icons.rocket_launch_outlined, 'Featured Promotions (add-on)', 'Appear in featured section (₹20/day)', false),
+    (Icons.rocket_launch_outlined, 'Featured Promotions (add-on)', 'Appear in featured section (₹10/day)', false),
     (Icons.local_offer_outlined, 'Add Schemes & Offers', 'Run deals for customers', true),
     (Icons.support_agent_rounded, 'Priority Support', '24/7 dedicated support', false),
   ];
@@ -108,7 +151,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final end = expiresAt == null ? null : DateTime.tryParse(expiresAt)?.toLocal();
     if (_isActive && end != null && end.isAfter(DateTime.now())) {
       final newEnd = end.add(Duration(days: _durationDays));
-      final length = _selectedPlan == 'yearly' ? '1 year' : '1 month';
+      final length = _selectedPlan == 'quarterly' ? '3 months' : '1 month';
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -170,7 +213,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Professional Plan', style: GoogleFonts.inter(color: Colors.white70, fontSize: 11)),
-                        Text('${_selectedPlan == 'yearly' ? 'Annual' : 'Monthly'} subscription', style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                        Text('$_planName subscription', style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   ),
@@ -219,7 +262,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   orderId: order['order_id'] as String,
                   amountPaise: order['amount'] as int,
                   name: widget.shop.name,
-                  description: '${_selectedPlan == 'yearly' ? 'Annual' : 'Monthly'} subscription',
+                  description: '$_planName subscription',
                   contact: AuthService.instance.profile?['phone'] as String?,
                   email: AuthService.instance.profile?['email'] as String?,
                 );
@@ -378,6 +421,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Offer the free month only to a shop with no plan yet whose owner hasn't used theirs.
+    final trialOffer = !_isActive && _trialAvailable;
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: CustomScrollView(
@@ -455,7 +500,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text('Subscription Active', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.tertiary)),
+                                      Text(_isTrial ? 'Free Trial Active' : 'Subscription Active', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.tertiary)),
                                       Text('${widget.shop.name} is live and accepting queues', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
                                       if (_formatExpiry().isNotEmpty) ...[
                                         const SizedBox(height: 2),
@@ -472,7 +517,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                         // ── Hero ──────────────────────────────────────────────────
                         Text(
-                          _isActive ? 'Manage Your Plan' : 'Choose Your Plan',
+                          _isActive ? 'Manage Your Plan' : (trialOffer ? 'Start Your Free Month' : 'Choose Your Plan'),
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
@@ -487,8 +532,40 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         ),
                         const SizedBox(height: 24),
 
+                        // ── Free trial offer (first-time owners, before any plan) ───────────
+                        if (trialOffer) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient135,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.card_giftcard_rounded, color: Colors.white, size: 22),
+                                    const SizedBox(width: 10),
+                                    Text('1 Month Free Trial',
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Your shop goes live straight away — no payment needed. After the free month you can continue with a 1-month (₹49) or 3-month (₹130) plan.',
+                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.85), height: 1.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+
                         // ── Plan toggle ───────────────────────────────────────────
-                        Row(
+                        if (!trialOffer) Row(
                           children: [
                             Expanded(
                               child: GestureDetector(
@@ -512,7 +589,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   child: Column(
                                     children: [
                                       Text(
-                                        '₹300',
+                                        '₹49',
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 28,
                                           fontWeight: FontWeight.w700,
@@ -534,41 +611,41 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => _selectedPlan = 'yearly'),
+                                onTap: () => setState(() => _selectedPlan = 'quarterly'),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    gradient: _selectedPlan == 'yearly' ? AppColors.primaryGradient135 : null,
-                                    color: _selectedPlan == 'yearly' ? null : AppColors.surfaceContainerLowest,
+                                    gradient: _selectedPlan == 'quarterly' ? AppColors.primaryGradient135 : null,
+                                    color: _selectedPlan == 'quarterly' ? null : AppColors.surfaceContainerLowest,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: _selectedPlan == 'yearly'
+                                      color: _selectedPlan == 'quarterly'
                                           ? Colors.transparent
                                           : AppColors.outline.withValues(alpha: 0.3),
                                     ),
-                                    boxShadow: _selectedPlan == 'yearly'
+                                    boxShadow: _selectedPlan == 'quarterly'
                                         ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))]
                                         : [],
                                   ),
                                   child: Column(
                                     children: [
                                       Text(
-                                        '₹2,999',
+                                        '₹130',
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 28,
                                           fontWeight: FontWeight.w700,
-                                          color: _selectedPlan == 'yearly' ? Colors.white : AppColors.onSurface,
+                                          color: _selectedPlan == 'quarterly' ? Colors.white : AppColors.onSurface,
                                         ),
                                       ),
                                       Text(
-                                        'per year',
+                                        'per 3 months',
                                         style: GoogleFonts.inter(
                                           fontSize: 12,
-                                          color: _selectedPlan == 'yearly' ? Colors.white70 : AppColors.onSurfaceVariant,
+                                          color: _selectedPlan == 'quarterly' ? Colors.white70 : AppColors.onSurfaceVariant,
                                         ),
                                       ),
-                                      if (_selectedPlan == 'yearly')
+                                      if (_selectedPlan == 'quarterly')
                                         Container(
                                           margin: const EdgeInsets.only(top: 4),
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -576,7 +653,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                             color: Colors.white.withValues(alpha: 0.25),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
-                                          child: Text('Save ₹601', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
+                                          child: Text('Save ₹17', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
                                         ),
                                     ],
                                   ),
@@ -597,7 +674,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         const SizedBox(height: 24),
 
                         // ── CTA ───────────────────────────────────────────────────
-                        if (!_isActive)
+                        if (trialOffer)
+                          SizedBox(
+                            width: double.infinity,
+                            child: GradientButton(
+                              label: 'Activate Free Trial',
+                              onPressed: _startTrial,
+                              icon: Icons.card_giftcard_rounded,
+                            ),
+                          )
+                        else if (!_isActive)
                           SizedBox(
                             width: double.infinity,
                             child: GradientButton(

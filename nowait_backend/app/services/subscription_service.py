@@ -5,9 +5,19 @@ from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.schemas.subscription import SubscriptionCreate
+from app.services import trial_service
 
-PLAN_PRICES = {"basic": 499, "premium": 999}
-VALID_DURATIONS = (30, 90, 365)
+# Two paid plans, priced by length (rupees). New owners also get TRIAL_DAYS free - see
+# trial_service. The plan label is 'basic' for both; 'premium' is only still accepted so
+# older app builds and existing rows keep working, and 'trial' marks the free month.
+PLAN_PRICES = {"basic": 49, "premium": 49}
+DURATION_PRICES = {30: 49, 90: 130}
+VALID_DURATIONS = tuple(DURATION_PRICES)
+
+
+def price_paise(duration_days: int) -> int:
+    """Amount to charge for a plan length, in paise. Server-side only - never from the client."""
+    return DURATION_PRICES[duration_days] * 100
 
 
 def _parse_dt(value: str) -> datetime:
@@ -32,11 +42,11 @@ def validate_plan(plan: str, duration_days: int) -> None:
     if plan not in PLAN_PRICES:
         raise HTTPException(status_code=400, detail=f"Invalid plan. Choose from: {list(PLAN_PRICES.keys())}")
     if duration_days not in VALID_DURATIONS:
-        raise HTTPException(status_code=400, detail="Duration must be 30, 90, or 365 days")
+        raise HTTPException(status_code=400, detail="Choose a 1-month or 3-month plan.")
 
 
 def already_active_message(expires_at: datetime, duration_days: int) -> str:
-    length = {30: "1 month", 90: "3 months", 365: "1 year"}.get(duration_days, f"{duration_days} days")
+    length = {30: "1 month", 90: "3 months"}.get(duration_days, f"{duration_days} days")
     new_end = expires_at + timedelta(days=duration_days)
     return (
         f"Your active subscription ends on {expires_at.strftime('%d %b %Y')}. "
@@ -56,7 +66,12 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
 
     result = execute_one(supabase.table("subscriptions").select("*").eq("shop_id", shop_id))
     if not result.data:
-        return {"has_active_subscription": False, "subscription": None}
+        # A shop that has never had a plan can start its owner's one free month.
+        return {
+            "has_active_subscription": False,
+            "subscription": None,
+            "trial_available": trial_service.is_eligible(owner_id),
+        }
 
     sub = result.data
     now = datetime.now(timezone.utc)
@@ -67,6 +82,24 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
     sub_response = {**sub, "days_remaining": days_remaining}
 
     return {"has_active_subscription": is_active, "subscription": sub_response}
+
+
+def start_free_trial(shop_id: str, owner_id: str) -> dict:
+    """Owner presses "Activate free trial": gives the shop its one free month."""
+    shop = execute_one(
+        supabase.table("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .eq("owner_id", owner_id)
+    )
+    if not shop.data:
+        raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+    if execute_one(supabase.table("subscriptions").select("id").eq("shop_id", shop_id)).data:
+        raise HTTPException(status_code=400, detail="The free trial is only for shops that have not subscribed yet.")
+
+    trial_service.start_trial(shop_id, owner_id)
+    return get_subscription(shop_id, owner_id)
 
 
 def create_or_renew_subscription(shop_id: str, owner_id: str, data: SubscriptionCreate) -> dict:

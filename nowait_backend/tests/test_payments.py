@@ -53,12 +53,12 @@ class TestExtension:
         assert exp == current_end + timedelta(days=30)        # 10 days left + 30 = 40 from now
         assert data["started_at"] == _iso(now - timedelta(days=20))  # original start kept
 
-    def test_year_extension_adds_365_days(self):
+    def test_three_month_extension_adds_90_days(self):
         now = datetime.now(timezone.utc)
         current_end = now + timedelta(days=100)
         data = self._run({"status": "active", "started_at": _iso(now), "expires_at": _iso(current_end)},
-                         plan="premium", duration=365)
-        assert datetime.fromisoformat(data["expires_at"]) == current_end + timedelta(days=365)
+                         plan="basic", duration=90)
+        assert datetime.fromisoformat(data["expires_at"]) == current_end + timedelta(days=90)
 
     def test_expired_subscription_restarts_from_now(self):
         now = datetime.now(timezone.utc)
@@ -86,7 +86,7 @@ class TestDaysAndMessage:
         now = datetime.now(timezone.utc)
         assert _days_left(now - timedelta(days=3), now) == 0
 
-    @pytest.mark.parametrize("days,label", [(30, "1 month"), (365, "1 year")])
+    @pytest.mark.parametrize("days,label", [(30, "1 month"), (90, "3 months")])
     def test_already_active_message(self, days, label):
         from app.services.subscription_service import already_active_message
         end = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -120,9 +120,27 @@ class TestCreateOrder:
 
     def test_active_with_extend_creates_order(self):
         end = datetime.now(timezone.utc) + timedelta(days=12)
-        res, rec = self._call(end, extend=True, plan="premium", duration=365)
+        res, rec = self._call(end, extend=True, plan="basic", duration=90)
         assert res["order_id"] == "o1"
-        assert rec.call_args[0][5] == {"plan": "premium", "duration_days": 365}
+        assert rec.call_args[0][5] == {"plan": "basic", "duration_days": 90}
+
+    @pytest.mark.parametrize("days,paise", [(30, 4900), (90, 13000)])
+    def test_order_is_charged_the_real_plan_price(self, days, paise):
+        from app.routers import payments
+        from app.schemas.payment import SubscriptionOrderRequest
+        with patch.object(payments, "_require_shop_owner"), \
+             patch.object(payments.subscription_service, "active_expiry", return_value=None), \
+             patch.object(payments.razorpay_service, "create_order",
+                          return_value={"order_id": "o1", "amount": paise, "currency": "INR", "key_id": "k"}) as create, \
+             patch.object(payments.payment_transaction_service, "record_order"):
+            payments.create_subscription_order(
+                "shop-001", SubscriptionOrderRequest(plan="basic", duration_days=days), {"id": "o"})
+        assert create.call_args[0][0] == paise
+
+    def test_yearly_plan_is_no_longer_offered(self):
+        with pytest.raises(HTTPException) as e:
+            self._call(None, extend=False, plan="premium", duration=365)
+        assert e.value.status_code == 400
 
     def test_no_subscription_creates_order(self):
         res, _ = self._call(None, extend=False)
@@ -301,3 +319,55 @@ class TestRazorpayReceipt:
             assert len(r) <= 40, r
             assert r.startswith(prefix + "_")
         assert _receipt("sub", shop_id) != _receipt("sub", shop_id)   # unique per order
+
+
+# ── Featured Promotion: 3/7/15 days at Rs. 10 a day, priced by the server ───────────────
+
+class TestPromotionOrder:
+    def _call(self, days):
+        from app.routers import payments
+        from app.schemas.payment import PromotionOrderRequest
+        with patch.object(payments, "_require_shop_owner"), \
+             patch.object(payments.razorpay_service, "create_order",
+                          return_value={"order_id": "o1", "amount": 0, "currency": "INR", "key_id": "k"}) as create, \
+             patch.object(payments.payment_transaction_service, "record_order") as rec:
+            payments.create_promotion_order("shop-001", PromotionOrderRequest(days=days), {"id": "owner-001"})
+        return create, rec
+
+    @pytest.mark.parametrize("days,paise", [(3, 3000), (7, 7000), (15, 15000)])
+    def test_charged_ten_rupees_a_day(self, days, paise):
+        create, rec = self._call(days)
+        assert create.call_args[0][0] == paise
+        meta = rec.call_args[0][5]
+        assert meta["days"] == days and meta["title"] == "Featured Promotion"
+
+    @pytest.mark.parametrize("days", [0, 1, 2, 5, 14, 30, 60, -1])
+    def test_other_lengths_are_rejected_before_payment(self, days):
+        with pytest.raises(HTTPException) as e:
+            self._call(days)
+        assert e.value.status_code == 400
+
+    def test_activation_runs_for_the_paid_days_from_now(self):
+        from app.routers import payments
+        txn = {"purpose": "promotion", "shop_id": "s", "owner_id": "o",
+               "metadata": {"title": "Featured Promotion", "description": "d", "days": 7}}
+        with patch.object(payments.promotion_service, "create_promotion") as create:
+            payments._activate(txn)
+        data = create.call_args[0][2]
+        end = datetime.fromisoformat(data.valid_until)
+        assert abs((end - (datetime.now(timezone.utc) + timedelta(days=7))).total_seconds()) < 5
+        assert create.call_args.kwargs == {"paid": True}
+
+
+class TestSchemeLength:
+    def test_up_to_15_days_is_fine(self):
+        from app.services.promotion_service import _check_scheme_length
+        _check_scheme_length((datetime.now(timezone.utc) + timedelta(days=15)).isoformat())
+        _check_scheme_length((datetime.now(timezone.utc) + timedelta(days=3)).isoformat().replace("+00:00", "Z"))
+        _check_scheme_length(None)
+
+    def test_longer_than_15_days_is_refused(self):
+        from app.services.promotion_service import _check_scheme_length
+        with pytest.raises(HTTPException) as e:
+            _check_scheme_length((datetime.now(timezone.utc) + timedelta(days=30)).isoformat())
+        assert e.value.status_code == 400
