@@ -70,6 +70,16 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     } catch (_) {}
   }
 
+  /// After the Subscription screen closes (the owner may have cancelled or renewed), refresh the
+  /// shop itself so the active/inactive state and expiry shown here are never stale.
+  Future<void> _refreshAfterSubscription() async {
+    try {
+      final updated = await ShopService.instance.getShop(_shop.id);
+      if (mounted) setState(() => _shop = updated);
+    } catch (_) {}
+    await _loadSubscriptionExpiry();
+  }
+
   Future<void> _loadSubscriptionExpiry() async {
     try {
       final res = await SubscriptionService.instance.getSubscription(_shop.id);
@@ -941,7 +951,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop)),
-                      ).then((_) => _loadSubscriptionExpiry()),
+                      ).then((_) => _refreshAfterSubscription()),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
@@ -1000,7 +1010,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                               onPressed: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop)),
-                              ).then((_) => setState(() {})),
+                              ).then((_) => _refreshAfterSubscription()),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.error,
                                 foregroundColor: Colors.white,

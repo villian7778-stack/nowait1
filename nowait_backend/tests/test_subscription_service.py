@@ -121,3 +121,34 @@ class TestGetSubscription:
 
         assert result["has_active_subscription"] is True
         assert result["subscription"]["days_remaining"] > 0
+
+
+class TestCancelSubscription:
+    def test_cancel_marks_cancelled_and_closes_the_shop(self):
+        from app.services import subscription_service as ss
+
+        tables = {}
+
+        def table(name):
+            tables.setdefault(name, make_chain(ok_list([{"id": "x", "status": "cancelled"}])))
+            return tables[name]
+
+        with patch.object(ss, "execute_one", return_value=MagicMock(data={"id": "shop-001"})), \
+                patch.object(ss, "supabase") as sb:
+            sb.table.side_effect = table
+            out = ss.cancel_subscription("shop-001", "owner-001")
+        assert out["has_active_subscription"] is False
+        tables["subscriptions"].update.assert_called_with({"status": "cancelled"})
+        tables["shops"].update.assert_called_with({"is_open": False})
+
+    def test_a_cancelled_plan_reports_inactive_and_zero_days_left(self):
+        from datetime import datetime, timedelta, timezone
+        from app.services import subscription_service as ss
+
+        future = (datetime.now(timezone.utc) + timedelta(days=20)).isoformat()
+        rows = iter([MagicMock(data={"id": "shop-001"}),
+                     MagicMock(data={"status": "cancelled", "expires_at": future, "shop_id": "shop-001"})])
+        with patch.object(ss, "execute_one", side_effect=lambda q: next(rows)), patch.object(ss, "supabase"):
+            out = ss.get_subscription("shop-001", "owner-001")
+        assert out["has_active_subscription"] is False
+        assert out["subscription"]["days_remaining"] == 0

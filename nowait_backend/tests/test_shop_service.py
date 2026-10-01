@@ -179,3 +179,30 @@ class TestCategoriesAndCities:
         assert "Mumbai" in cities
         assert "Pune" in cities
         assert "" not in cities
+
+
+class TestUnsubscribedShopsLookClosed:
+    def _run(self, subscribed_ids, **kw):
+        from app.services import shop_service
+
+        shops = [{"id": "a", "is_open": True, "queue_paused": False}, {"id": "b", "is_open": True, "queue_paused": False}]
+        results = {
+            "shops": ok_list(shops),
+            "subscriptions": ok_list([{"shop_id": i} for i in subscribed_ids]),
+            "promotions": ok_list([]),
+            "queue_entries": ok_list([]),
+        }
+        with patch.object(shop_service, "supabase") as sb, \
+                patch.object(shop_service.review_service, "get_batch_review_summaries", return_value={}):
+            sb.table.side_effect = lambda name: make_chain(results[name])
+            return shop_service.list_shops(**kw)["shops"]
+
+    def test_cancelled_or_expired_shop_is_reported_unsubscribed_and_closed(self):
+        out = {s["id"]: s for s in self._run(["a"])}
+        assert out["a"]["has_active_subscription"] and out["a"]["is_open"]
+        assert not out["b"]["has_active_subscription"]
+        assert out["b"]["is_open"] is False
+        assert out["b"]["can_accept_queue"] is False
+
+    def test_open_only_leaves_unsubscribed_shops_out(self):
+        assert [s["id"] for s in self._run(["a"], open_only=True)] == ["a"]

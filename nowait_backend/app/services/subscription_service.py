@@ -79,7 +79,8 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
     days_remaining = _days_left(expires_at, now)
 
     is_active = sub["status"] == "active" and expires_at > now
-    sub_response = {**sub, "days_remaining": days_remaining}
+    # A cancelled/expired plan has no days left, whatever its stored end date says.
+    sub_response = {**sub, "days_remaining": days_remaining if is_active else 0}
 
     return {"has_active_subscription": is_active, "subscription": sub_response}
 
