@@ -91,13 +91,13 @@ PROFILE = {"email": "Owner@Example.com", "phone": "+919834086519"}
 
 
 class TestStartTrial:
-    def test_new_owner_gets_30_free_days(self):
+    def test_new_owner_gets_90_free_days(self):
         db = FakeDb(PROFILE)
         _run(trial_service.start_trial, db, "shop-1", "owner-1")
         sub = db.subscriptions[0]
         assert sub["plan"] == "trial" and sub["status"] == "active" and sub["shop_id"] == "shop-1"
         days = (datetime.fromisoformat(sub["expires_at"]) - datetime.fromisoformat(sub["started_at"])).days
-        assert days == 30
+        assert days == 90 == trial_service.TRIAL_DAYS
 
     def test_stores_only_hashes(self):
         db = FakeDb(PROFILE)

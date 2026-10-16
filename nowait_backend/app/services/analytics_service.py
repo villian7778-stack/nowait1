@@ -39,6 +39,26 @@ def _range_bounds(from_date: Optional[str], to_date: Optional[str]):
     return start.isoformat(), end.isoformat() if end else None
 
 
+def _service_prices(shop_id: str) -> dict:
+    """service id -> current price (rupees) for this shop."""
+    rows = supabase.table("services").select("id, price").eq("shop_id", shop_id).execute().data or []
+    return {str(r["id"]): float(r.get("price") or 0) for r in rows}
+
+
+def _estimated_income(entries: list, prices: dict) -> float:
+    """Approximate income: for every COMPLETED visit, add up the price of each service the
+    customer picked when joining the queue (service_ids, or the older single service_id).
+    It is an estimate: it uses the services' current prices, and a service the owner has
+    since deleted can no longer be priced (it counts as 0)."""
+    total = 0.0
+    for e in entries:
+        if e.get("status") != "completed":
+            continue
+        ids = e.get("service_ids") or ([e["service_id"]] if e.get("service_id") else [])
+        total += sum(prices.get(str(i), 0.0) for i in ids)
+    return round(total, 2)
+
+
 def get_summary(
     shop_id: str,
     actor_id: str,
@@ -50,7 +70,7 @@ def get_summary(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     bounds = _range_bounds(from_date, to_date)
-    query = supabase.table("queue_entries").select("status, joined_at").eq("shop_id", shop_id)
+    query = supabase.table("queue_entries").select("status, joined_at, service_id, service_ids").eq("shop_id", shop_id)
     if bounds:
         query = query.gte("joined_at", bounds[0])
         if bounds[1]:
@@ -65,6 +85,7 @@ def get_summary(
     total_served = sum(1 for e in entries if e["status"] == "completed")
     total_cancelled = sum(1 for e in entries if e["status"] == "cancelled")
     total_skipped = sum(1 for e in entries if e["status"] == "skipped")
+    estimated_income = _estimated_income(entries, _service_prices(shop_id)) if total_served else 0.0
 
     # actual_service_minutes column does not exist in schema; avg derived from shop settings instead
     avg_service = None
@@ -92,6 +113,8 @@ def get_summary(
         "cancel_rate_pct": cancel_rate,
         "skip_rate_pct": skip_rate,
         "peak_hour": peak_hour,
+        # Approximate - see _estimated_income. Same date range as every other number here.
+        "estimated_income": estimated_income,
     }
 
 

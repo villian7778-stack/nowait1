@@ -1,10 +1,10 @@
-"""One free month for each new shop owner, started by the owner from the Subscription screen.
+"""Three free months for each new shop owner, started by the owner from the Subscription screen.
 
-A free month is claimed against the owner's email AND mobile number: if either one has
-already had a free month, no second one is given. Only keyed hashes of the two are stored,
+The free trial is claimed against the owner's email AND mobile number: if either one has
+already had a free trial, no second one is given. Only keyed hashes of the two are stored,
 in `trial_claims`, which has no link to `profiles`/`auth.users` — so the record survives
 account deletion (deleting the account and registering again with the same email or mobile
-number does not give another free month) while no readable personal data is kept.
+number does not give another free trial) while no readable personal data is kept.
 
 Matching is on the exact value: an email is compared case-insensitively, a mobile number as
 stored on the profile. Nothing cleverer than that.
@@ -21,7 +21,7 @@ from app.database import execute_one, supabase
 
 logger = logging.getLogger(__name__)
 
-TRIAL_DAYS = 30
+TRIAL_DAYS = 90  # 3 months
 
 
 def _digest(kind: str, value: str | None) -> str | None:
@@ -57,7 +57,7 @@ def is_eligible(owner_id: str) -> bool:
 
 
 def start_trial(shop_id: str, owner_id: str) -> None:
-    """Gives the shop its free month. Raises HTTPException if the owner has already had one
+    """Gives the shop its free trial (TRIAL_DAYS). Raises HTTPException if the owner has already had one
     (or on a server problem) — the caller is the owner pressing "Activate free trial"."""
     email_hash, phone_hash = _owner_hashes(owner_id)
     if email_hash is None and phone_hash is None:

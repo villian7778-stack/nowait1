@@ -22,5 +22,5 @@ class SubscriptionStatus(BaseModel):
     has_active_subscription: bool
     subscription: Optional[SubscriptionResponse] = None
     # True while this shop has never had a plan and its owner's email / mobile number
-    # have not had a free month yet - the app then offers "Activate free trial".
+    # have not had a free trial yet - the app then offers "Activate free trial".
     trial_available: bool = False

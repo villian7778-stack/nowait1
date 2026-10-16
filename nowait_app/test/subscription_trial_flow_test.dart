@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nowait_app/models/models.dart';
 import 'package:nowait_app/screens/owner/subscription_screen.dart';
 
-/// A tiny fake backend for the Subscription screen: remembers whether the free month has been
+/// A tiny fake backend for the Subscription screen: remembers whether the free trial has been
 /// started and answers the three calls the screen makes.
 class _FakeBackend {
   _FakeBackend({required this.trialAvailable});
@@ -18,13 +18,13 @@ class _FakeBackend {
 
   Map<String, dynamic> get _status {
     if (trialStarted) {
-      final end = DateTime.now().toUtc().add(const Duration(days: 30)).toIso8601String();
+      final end = DateTime.now().toUtc().add(const Duration(days: 90)).toIso8601String();
       return {
         'has_active_subscription': true,
         'subscription': {
           'id': 'sub', 'shop_id': 's1', 'plan': 'trial', 'status': 'active',
           'started_at': DateTime.now().toUtc().toIso8601String(), 'expires_at': end,
-          'days_remaining': 30, 'created_at': DateTime.now().toUtc().toIso8601String(),
+          'days_remaining': 90, 'created_at': DateTime.now().toUtc().toIso8601String(),
         },
         'trial_available': false,
       };
@@ -81,9 +81,9 @@ void main() {
     final backend = _FakeBackend(trialAvailable: true);
     await _open(tester, backend, () async {
       // Before activating: the trial offer, no paid plans, no pay button.
-      expect(find.text('1 Month Free Trial'), findsOneWidget);
+      expect(find.text('3 Months Free Trial'), findsOneWidget);
       expect(find.text('Activate Free Trial'), findsOneWidget);
-      expect(find.text('Start Your Free Month'), findsOneWidget);
+      expect(find.text('Start Your Free 3 Months'), findsOneWidget);
       expect(find.text('₹49'), findsNothing);
       expect(find.text('₹130'), findsNothing);
       expect(find.textContaining('Activate  ·'), findsNothing);
@@ -127,7 +127,7 @@ void main() {
   testWidgets('an owner who already used their free month goes straight to the paid plans', (tester) async {
     final backend = _FakeBackend(trialAvailable: false);
     await _open(tester, backend, () async {
-      expect(find.text('1 Month Free Trial'), findsNothing);
+      expect(find.text('3 Months Free Trial'), findsNothing);
       expect(find.text('Activate Free Trial'), findsNothing);
       expect(find.text('Choose Your Plan'), findsOneWidget);
       expect(find.text('Activate  ·  ₹49/month'), findsOneWidget);

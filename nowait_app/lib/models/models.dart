@@ -458,6 +458,9 @@ class AnalyticsSummary {
   final double cancelRatePct;
   final double skipRatePct;
   final int? peakHour;
+  /// Approximate income (rupees) for the selected dates: the prices of the services customers picked
+  /// when joining the queue, on visits that were completed. See the note shown with it.
+  final double estimatedIncome;
 
   const AnalyticsSummary({
     required this.period,
@@ -469,6 +472,7 @@ class AnalyticsSummary {
     required this.cancelRatePct,
     required this.skipRatePct,
     this.peakHour,
+    this.estimatedIncome = 0,
   });
 
   factory AnalyticsSummary.fromJson(Map<String, dynamic> json) {
@@ -482,8 +486,29 @@ class AnalyticsSummary {
       cancelRatePct: (json['cancel_rate_pct'] as num?)?.toDouble() ?? 0,
       skipRatePct: (json['skip_rate_pct'] as num?)?.toDouble() ?? 0,
       peakHour: json['peak_hour'] as int?,
+      estimatedIncome: (json['estimated_income'] as num?)?.toDouble() ?? 0,
     );
   }
+
+  /// Whole rupees with Indian digit grouping: 1234567 -> ₹12,34,567.
+  static String formatRupees(num amount) {
+    final n = amount.round();
+    var digits = n.abs().toString();
+    if (digits.length > 3) {
+      final last3 = digits.substring(digits.length - 3);
+      var rest = digits.substring(0, digits.length - 3);
+      final groups = <String>[];
+      while (rest.length > 2) {
+        groups.insert(0, rest.substring(rest.length - 2));
+        rest = rest.substring(0, rest.length - 2);
+      }
+      if (rest.isNotEmpty) groups.insert(0, rest);
+      digits = '${groups.join(',')},$last3';
+    }
+    return '${n < 0 ? '-' : ''}₹$digits';
+  }
+
+  String get estimatedIncomeText => formatRupees(estimatedIncome);
 
   String get peakHourText {
     if (peakHour == null) return 'N/A';

@@ -38,7 +38,7 @@ class SubscriptionService {
     });
   }
 
-  /// Starts the one-time free month (30 days). Allowed once per email / mobile number and only
+  /// Starts the one-time free trial (3 months, 90 days). Allowed once per email / mobile number and only
   /// for a shop that has never had a plan; the backend says 409 if it was already used.
   Future<Map<String, dynamic>> startTrial(String shopId) async {
     return await ApiClient.instance.post('/subscriptions/shop/$shopId/start-trial');

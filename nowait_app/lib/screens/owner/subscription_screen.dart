@@ -24,7 +24,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String _selectedPlan = 'monthly';
   bool _isLoading = false;
   bool _subscriptionJustActivated = false;
-  // True while this shop has never had a plan and its owner hasn't had their one free month:
+  // True while this shop has never had a plan and its owner hasn't had their free 3-month trial:
   // the screen then offers "Activate Free Trial" and keeps the paid plans out of the way.
   bool _trialAvailable = false;
   Map<String, dynamic>? _subscriptionData;
@@ -77,7 +77,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  /// "Activate Free Trial": the shop goes live for 30 days with no payment. Afterwards the
+  /// "Activate Free Trial": the shop goes live for 90 days (3 months) with no payment. Afterwards the
   /// 1-month / 3-month plans show and paying for one extends from the end of the trial.
   Future<void> _startTrial() async {
     setState(() => _isLoading = true);
@@ -93,7 +93,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✓  Free trial activated! Your shop is now live for 1 month.'),
+          content: const Text('✓  Free trial activated! Your shop is now live for 3 months.'),
           backgroundColor: AppColors.tertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -134,7 +134,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String get _period => _selectedPlan == 'quarterly' ? '/3 months' : '/month';
   int get _durationDays => _selectedPlan == 'quarterly' ? 90 : 30;
   String get _planName => _selectedPlan == 'quarterly' ? '3-month' : 'Monthly';
-  // The free first month given to new owners (plan == 'trial').
+  // The free 3-month trial given to new owners (plan == 'trial').
   bool get _isTrial => _subscriptionData?['plan'] == 'trial';
   // Backend expects 'basic' or 'premium', not the UI label
   String get _backendPlan => 'basic';
@@ -497,7 +497,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Offer the free month only to a shop with no plan yet whose owner hasn't used theirs.
+    // Offer the free trial only to a shop with no plan yet whose owner hasn't used theirs.
     final trialOffer = !_isActive && _trialAvailable;
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -563,7 +563,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        trialOffer ? 'Try 1 month free trial' : 'Choose a plan',
+                                        trialOffer ? 'Try 3 months free trial' : 'Choose a plan',
                                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
                                       ),
                                       const SizedBox(width: 4),
@@ -608,7 +608,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                         // ── Hero ──────────────────────────────────────────────────
                         Text(
-                          _isActive ? 'Manage Your Plan' : (trialOffer ? 'Start Your Free Month' : 'Choose Your Plan'),
+                          _isActive ? 'Manage Your Plan' : (trialOffer ? 'Start Your Free 3 Months' : 'Choose Your Plan'),
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 26,
                             fontWeight: FontWeight.w800,
@@ -640,13 +640,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   children: [
                                     const Icon(Icons.card_giftcard_rounded, color: Colors.white, size: 22),
                                     const SizedBox(width: 10),
-                                    Text('1 Month Free Trial',
+                                    Text('3 Months Free Trial',
                                         style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Your shop goes live straight away — no payment needed. After the free month you can continue with a 1-month (₹49) or 3-month (₹130) plan.',
+                                  'Your shop goes live straight away — no payment needed. After the free 3 months you can continue with a 1-month (₹49) or 3-month (₹130) plan.',
                                   style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withValues(alpha: 0.85), height: 1.5),
                                 ),
                               ],

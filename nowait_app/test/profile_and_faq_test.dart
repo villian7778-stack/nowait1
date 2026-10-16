@@ -95,7 +95,7 @@ void main() {
       final safe = faqs.firstWhere((f) => f.$1.contains('personal information'));
       expect(safe.$2, contains('never sell'));
       final sub = faqs.firstWhere((f) => f.$1.contains('subscription'));
-      expect(sub.$2, allOf(contains('₹49'), contains('₹130'), contains('free month')));
+      expect(sub.$2, allOf(contains('₹49'), contains('₹130'), contains('free 3 months')));
       expect(faqs.any((f) => f.$1.contains('free trial')), isTrue);
     });
   });

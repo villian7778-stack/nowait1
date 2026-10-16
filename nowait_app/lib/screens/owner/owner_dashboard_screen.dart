@@ -976,6 +976,21 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
 
   bool get _isCustom => _period == 'custom';
 
+  /// Which dates the numbers below are for, in words.
+  String get _rangeText {
+    final l = LocaleService.instance;
+    switch (_period) {
+      case 'week':
+        return l.tr('periodWeek');
+      case 'month':
+        return l.tr('periodMonth');
+      case 'custom':
+        return '${_fmt(_fromDate)} – ${_fmt(_toDate)}';
+      default:
+        return l.tr('periodToday');
+    }
+  }
+
   String _fmt(DateTime? d) => d == null
       ? 'Select'
       : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
@@ -1156,6 +1171,13 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                       ),
                     )
                   else if (_summary != null) ...[
+                    // Income for the selected dates (an approximation - the note says so)
+                    _IncomeCard(
+                      amountText: _summary!.estimatedIncomeText,
+                      served: _summary!.totalServed,
+                      rangeText: _rangeText,
+                    ),
+                    const SizedBox(height: 16),
                     // Metric grid
                     GridView.count(
                       crossAxisCount: 2,
@@ -1240,6 +1262,94 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Total income and customers served for the selected dates, with the "approximate" note.
+class _IncomeCard extends StatelessWidget {
+  final String amountText;
+  final int served;
+  final String rangeText;
+  const _IncomeCard({required this.amountText, required this.served, required this.rangeText});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = LocaleService.instance;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient135,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 6))],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(l.tr('totalIncome'),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.85))),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(6)),
+                          child: Text(l.tr('approxLabel'), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(amountText, style: GoogleFonts.plusJakartaSans(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(rangeText, style: GoogleFonts.inter(fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(l.tr('customersServed'),
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.85))),
+                    const SizedBox(height: 6),
+                    Text('$served', style: GoogleFonts.plusJakartaSans(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline_rounded, size: 14, color: AppColors.onSurfaceVariant.withValues(alpha: 0.8)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(l.tr('incomeNote'),
+                  style: GoogleFonts.inter(fontSize: 11, height: 1.4, color: AppColors.onSurfaceVariant)),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

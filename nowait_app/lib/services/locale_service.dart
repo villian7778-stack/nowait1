@@ -52,8 +52,8 @@ class LocaleService extends ChangeNotifier {
     ('How do I join a queue?', 'Find a shop by browsing the categories or searching by name. Open the shop, tap "Join Queue & Get Token" and confirm. You will get a token number and can follow your place in the line at any time.'),
     ('How do I cancel my place in the queue?', 'Open the "My Queue" tab and tap "Cancel Queue" on your token. Please note that you will lose your place in the line straight away.'),
     ('How do I register my shop?', 'Create an account and choose "Shop Owner". Then open the Shops tab and tap "Create New Shop" to add your shop details.'),
-    ('Is there a free trial for shop owners?', 'Yes. Every new shop owner gets the first month free. After creating your shop, open Manage Shop → Subscription and tap "Activate Free Trial". The free month is given once to each owner and cannot be repeated by opening a new account with the same email or mobile number. To keep this fair, we keep an anonymous note (not your actual details) that a free month has been used.'),
-    ('What is a subscription and what does it cost?', 'A subscription keeps your shop open for customers. After the free month, it costs ₹49 for 1 month or ₹130 for 3 months. You can renew at any time from Manage Shop → Subscription, and the new period is added after your current one ends.'),
+    ('Is there a free trial for shop owners?', 'Yes. Every new shop owner gets the first 3 months free. After creating your shop, open Manage Shop → Subscription and tap "Activate Free Trial". The free 3 months are given once to each owner and cannot be repeated by opening a new account with the same email or mobile number. To keep this fair, we keep an anonymous note (not your actual details) that the free trial has been used.'),
+    ('What is a subscription and what does it cost?', 'A subscription keeps your shop open for customers. After the free 3 months, it costs ₹49 for 1 month or ₹130 for 3 months. You can renew at any time from Manage Shop → Subscription, and the new period is added after your current one ends.'),
     ('Can I join more than one queue at a time?', 'Yes. You can wait in the queues of several shops at the same time and follow all your tokens from the "My Queue" tab.'),
     ('What do the queue statuses mean?', '"Waiting" means you are in line. "Almost There" means only 1 to 3 people are ahead of you. "Your Turn" means the shop is ready for you. "Completed" means your service is done.'),
     ('How does the token number work?', 'You get a unique token number each time you join a queue. Numbers keep increasing for each shop and never start over, so it is easy to see where you stand.'),
@@ -65,8 +65,8 @@ class LocaleService extends ChangeNotifier {
     ('कतार में कैसे शामिल हों?', 'श्रेणी देखकर या नाम से खोजकर दुकान चुनें। दुकान खोलें, "कतार में शामिल हों और टोकन पाएं" पर टैप करें और पुष्टि करें। आपको एक टोकन नंबर मिलेगा और आप कभी भी कतार में अपनी जगह देख सकते हैं।'),
     ('कतार में अपनी जगह कैसे रद्द करें?', '"मेरी कतार" टैब खोलें और अपने टोकन पर "कतार रद्द करें" टैप करें। ध्यान दें कि इससे कतार में आपकी जगह तुरंत चली जाएगी।'),
     ('अपनी दुकान कैसे पंजीकृत करें?', 'खाता बनाएं और "दुकानदार" चुनें। फिर दुकानें टैब खोलें और अपनी दुकान की जानकारी जोड़ने के लिए "नई दुकान बनाएं" पर टैप करें।'),
-    ('क्या दुकानदारों के लिए मुफ़्त ट्रायल है?', 'हां। हर नए दुकानदार को पहला महीना मुफ़्त मिलता है। दुकान बनाने के बाद दुकान प्रबंधित करें → सदस्यता खोलें और "Activate Free Trial" पर टैप करें। यह मुफ़्त महीना हर दुकानदार को सिर्फ़ एक बार मिलता है और उसी ईमेल या मोबाइल नंबर से नया खाता बनाकर दोबारा नहीं लिया जा सकता। इसे निष्पक्ष रखने के लिए हम केवल एक गुमनाम नोट रखते हैं (आपकी असली जानकारी नहीं) कि मुफ़्त महीना इस्तेमाल हो चुका है।'),
-    ('सदस्यता क्या है और इसकी कीमत क्या है?', 'सदस्यता आपकी दुकान को ग्राहकों के लिए खुला रखती है। मुफ़्त महीने के बाद इसकी कीमत 1 महीने के लिए ₹49 या 3 महीने के लिए ₹130 है। आप दुकान प्रबंधित करें → सदस्यता से कभी भी नवीनीकरण कर सकते हैं; नई अवधि आपकी मौजूदा अवधि खत्म होने के बाद जुड़ती है।'),
+    ('क्या दुकानदारों के लिए मुफ़्त ट्रायल है?', 'हां। हर नए दुकानदार को पहले 3 महीने मुफ़्त मिलते हैं। दुकान बनाने के बाद दुकान प्रबंधित करें → सदस्यता खोलें और "Activate Free Trial" पर टैप करें। ये मुफ़्त 3 महीने हर दुकानदार को सिर्फ़ एक बार मिलते हैं और उसी ईमेल या मोबाइल नंबर से नया खाता बनाकर दोबारा नहीं लिए जा सकते। इसे निष्पक्ष रखने के लिए हम केवल एक गुमनाम नोट रखते हैं (आपकी असली जानकारी नहीं) कि मुफ़्त ट्रायल इस्तेमाल हो चुका है।'),
+    ('सदस्यता क्या है और इसकी कीमत क्या है?', 'सदस्यता आपकी दुकान को ग्राहकों के लिए खुला रखती है। मुफ़्त 3 महीनों के बाद इसकी कीमत 1 महीने के लिए ₹49 या 3 महीने के लिए ₹130 है। आप दुकान प्रबंधित करें → सदस्यता से कभी भी नवीनीकरण कर सकते हैं; नई अवधि आपकी मौजूदा अवधि खत्म होने के बाद जुड़ती है।'),
     ('क्या मैं एक साथ कई कतारों में शामिल हो सकता हूं?', 'हां। आप एक ही समय में कई दुकानों की कतारों में रह सकते हैं और अपने सभी टोकन "मेरी कतार" टैब में देख सकते हैं।'),
     ('कतार की स्थिति का क्या मतलब है?', '"प्रतीक्षारत" का मतलब है कि आप कतार में हैं। "लगभग पहुंच गए" का मतलब है कि आपसे पहले केवल 1 से 3 लोग हैं। "आपकी बारी" का मतलब है कि दुकान आपके लिए तैयार है। "पूर्ण" का मतलब है कि आपकी सेवा हो गई।'),
     ('टोकन नंबर कैसे काम करता है?', 'हर बार कतार में शामिल होने पर आपको एक अलग टोकन नंबर मिलता है। हर दुकान के लिए नंबर बढ़ते जाते हैं और कभी दोबारा शुरू नहीं होते, इसलिए आप आसानी से देख सकते हैं कि आपका नंबर कब आएगा।'),
@@ -78,8 +78,8 @@ class LocaleService extends ChangeNotifier {
     ('रांगेत कसे सामील व्हावे?', 'श्रेणी पाहून किंवा नावाने शोधून दुकान निवडा. दुकान उघडा, "रांगेत सामील व्हा आणि टोकन मिळवा" वर टॅप करा आणि पुष्टी करा. तुम्हाला टोकन नंबर मिळेल आणि तुम्ही रांगेतील तुमची जागा कधीही पाहू शकता.'),
     ('रांगेतील माझी जागा कशी रद्द करावी?', '"माझी रांग" टॅब उघडा आणि तुमच्या टोकनवर "रांग रद्द करा" टॅप करा. लक्षात ठेवा, यामुळे रांगेतील तुमची जागा लगेच जाईल.'),
     ('माझे दुकान कसे नोंदवावे?', 'खाते तयार करा आणि "दुकानदार" निवडा. नंतर दुकाने टॅब उघडा आणि तुमच्या दुकानाची माहिती भरण्यासाठी "नवीन दुकान तयार करा" वर टॅप करा.'),
-    ('दुकानदारांसाठी मोफत ट्रायल आहे का?', 'होय. प्रत्येक नवीन दुकानदाराला पहिला महिना मोफत मिळतो. दुकान तयार केल्यानंतर दुकान व्यवस्थापित करा → सदस्यता उघडा आणि "Activate Free Trial" वर टॅप करा. हा मोफत महिना प्रत्येक दुकानदाराला फक्त एकदाच मिळतो आणि त्याच ईमेल किंवा मोबाइल नंबरने नवीन खाते उघडून पुन्हा घेता येत नाही. हे न्याय्य ठेवण्यासाठी आम्ही फक्त एक अनामिक नोंद ठेवतो (तुमची खरी माहिती नाही) की मोफत महिना वापरला गेला आहे.'),
-    ('सदस्यता म्हणजे काय आणि त्याची किंमत किती?', 'सदस्यता तुमचे दुकान ग्राहकांसाठी उघडे ठेवते. मोफत महिन्यानंतर त्याची किंमत 1 महिन्यासाठी ₹49 किंवा 3 महिन्यांसाठी ₹130 आहे. तुम्ही दुकान व्यवस्थापित करा → सदस्यता मधून कधीही नूतनीकरण करू शकता; नवीन कालावधी तुमचा सध्याचा कालावधी संपल्यानंतर जोडला जातो.'),
+    ('दुकानदारांसाठी मोफत ट्रायल आहे का?', 'होय. प्रत्येक नवीन दुकानदाराला पहिले 3 महिने मोफत मिळतात. दुकान तयार केल्यानंतर दुकान व्यवस्थापित करा → सदस्यता उघडा आणि "Activate Free Trial" वर टॅप करा. हे मोफत 3 महिने प्रत्येक दुकानदाराला फक्त एकदाच मिळतात आणि त्याच ईमेल किंवा मोबाइल नंबरने नवीन खाते उघडून पुन्हा घेता येत नाहीत. हे न्याय्य ठेवण्यासाठी आम्ही फक्त एक अनामिक नोंद ठेवतो (तुमची खरी माहिती नाही) की मोफत ट्रायल वापरला गेला आहे.'),
+    ('सदस्यता म्हणजे काय आणि त्याची किंमत किती?', 'सदस्यता तुमचे दुकान ग्राहकांसाठी उघडे ठेवते. मोफत 3 महिन्यांनंतर त्याची किंमत 1 महिन्यासाठी ₹49 किंवा 3 महिन्यांसाठी ₹130 आहे. तुम्ही दुकान व्यवस्थापित करा → सदस्यता मधून कधीही नूतनीकरण करू शकता; नवीन कालावधी तुमचा सध्याचा कालावधी संपल्यानंतर जोडला जातो.'),
     ('मी एकाच वेळी अनेक रांगांमध्ये सामील होऊ शकतो का?', 'होय. तुम्ही एकाच वेळी अनेक दुकानांच्या रांगांमध्ये थांबू शकता आणि तुमचे सर्व टोकन "माझी रांग" टॅबमध्ये पाहू शकता.'),
     ('रांगेच्या स्थितींचा अर्थ काय?', '"प्रतीक्षेत" म्हणजे तुम्ही रांगेत आहात. "जवळजवळ पोहोचलात" म्हणजे तुमच्या पुढे फक्त 1 ते 3 जण आहेत. "तुमची पाळी" म्हणजे दुकान तुमच्यासाठी तयार आहे. "पूर्ण" म्हणजे तुमची सेवा झाली.'),
     ('टोकन नंबर कसा कार्य करतो?', 'रांगेत सामील झाल्यावर प्रत्येक वेळी तुम्हाला वेगळा टोकन नंबर मिळतो. प्रत्येक दुकानासाठी नंबर वाढत जातात आणि कधीही पुन्हा सुरू होत नाहीत, त्यामुळे तुमचा नंबर कधी येईल हे सहज कळते.'),
@@ -198,6 +198,15 @@ class LocaleService extends ChangeNotifier {
     'city': 'City',
 
     // ── Customer profile ──
+    // ── Analytics: income ──
+    'totalIncome': 'Total Income',
+    'approxLabel': 'Approx.',
+    'customersServed': 'Customers Served',
+    'incomeNote': 'Income is an approximate value. It is calculated from the services customers selected when joining the queue, using your current service prices.',
+    'periodToday': 'Today',
+    'periodWeek': 'Last 7 days',
+    'periodMonth': 'Last 30 days',
+
     // ── Profile details (read-only) ──
     'yourDetails': 'Your Details',
     'detailName': 'Name',
@@ -499,6 +508,15 @@ class LocaleService extends ChangeNotifier {
     'address': 'पता',
     'city': 'शहर',
 
+    // ── Analytics: income ──
+    'totalIncome': 'कुल आय',
+    'approxLabel': 'अनुमानित',
+    'customersServed': 'सेवा दिए गए ग्राहक',
+    'incomeNote': 'आय एक अनुमानित मूल्य है। यह कतार में शामिल होते समय ग्राहकों द्वारा चुनी गई सेवाओं और आपकी वर्तमान सेवा कीमतों के आधार पर गणना की जाती है।',
+    'periodToday': 'आज',
+    'periodWeek': 'पिछले 7 दिन',
+    'periodMonth': 'पिछले 30 दिन',
+
     // ── Profile details (read-only) ──
     'yourDetails': 'आपकी जानकारी',
     'detailName': 'नाम',
@@ -789,6 +807,15 @@ class LocaleService extends ChangeNotifier {
     'name': 'नाव',
     'address': 'पत्ता',
     'city': 'शहर',
+
+    // ── Analytics: income ──
+    'totalIncome': 'एकूण उत्पन्न',
+    'approxLabel': 'अंदाजे',
+    'customersServed': 'सेवा दिलेले ग्राहक',
+    'incomeNote': 'उत्पन्न हे अंदाजे मूल्य आहे. रांगेत सामील होताना ग्राहकांनी निवडलेल्या सेवा आणि तुमच्या सध्याच्या सेवा किमतींवरून ते मोजले जाते.',
+    'periodToday': 'आज',
+    'periodWeek': 'मागील 7 दिवस',
+    'periodMonth': 'मागील 30 दिवस',
 
     // ── Profile details (read-only) ──
     'yourDetails': 'तुमची माहिती',

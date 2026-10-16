@@ -17,10 +17,10 @@ def get_subscription(shop_id: str, current_user: dict = Depends(get_current_owne
     "/shop/{shop_id}/start-trial",
     response_model=SubscriptionStatus,
     status_code=201,
-    summary="Activate the one-time free month",
+    summary="Activate the one-time free 3 months",
 )
 def start_trial(shop_id: str, current_user: dict = Depends(get_current_owner)):
-    """Starts the 30-day free trial. Allowed once per email / mobile number, and only for a
+    """Starts the 90-day (3-month) free trial. Allowed once per email / mobile number, and only for a
     shop that has never had a plan. `GET /subscriptions/shop/{id}` reports `trial_available`."""
     return subscription_service.start_free_trial(shop_id, current_user["id"])
 
@@ -30,7 +30,7 @@ def create_or_renew(shop_id: str, body: SubscriptionCreate, current_user: dict =
     """
     Create a new subscription or renew existing one.
     Plans: 1 month (30 days, Rs. 49) or 3 months (90 days, Rs. 130). New owners can start
-    one free month with `POST /subscriptions/shop/{id}/start-trial`.
+    a free 3-month trial with `POST /subscriptions/shop/{id}/start-trial`.
 
     **Sample Request:**
     ```json

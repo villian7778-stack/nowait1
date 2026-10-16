@@ -9,7 +9,7 @@ from app.services import trial_service
 
 # Two paid plans, priced by length (rupees). New owners also get TRIAL_DAYS free - see
 # trial_service. The plan label is 'basic' for both; 'premium' is only still accepted so
-# older app builds and existing rows keep working, and 'trial' marks the free month.
+# older app builds and existing rows keep working, and 'trial' marks the free 3-month trial.
 PLAN_PRICES = {"basic": 49, "premium": 49}
 DURATION_PRICES = {30: 49, 90: 130}
 VALID_DURATIONS = tuple(DURATION_PRICES)
@@ -66,7 +66,7 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
 
     result = execute_one(supabase.table("subscriptions").select("*").eq("shop_id", shop_id))
     if not result.data:
-        # A shop that has never had a plan can start its owner's one free month.
+        # A shop that has never had a plan can start its owner's one free 3-month trial.
         return {
             "has_active_subscription": False,
             "subscription": None,
@@ -86,7 +86,7 @@ def get_subscription(shop_id: str, owner_id: str) -> dict:
 
 
 def start_free_trial(shop_id: str, owner_id: str) -> dict:
-    """Owner presses "Activate free trial": gives the shop its one free month."""
+    """Owner presses "Activate free trial": gives the shop its one free 3-month trial."""
     shop = execute_one(
         supabase.table("shops")
         .select("id")
