@@ -251,6 +251,9 @@ class TestNoFreeFeatured:
 
 # ── image upload size cap ────────────────────────────────────────────────────
 
+JPEG_HEADER = bytes([0xFF, 0xD8, 0xFF, 0xE0])  # a real JPEG starts like this
+
+
 class TestImageUploadLimit:
     def _post(self, size):
         import io
@@ -263,7 +266,7 @@ class TestImageUploadLimit:
                        return_value={"url": "u", "images": ["u"]}) as up:
                 r = TestClient(app).post(
                     "/shops/shop-001/images",
-                    files={"file": ("a.jpg", io.BytesIO(b"x" * size), "image/jpeg")})
+                    files={"file": ("a.jpg", io.BytesIO((JPEG_HEADER + b"x" * size)[:size]), "image/jpeg")})
             return r, up
         finally:
             app.dependency_overrides.pop(get_current_owner, None)

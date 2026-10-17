@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import '../config/app_config.dart';
+import 'api_client.dart';
 
 class PlacePrediction {
   final String placeId;
@@ -35,8 +33,6 @@ class LocationResult {
 class LocationService {
   static final LocationService instance = LocationService._();
   LocationService._();
-
-  static String get _base => AppConfig.baseUrl;
 
   // ── GPS ────────────────────────────────────────────────────────────────────
 
@@ -75,12 +71,10 @@ class LocationService {
   /// Returns a human-readable address via the backend → Google Geocoding proxy.
   Future<String?> getAddressFromCoords(double lat, double lng) async {
     try {
-      final uri = Uri.parse('$_base/maps/geocode')
-          .replace(queryParameters: {'latlng': '$lat,$lng'});
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+      // ApiClient adds the owner's login token - the backend only serves maps to owners.
+      final data = await ApiClient.instance.get('/maps/geocode', query: {'latlng': '$lat,$lng'})
+          .timeout(const Duration(seconds: 10)) as Map<String, dynamic>;
+      {
         // Google Geocoding returns status + results[].formatted_address
         if (data['status'] == 'OK') {
           final results = data['results'] as List?;
@@ -101,17 +95,13 @@ class LocationService {
     final trimmed = query.trim();
     if (trimmed.length < 2) return [];
     try {
-      final uri = Uri.parse('$_base/maps/places/autocomplete')
-          .replace(queryParameters: {
+      final data = await ApiClient.instance.get('/maps/places/autocomplete', query: {
         'input': trimmed,
         // 'geocode' returns cities, regions and addresses; no pipe needed.
         'types': 'geocode',
         'components': 'country:in',
-      });
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+      }).timeout(const Duration(seconds: 10)) as Map<String, dynamic>;
+      {
         // Surface a useful exception when the key is wrong / quota exceeded.
         final status = data['status'] as String? ?? '';
         if (status != 'OK' && status != 'ZERO_RESULTS') {
@@ -138,15 +128,10 @@ class LocationService {
   Future<LocationResult?> getPlaceDetails(String placeId) async {
     if (placeId.isEmpty) return null;
     try {
-      final uri =
-          Uri.parse('$_base/maps/place/details').replace(queryParameters: {
+      final data = await ApiClient.instance.get('/maps/place/details', query: {
         'place_id': placeId,
-        'fields': 'geometry,formatted_address',
-      });
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+      }).timeout(const Duration(seconds: 10)) as Map<String, dynamic>;
+      {
         final status = data['status'] as String? ?? '';
         if (status != 'OK') return null;
         final result = data['result'] as Map?;

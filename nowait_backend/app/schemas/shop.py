@@ -76,6 +76,12 @@ class ShopSummary(BaseModel):
     active_promotions: List[PromotionInShop] = []
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # Read by the app (ShopModel). They were computed but dropped by this schema, so customers
+    # never saw review ratings, "queue paused" or the queue limit.
+    avg_review_rating: float = 0.0
+    review_count: int = 0
+    queue_paused: bool = False
+    max_queue_size: Optional[int] = None
 
 
 class ShopDetail(ShopSummary):

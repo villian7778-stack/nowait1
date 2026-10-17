@@ -1,0 +1,7 @@
+# Copy to android/key.properties (never commit it). Create the keystore once with:
+#   keytool -genkey -v -keystore C:\keys\nowait-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# Back up the .jks file and both passwords somewhere safe: without them you can never update the app.
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=C:\\keys\\nowait-upload.jks

@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
 class AddStaffRequest(BaseModel):
-    phone: str  # Find user by phone number
+    phone: str = Field(min_length=10, max_length=16)  # Find user by phone number
 
 
 class StaffMemberResponse(BaseModel):
@@ -17,3 +17,5 @@ class StaffMemberResponse(BaseModel):
     created_at: str
 
 
+class AddStaffByNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=60)

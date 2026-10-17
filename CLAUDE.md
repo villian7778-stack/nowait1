@@ -35,7 +35,11 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 # Android emulator default: http://10.0.2.2:8000
 ```
 
-**Stray files:** `tmp_cust_user.json` / `tmp_owner_user.json` at the repo root are scratch data, not used by the code. `nowait_backend/sql/` holds many legacy `migrate_*.sql`/`schema.sql` files; only `final_consolidated.sql` is authoritative. `nowait_backend/README.md` is outdated (still describes OTP/phone auth) — trust this file instead.
+**Production launch:** `PRODUCTION.md` (repo root) is the step-by-step for everything outside the code — Supabase, server, Razorpay live, Google Cloud, Play Console (incl. Data safety answers) — and starts with the open Google Play payments-policy decision (Razorpay for in-app digital purchases vs Play Billing). Keep it in sync when platform-facing behaviour changes.
+
+**Release builds:** `nowait_app/build_release.ps1` builds the Play bundle (`-Apk` also an APK) from `nowait_app/release.env` (copy `release.env.example`; gitignored) and refuses to run without `android/key.properties` (copy `key.properties.example`). `main.dart` also refuses to start a **release** build whose `BASE_URL` isn't a non-local `https://` address or that lacks the Supabase defines (`AppConfig.releaseConfigProblem`), showing a "not configured for production" screen instead.
+
+**Stray files:** `nowait_backend/sql/` holds many legacy `migrate_*.sql`/`schema.sql` files; only `final_consolidated.sql` is authoritative. `nowait_backend/README.md` is outdated (still describes OTP/phone auth) — trust this file instead.
 
 **Root data:** `india_state_city.json` at the repo root provides the state→city mapping loaded by `searchable_picker_sheet.dart` for address fields. It is bundled into the Flutter app via `assets/data/`.
 
@@ -127,13 +131,13 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload  # http://localhost:8000
 ```
 
-Deploy notes: the Dockerfile runs one uvicorn worker with `--proxy-headers --forwarded-allow-ips=*` (per-IP rate limits need the real client IP behind Render's proxy); `/docs`/`/redoc`/`/openapi.json` are disabled when `RENDER=true` or `ENVIRONMENT=production`; CORS allows no browser origins by default (mobile app doesn't need it — set `ALLOWED_ORIGINS=*` in a local `.env` to use the Flutter web build).
+Deploy notes: the Dockerfile runs one uvicorn worker on `${PORT:-8000}` with `--proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-*}` (keep `*` behind a managed proxy like Render; on your own server behind nginx/Caddy set it to the proxy address) (per-IP rate limits need the real client IP behind Render's proxy); `/docs`/`/redoc`/`/openapi.json` are disabled when `RENDER=true` or `ENVIRONMENT=production`; CORS allows no browser origins by default (mobile app doesn't need it — set `ALLOWED_ORIGINS=*` in a local `.env` to use the Flutter web build).
 
 Required `.env` variables: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`. Optional: `PASSWORD_RESET_REDIRECT_URL` (default `io.nowait.app://auth-callback` — the app's deep link, embedded in password-reset emails; must match the intent-filter in `AndroidManifest.xml` and the Redirect URL allow-listed in the Supabase dashboard). `.env.example` lists the core Supabase vars plus `GOOGLE_MAP_KEY` (for `/maps/*`); Razorpay vars (see Payments) are not in it. `nowait_app/.env.example` also exists (`GOOGLE_MAP_KEY`).
 
 **Database is locked to the backend:** `sql/migrate_lockdown_rls.sql` (also inlined in `final_consolidated.sql`) removes every RLS policy, revokes table/function access from `anon`/`authenticated`, and only `service_role` (the backend) can read/write. The app ships the anon key and only uses Supabase for sign-in, so never add client-facing policies or call Supabase tables/RPCs from Flutter. `SUPABASE_SERVICE_KEY` must be the real `service_role` key (check the JWT payload `role`), or the backend breaks once locked down.
 
-Shop images: max 5 per shop, each <= 0.5 MB (app compresses in `ShopService.uploadImage`; server streams and rejects >512 KB with 413).
+Shop images: max 5 per shop, each <= 0.5 MB (app compresses in `ShopService.uploadImage`; server streams and rejects >512 KB with 413). The server checks the file's real type from its first bytes (JPEG/PNG/WebP/GIF only, else 415) and names the stored file itself — the uploaded filename and claimed content type are never trusted.
 
 **Release signing:** `nowait_app/android/app/build.gradle.kts` signs release builds with `android/key.properties` (keyAlias/keyPassword/storeFile/storePassword) if present, else falls back to the debug key (fine for test APKs, rejected by Play Store). `key.properties`, `*.jks` are gitignored.
 
@@ -147,7 +151,7 @@ pytest tests/                          # Run all backend tests
 pytest tests/test_queue_service.py     # Run a single test file
 pytest tests/ -k "test_join_queue"     # Run tests matching a name
 ```
-Test files (`nowait_backend/tests/`, payment-related: `test_payments.py`, `test_payment_recovery.py`, `test_payment_security.py`, `test_payment_webhook.py`, `test_trial_service.py`): `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
+The whole backend suite passes (no known failures — keep it that way). Test files (`nowait_backend/tests/`; production features in `test_production_readiness.py`; security attacks in `test_security.py`; analytics income in `test_analytics_income.py`; payment-related: `test_payments.py`, `test_payment_recovery.py`, `test_payment_security.py`, `test_payment_webhook.py`, `test_trial_service.py`): `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
 
 The `conftest.py` patches `supabase.create_client` before any imports, so no real Supabase credentials are needed. Each test module must patch its own local `supabase` binding (e.g. `patch("app.services.queue_service.supabase", ...)`), not just `app.database.supabase`.
 
@@ -168,7 +172,7 @@ app/
   services/        — Business logic; routers are thin HTTP adapters only
 ```
 
-**Auth:** email/password and Google OAuth both produce a standard Supabase-issued JWT, decoded identically in `dependencies.py` — it tries HS256 first (legacy projects), then falls back to ES256/RS256 via cached JWKS (newer projects). Audience must be `authenticated`. Four `Depends` helpers exist: `get_current_user` (full profile lookup), `get_current_owner` (enforces `role == 'owner'`), `get_token_user_id` (ID only, no profile needed), `get_token_claims` (full JWT payload including `email` claim — used by `/auth/complete-profile` for the Google-new-user flow). `POST /auth/register` creates the Supabase auth user and the `profiles` row in one call via direct REST calls to Supabase's `/auth/v1/signup` and `/auth/v1/token` endpoints (`app/services/auth_service.py`) rather than the `supabase-py` client's `.auth` namespace, for reliability. The mobile number is stored on the profile but never used for login or OTP-verified — Google sign-in is handled entirely client-side in the Flutter app via `supabase_flutter` (see `nowait_app/lib/main.dart`'s `onAuthStateChange` listener); the backend has no dedicated Google endpoint since the resulting JWT validates through the same `dependencies.py` code path.
+**Auth:** email/password and Google OAuth both produce a standard Supabase-issued JWT, decoded identically in `dependencies.py` — verified with PyJWT (not python-jose) and only the algorithms we expect — it tries HS256 first (legacy projects), then falls back to ES256/RS256 via cached JWKS (newer projects). Audience must be `authenticated`. Four `Depends` helpers exist: `get_current_user` (full profile lookup), `get_current_owner` (enforces `role == 'owner'`), `get_token_user_id` (ID only, no profile needed), `get_token_claims` (full JWT payload including `email` claim — used by `/auth/complete-profile` for the Google-new-user flow). `POST /auth/register` creates the Supabase auth user and the `profiles` row in one call via direct REST calls to Supabase's `/auth/v1/signup` and `/auth/v1/token` endpoints (`app/services/auth_service.py`) rather than the `supabase-py` client's `.auth` namespace, for reliability. The mobile number is stored on the profile but never used for login or OTP-verified — Google sign-in is handled entirely client-side in the Flutter app via `supabase_flutter` (see `nowait_app/lib/main.dart`'s `onAuthStateChange` listener); the backend has no dedicated Google endpoint since the resulting JWT validates through the same `dependencies.py` code path.
 
 **`execute_one(query)`** (`database.py`) — wrapper around `.maybe_single().execute()` that normalises supabase-py 2.9+ behaviour where a missing row may return `None` or raise `APIError(code=204)`. All single-row lookups in services should use this instead of `.single()`.
 
@@ -188,7 +192,10 @@ app/
 - **Estimated income** — the Analytics tab shows *Total Income* and *Customers Served* for the selected dates (Today / Week / Month / Custom range). `analytics_service.get_summary` returns `estimated_income`: for every **completed** visit joined in the range it adds the price of each service the customer picked when joining (`queue_entries.service_ids`, or the older single `service_id`), using the services' **current** prices; a service the owner has since deleted counts as 0. It is an approximation and the app says so next to the figure (`incomeNote`, en/hi/mr) — don't present it as accounting. Shown in whole rupees with Indian digit grouping (`AnalyticsSummary.formatRupees`)
 - **Scheme length** — customer-facing schemes (the free offers on `scheme_screen.dart`) run 3, 7 or 15 days; `promotion_service` rejects a scheme whose `valid_until` is more than 15 days away. Featured Promotions use the same set of lengths (see Payments)
 - **`active_promotions` parsing** — entries with `title == 'Featured Promotion'` are paid visibility boosts (`isPromoted` flag on `ShopModel`); all other entries become the `SchemeModel` (customer-facing offer/scheme)
-- **Reviews** — submitted only for `completed` queue entries; re-submitting for the same `queue_entry_id` overwrites the previous rating; `ShopModel.avgReviewRating` / `reviewCount` come directly from the shop API response (not a separate call)
+- **Reviews** — submitted only for `completed` queue entries; re-submitting for the same `queue_entry_id` overwrites the previous rating; `ShopModel.avgReviewRating` / `reviewCount` come directly from the shop API response (not a separate call). The shop response schema (`ShopSummary`) must declare every field the app reads — it used to silently drop `avg_review_rating`, `review_count`, `queue_paused` and `max_queue_size`; `rating` is set to the live review average (the `shops.rating` column is never updated)
+- **Reporting reviews** (Google Play user-generated-content policy) — any signed-in user can report someone else's review once (`POST /reviews/{id}/report`, reason spam/offensive/fake/other; flag button `ReportReviewButton` in `lib/widgets/report_review_sheet.dart`, on the customer reviews list and the owner's review cards). Reports go to `review_reports`; after `review_service.AUTO_HIDE_REPORTS` (3) different reporters the review gets `shop_reviews.is_hidden = true` and every public list/summary leaves it out (the queries fall back to unfiltered, with a loud log, if the column hasn't been migrated yet). Admin panel → *Reported Reviews*: Hide, Restore (also dismisses its reports) or Delete
+- **Public policy pages** — `app/routers/legal.py` serves `/legal`, `/legal/privacy`, `/legal/terms`, `/legal/refund-policy`, `/legal/contact`, `/legal/delete-account` (needed by Play and Razorpay). Business details come from `LEGAL_BUSINESS_NAME` / `SUPPORT_EMAIL` / `SUPPORT_PHONE` / `LEGAL_ADDRESS` / `LEGAL_JURISDICTION` (HTML-escaped) and prices/trial length straight from the code that charges them. The app links to them from Help & Support (`AppConfig.legalUrl`). Starting texts — have them reviewed before launch
+- **Admin panel escaping** — every user-typed value rendered by the admin dashboard JS goes through `esc()` (and `jsArg()` for onclick arguments); keep it that way for anything new, it renders review text and shop names
 
 ### Queue `display_status` Values
 
@@ -264,12 +271,16 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/analytics/shops/{id}/summary` | Owner | Summary stats incl. `estimated_income` (`period`: today/week/month, or `from_date`/`to_date`) |
 | GET | `/analytics/shops/{id}/hourly` | Owner/Staff | Hourly customer counts (`days`: 1–30) |
 | GET | `/analytics/shops/{id}/staff` | Owner | Per-staff performance metrics |
-| GET | `/maps/geocode` | — | Reverse-geocode `latlng=lat,lng` → address (proxies Google Geocoding API using server `GOOGLE_MAP_KEY`) |
-| GET | `/maps/places/autocomplete` | — | Places autocomplete `input=query` → predictions |
-| GET | `/maps/place/details` | — | Place details `place_id=...` → lat/lng + address |
+| GET | `/maps/geocode` | Owner | Reverse-geocode `latlng=lat,lng` → address (proxies Google Geocoding API using server `GOOGLE_MAP_KEY`) |
+| GET | `/maps/places/autocomplete` | Owner | Places autocomplete `input=query` → predictions |
+| GET | `/maps/place/details` | Owner | Place details `place_id=...` → lat/lng + address |
 | POST | `/reviews/shops/{id}` | Customer | Submit rating (1–5) + optional text for a completed visit |
 | GET | `/reviews/shops/{id}` | — | Paginated reviews (`page`, `limit`) |
 | GET | `/reviews/shops/{id}/summary` | — | Avg rating, total count, per-star distribution |
+| POST | `/reviews/{id}/report` | User | Report a review (once per person; auto-hidden after 3 reporters) |
+| GET | `/legal/{privacy,terms,refund-policy,contact,delete-account}` | — | Public policy pages (HTML) |
+
+**Security notes:** `/maps/*` are owner-only (only the shop forms use them), rate-limited to 60/min per owner, and always ask Google for fixed fields only (the caller can't pick costlier ones), since they spend the server's Google key. `/auth/complete-profile` returns 409 once a profile exists (it can't be re-run to change role/phone). `/auth/fcm-token` takes only a short string. Request schemas cap text lengths. Android `allowBackup` is off. Cloudflare (PRODUCTION.md 4b): with `CLOUDFLARE_ORIGIN_SECRET` set, `main.py` refuses (403) every request except `/health` that lacks the matching `X-Origin-Secret` header (added by a Cloudflare Transform Rule), and `rate_limit.client_ip` keys per-IP limits on `CF-Connecting-IP`; unset, behaviour is unchanged (uvicorn's leftmost `X-Forwarded-For`, which a caller can fake). `tests/test_security.py` holds the attack-style tests for all of this. Dependencies were checked with `pip-audit` (no known vulnerabilities as of 2026-10); re-run it before each release.
 
 ### Admin Panel
 
@@ -277,7 +288,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 
 ### Database Tables
 
-`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `staff_members`, `queue_events`, `shop_reviews`, `payment_transactions`, `trial_claims` — all RLS-enabled; service role key bypasses RLS server-side. `sql/final_consolidated.sql` is the single up-to-date source for the full schema (superset of every `sql/migrate_*.sql` file); run it on a fresh project or an existing one at any prior state. `profiles.email` was added for the email/password + Google auth system — populated at registration/profile-completion, distinct from `auth.users.email` (which Supabase manages). The `payment_transactions` table logs every Razorpay order (`purpose`: `subscription`/`promotion`, `status`: `created`/`paid`/`failed`) written by `app/services/payment_transaction_service.py`; owners can only read their own rows, all writes go through the service-role key from `app/routers/payments.py`.
+`profiles`, `shops`, `services`, `subscriptions`, `promotions`, `queue_entries`, `notifications`, `staff_members`, `queue_events`, `shop_reviews`, `review_reports`, `payment_transactions`, `trial_claims` — all RLS-enabled (the SQL also creates the public `shop-images` storage bucket); service role key bypasses RLS server-side. `sql/final_consolidated.sql` is the single up-to-date source for the full schema (superset of every `sql/migrate_*.sql` file); run it on a fresh project or an existing one at any prior state. `profiles.email` was added for the email/password + Google auth system — populated at registration/profile-completion, distinct from `auth.users.email` (which Supabase manages). The `payment_transactions` table logs every Razorpay order (`purpose`: `subscription`/`promotion`, `status`: `created`/`paid`/`failed`) written by `app/services/payment_transaction_service.py`; owners can only read their own rows, all writes go through the service-role key from `app/routers/payments.py`.
 
 ### Payments (Razorpay)
 

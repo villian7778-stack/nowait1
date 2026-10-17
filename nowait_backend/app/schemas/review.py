@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -17,6 +17,16 @@ class ReviewResponse(BaseModel):
     review: Optional[str]
     user_name: str
     created_at: str
+
+
+class ReviewReportRequest(BaseModel):
+    reason: Literal["spam", "offensive", "fake", "other"] = "other"
+    details: Optional[str] = Field(None, max_length=300)
+
+
+class ReviewReportResponse(BaseModel):
+    reported: bool
+    already_reported: bool = False
 
 
 class ReviewSummary(BaseModel):

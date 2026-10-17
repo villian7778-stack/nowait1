@@ -198,6 +198,22 @@ class LocaleService extends ChangeNotifier {
     'city': 'City',
 
     // ── Customer profile ──
+    // ── Reporting reviews / legal links ──
+    'reportReview': 'Report review',
+    'reportReviewHint': 'Why are you reporting this review?',
+    'reasonSpam': 'Spam or advertising',
+    'reasonOffensive': 'Offensive or abusive',
+    'reasonFake': 'Fake, or not a real visit',
+    'reasonOther': 'Something else',
+    'reportDetailsHint': 'Add details (optional)',
+    'sendReport': 'Send report',
+    'reportThanks': 'Thanks for telling us. We will look into it.',
+    'reportAlready': 'You have already reported this review.',
+    'legalSection': 'Legal',
+    'refundPolicy': 'Refund & Cancellation Policy',
+    'deleteAccountInfo': 'How to delete your account',
+    'linkOpenFailed': 'Could not open the page. Please try again.',
+
     // ── Analytics: income ──
     'totalIncome': 'Total Income',
     'approxLabel': 'Approx.',
@@ -508,6 +524,22 @@ class LocaleService extends ChangeNotifier {
     'address': 'पता',
     'city': 'शहर',
 
+    // ── Reporting reviews / legal links ──
+    'reportReview': 'समीक्षा की रिपोर्ट करें',
+    'reportReviewHint': 'आप इस समीक्षा की रिपोर्ट क्यों कर रहे हैं?',
+    'reasonSpam': 'स्पैम या विज्ञापन',
+    'reasonOffensive': 'आपत्तिजनक या अपमानजनक',
+    'reasonFake': 'नकली, या असली मुलाक़ात नहीं',
+    'reasonOther': 'कुछ और',
+    'reportDetailsHint': 'विवरण जोड़ें (वैकल्पिक)',
+    'sendReport': 'रिपोर्ट भेजें',
+    'reportThanks': 'बताने के लिए धन्यवाद। हम इसकी जाँच करेंगे।',
+    'reportAlready': 'आप इस समीक्षा की रिपोर्ट पहले ही कर चुके हैं।',
+    'legalSection': 'कानूनी',
+    'refundPolicy': 'रिफंड और रद्दीकरण नीति',
+    'deleteAccountInfo': 'अपना खाता कैसे हटाएं',
+    'linkOpenFailed': 'पेज नहीं खुल सका। कृपया फिर से कोशिश करें।',
+
     // ── Analytics: income ──
     'totalIncome': 'कुल आय',
     'approxLabel': 'अनुमानित',
@@ -807,6 +839,22 @@ class LocaleService extends ChangeNotifier {
     'name': 'नाव',
     'address': 'पत्ता',
     'city': 'शहर',
+
+    // ── Reporting reviews / legal links ──
+    'reportReview': 'पुनरावलोकनाची तक्रार करा',
+    'reportReviewHint': 'तुम्ही या पुनरावलोकनाची तक्रार का करत आहात?',
+    'reasonSpam': 'स्पॅम किंवा जाहिरात',
+    'reasonOffensive': 'आक्षेपार्ह किंवा अपमानास्पद',
+    'reasonFake': 'खोटे, किंवा खरी भेट नाही',
+    'reasonOther': 'इतर काही',
+    'reportDetailsHint': 'तपशील जोडा (ऐच्छिक)',
+    'sendReport': 'तक्रार पाठवा',
+    'reportThanks': 'कळवल्याबद्दल धन्यवाद. आम्ही याची तपासणी करू.',
+    'reportAlready': 'तुम्ही या पुनरावलोकनाची आधीच तक्रार केली आहे.',
+    'legalSection': 'कायदेशीर',
+    'refundPolicy': 'परतावा आणि रद्दीकरण धोरण',
+    'deleteAccountInfo': 'तुमचे खाते कसे हटवायचे',
+    'linkOpenFailed': 'पान उघडता आले नाही. कृपया पुन्हा प्रयत्न करा.',
 
     // ── Analytics: income ──
     'totalIncome': 'एकूण उत्पन्न',

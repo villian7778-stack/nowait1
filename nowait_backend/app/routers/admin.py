@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from app.config import settings
 from app.database import supabase
 from app.rate_limit import limiter
+from app.services import review_service
 
 router = APIRouter(prefix="/nowaitt_778admin", tags=["Admin"])
 
@@ -293,6 +294,39 @@ def api_delete_promotion(promo_id: str, admin_session: str | None = Cookie(defau
     return {"success": True}
 
 
+# ── Admin API — Reported reviews ──────────────────────────────────────────────
+
+@router.get("/api/reviews")
+def api_reported_reviews(admin_session: str | None = Cookie(default=None), page: int = 1):
+    if not _is_authed(admin_session):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return review_service.admin_list_reported(page=page)
+
+
+@router.post("/api/reviews/{review_id}/hide")
+def api_hide_review(review_id: str, admin_session: str | None = Cookie(default=None)):
+    if not _is_authed(admin_session):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    review_service.admin_set_hidden(review_id, True)
+    return {"success": True}
+
+
+@router.post("/api/reviews/{review_id}/unhide")
+def api_unhide_review(review_id: str, admin_session: str | None = Cookie(default=None)):
+    if not _is_authed(admin_session):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    review_service.admin_set_hidden(review_id, False)  # also dismisses its reports
+    return {"success": True}
+
+
+@router.delete("/api/reviews/{review_id}")
+def api_delete_review(review_id: str, admin_session: str | None = Cookie(default=None)):
+    if not _is_authed(admin_session):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    review_service.admin_delete_review(review_id)
+    return {"success": True}
+
+
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
 _LOGIN_HTML = """<!DOCTYPE html>
@@ -568,6 +602,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="nav-item" onclick="nav('promotions',this)">
       <span class="icon">🎯</span> Promotions
     </div>
+    <div class="nav-section">Moderation</div>
+    <div class="nav-item" onclick="nav('reports',this)">
+      <span class="icon">🚩</span> Reported Reviews
+    </div>
   </div>
   <div class="sidebar-footer">
     <button class="logout-btn" onclick="location.href='/nowaitt_778admin/logout'">
@@ -678,6 +716,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
 
+    <!-- ── Reported reviews ── -->
+    <div id="sec-reports" class="section">
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">Reported Reviews</span>
+          <div class="table-controls"><span id="reports-count" style="font-size:12px;color:var(--muted)"></span></div>
+        </div>
+        <div id="reports-body"><div class="loading"><div class="spinner"></div></div></div>
+        <div class="pagination" id="reports-pager"></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -734,7 +784,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 <script>
 const BASE = '/nowaitt_778admin';
-let pages = {users:1,shops:1,queues:1,subscriptions:1,promotions:1};
+let pages = {users:1,shops:1,queues:1,subscriptions:1,promotions:1,reports:1};
 let debounceTimer;
 
 /* ── Navigation ── */
@@ -745,7 +795,7 @@ function nav(sec, el) {
   document.getElementById('sec-'+sec).classList.add('active');
   document.getElementById('page-title').textContent =
     {dashboard:'Dashboard',users:'Users',shops:'Shops',
-     queues:'Live Queues',subscriptions:'Subscriptions',promotions:'Promotions'}[sec];
+     queues:'Live Queues',subscriptions:'Subscriptions',promotions:'Promotions',reports:'Reported Reviews'}[sec];
   loadSection(sec);
 }
 
@@ -763,6 +813,7 @@ function loadSection(sec) {
   else if(sec==='queues') loadQueues();
   else if(sec==='subscriptions') loadSubs();
   else if(sec==='promotions') loadPromos();
+  else if(sec==='reports') loadReports();
 }
 
 function debouncedLoad(sec) {
@@ -804,7 +855,12 @@ function ago(d) {
   if(s<86400) return Math.floor(s/3600)+'h ago';
   return Math.floor(s/86400)+'d ago';
 }
-function pill(text,cls) { return `<span class="badge-pill ${cls}">${text}</span>`; }
+function pill(text,cls) { return `<span class="badge-pill ${cls}">${esc(text)}</span>`; }
+/* Anything a user can type (names, shop names, review text...) goes through esc() before it is put
+   into the page, so it can never run as code in the admin's browser. jsArg() is for values passed
+   to onclick handlers. */
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function jsArg(v) { return esc(JSON.stringify(String(v ?? ''))); }
 
 /* ── Pagination ── */
 function renderPager(containerId, sec, cur, total, perPage) {
@@ -861,7 +917,7 @@ async function loadDashboard() {
         <div class="activity-item">
           <div class="activity-dot a-${e.status==='serving'?'serve':e.status}"></div>
           <div class="activity-body">
-            <div class="activity-title">${e.customer_name} @ <strong>${e.shop_name}</strong>
+            <div class="activity-title">${esc(e.customer_name)} @ <strong>${esc(e.shop_name)}</strong>
               &nbsp;${pill('#'+e.token_number,(e.status==='serving'?'badge-serving':'badge-waiting'))}</div>
             <div class="activity-time">${ago(e.created_at)}</div>
           </div>
@@ -875,8 +931,8 @@ async function loadDashboard() {
   document.getElementById('dash-shops').innerHTML = shops.length
     ? '<table><thead><tr><th>Shop</th><th>City</th><th>Status</th></tr></thead><tbody>'
       + shops.map(sh=>`<tr>
-          <td><div class="ellipsis">${sh.name}</div><div style="font-size:11px;color:var(--muted)">${sh.category}</div></td>
-          <td>${sh.city}</td>
+          <td><div class="ellipsis">${esc(sh.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(sh.category)}</div></td>
+          <td>${esc(sh.city)}</td>
           <td>${sh.is_open?pill('Open','badge-open'):pill('Closed','badge-closed')}</td>
         </tr>`).join('')+'</tbody></table>'
     : '<div class="empty">No shops yet</div>';
@@ -890,13 +946,13 @@ async function loadUsers() {
   if(!d) return;
   document.getElementById('user-count').textContent=d.total+' users';
   const rows = (d.users||[]).map(u=>`<tr>
-    <td style="font-size:11px;color:var(--muted)">${u.id.slice(0,8)}…</td>
-    <td><strong>${u.name||'—'}</strong></td>
-    <td>${u.phone||'—'}</td>
-    <td>${u.city||'—'}</td>
+    <td style="font-size:11px;color:var(--muted)">${esc(u.id.slice(0,8))}…</td>
+    <td><strong>${esc(u.name||'—')}</strong></td>
+    <td>${esc(u.phone||'—')}</td>
+    <td>${esc(u.city||'—')}</td>
     <td>${pill(u.role==='owner'?'Owner':'Customer',u.role==='owner'?'badge-owner':'badge-customer')}</td>
     <td>${fDate(u.created_at)}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('user','${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">Delete</button></td>
+    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('user',${jsArg(u.id)},${jsArg(u.name)})">Delete</button></td>
   </tr>`).join('');
   document.getElementById('users-body').innerHTML = rows
     ? `<table><thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>City</th><th>Role</th><th>Joined</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -912,16 +968,16 @@ async function loadShops() {
   if(!d) return;
   document.getElementById('shop-count').textContent=d.total+' shops';
   const rows=(d.shops||[]).map(s=>`<tr>
-    <td><div class="ellipsis"><strong>${s.name}</strong></div></td>
-    <td>${s.category}</td>
-    <td>${s.city}${s.state?', '+s.state:''}</td>
-    <td><div class="ellipsis" style="color:var(--dim)">${s.owner_name}</div></td>
+    <td><div class="ellipsis"><strong>${esc(s.name)}</strong></div></td>
+    <td>${esc(s.category)}</td>
+    <td>${esc(s.city)}${s.state?', '+esc(s.state):''}</td>
+    <td><div class="ellipsis" style="color:var(--dim)">${esc(s.owner_name)}</div></td>
     <td>${s.is_open?pill('Open','badge-open'):pill('Closed','badge-closed')}</td>
     <td>${s.queue_count||0}</td>
     <td style="font-size:11px;color:var(--muted)">${fDate(s.created_at)}</td>
     <td style="display:flex;gap:6px">
-      <button class="btn btn-edit btn-sm" onclick="openEditShop(${JSON.stringify(s).replace(/"/g,'&quot;')})">Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="confirmDelete('shop','${s.id}','${s.name.replace(/'/g,"\\'")}')">Del</button>
+      <button class="btn btn-edit btn-sm" onclick="openEditShop(${esc(JSON.stringify(s))})">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="confirmDelete('shop',${jsArg(s.id)},${jsArg(s.name)})">Del</button>
     </td>
   </tr>`).join('');
   document.getElementById('shops-body').innerHTML = rows
@@ -938,12 +994,12 @@ async function loadQueues() {
   document.getElementById('queue-count').textContent=d.total+' active entries';
   const rows=(d.entries||[]).map(e=>`<tr>
     <td><span style="font-weight:700;color:var(--primary2)">#${e.token_number}</span></td>
-    <td>${e.customer_name}</td>
-    <td style="font-size:11px;color:var(--muted)">${e.customer_phone}</td>
-    <td><div class="ellipsis">${e.shop_name}</div></td>
+    <td>${esc(e.customer_name)}</td>
+    <td style="font-size:11px;color:var(--muted)">${esc(e.customer_phone)}</td>
+    <td><div class="ellipsis">${esc(e.shop_name)}</div></td>
     <td>${e.status==='serving'?pill('Serving','badge-serving'):pill('Waiting','badge-waiting')}</td>
     <td>${fTime(e.created_at)}<br><span style="font-size:10px;color:var(--muted)">${ago(e.created_at)}</span></td>
-    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('queue','${e.id}','${e.customer_name.replace(/'/g,"\\'")}')">Cancel</button></td>
+    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('queue',${jsArg(e.id)},${jsArg(e.customer_name)})">Cancel</button></td>
   </tr>`).join('');
   document.getElementById('queues-body').innerHTML = rows
     ? `<table><thead><tr><th>Token</th><th>Customer</th><th>Phone</th><th>Shop</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -960,13 +1016,13 @@ async function loadSubs() {
     const exp=new Date(s.expires_at);
     const isActive=s.status==='active'&&exp>new Date();
     return `<tr>
-      <td><div class="ellipsis"><strong>${s.shop_name}</strong></div>
-        <div style="font-size:11px;color:var(--muted)">${s.shop_city}</div></td>
+      <td><div class="ellipsis"><strong>${esc(s.shop_name)}</strong></div>
+        <div style="font-size:11px;color:var(--muted)">${esc(s.shop_city)}</div></td>
       <td>${isActive?pill('Active','badge-active'):pill(s.status,'badge-cancelled')}</td>
-      <td>${s.plan||'standard'}</td>
+      <td>${esc(s.plan||'standard')}</td>
       <td>${fDate(s.created_at)}</td>
       <td style="${exp<new Date()?'color:var(--danger)':''}">${fDate(s.expires_at)}</td>
-      <td>${isActive?`<button class="btn btn-danger btn-sm" onclick="confirmDelete('sub','${s.id}','${s.shop_name.replace(/'/g,"\\'")}')">Cancel</button>`:''}</td>
+      <td>${isActive?`<button class="btn btn-danger btn-sm" onclick="confirmDelete('sub',${jsArg(s.id)},${jsArg(s.shop_name)})">Cancel</button>`:''}</td>
     </tr>`;}).join('');
   document.getElementById('subs-body').innerHTML = rows
     ? `<table><thead><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Started</th><th>Expires</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -981,17 +1037,49 @@ async function loadPromos() {
   if(!d) return;
   document.getElementById('promo-count').textContent=d.total+' promotions';
   const rows=(d.promotions||[]).map(p=>`<tr>
-    <td><div class="ellipsis"><strong>${p.shop_name}</strong></div></td>
-    <td class="ellipsis">${p.title}</td>
-    <td class="ellipsis" style="color:var(--muted)">${p.description||'—'}</td>
+    <td><div class="ellipsis"><strong>${esc(p.shop_name)}</strong></div></td>
+    <td class="ellipsis">${esc(p.title)}</td>
+    <td class="ellipsis" style="color:var(--muted)">${esc(p.description||'—')}</td>
     <td>${p.is_active?pill('Active','badge-active'):pill('Inactive','badge-cancelled')}</td>
     <td>${fDate(p.valid_until)}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('promo','${p.id}','${p.title.replace(/'/g,"\\'")}')">Delete</button></td>
+    <td><button class="btn btn-danger btn-sm" onclick="confirmDelete('promo',${jsArg(p.id)},${jsArg(p.title)})">Delete</button></td>
   </tr>`).join('');
   document.getElementById('promos-body').innerHTML = rows
     ? `<table><thead><tr><th>Shop</th><th>Title</th><th>Description</th><th>Status</th><th>Valid Until</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
     : '<div class="empty"><div class="empty-icon">🎯</div>No promotions</div>';
   renderPager('promos-pager','promotions',pages.promotions,d.total,20);
+}
+
+/* ── Reported reviews ── */
+async function loadReports() {
+  document.getElementById('reports-body').innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  const d = await api(`/api/reviews?page=${pages.reports}`);
+  if(!d) return;
+  document.getElementById('reports-count').textContent=d.total+' reported';
+  const rows=(d.reviews||[]).map(r=>{
+    const reasons=Object.entries(r.reasons||{}).map(([k,v])=>`${esc(k)} ×${v}`).join(', ');
+    const notes=(r.report_details||[]).map(t=>`<div style="font-size:11px;color:var(--muted)">“${esc(t)}”</div>`).join('');
+    return `<tr>
+    <td><div class="ellipsis"><strong>${esc(r.shop_name)}</strong></div><div style="font-size:11px;color:var(--muted)">by ${esc(r.user_name)} · ${fDate(r.created_at)}</div></td>
+    <td>${'★'.repeat(Math.max(0,Math.min(5,r.rating||0)))}</td>
+    <td style="max-width:320px;white-space:normal">${esc(r.review||'—')}</td>
+    <td><strong>${r.report_count}</strong><div style="font-size:11px;color:var(--muted)">${reasons}</div>${notes}</td>
+    <td>${r.is_hidden?pill('Hidden','badge-cancelled'):pill('Visible','badge-active')}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      ${r.is_hidden
+        ? `<button class="btn btn-edit btn-sm" title="Show it again and dismiss its reports" onclick="setReviewHidden(${jsArg(r.id)},false)">Restore</button>`
+        : `<button class="btn btn-edit btn-sm" onclick="setReviewHidden(${jsArg(r.id)},true)">Hide</button>`}
+      <button class="btn btn-danger btn-sm" onclick="confirmDelete('review',${jsArg(r.id)},${jsArg((r.review||'').slice(0,40))})">Delete</button>
+    </td></tr>`;}).join('');
+  document.getElementById('reports-body').innerHTML = rows
+    ? `<table><thead><tr><th>Shop / reviewer</th><th>Rating</th><th>Review</th><th>Reports</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    : '<div class="empty"><div class="empty-icon">🚩</div>No reported reviews</div>';
+  renderPager('reports-pager','reports',pages.reports,d.total,20);
+}
+async function setReviewHidden(id, hidden) {
+  const r=await api(`/api/reviews/${encodeURIComponent(id)}/${hidden?'hide':'unhide'}`,{method:'POST'});
+  if(r?.success){ toast(hidden?'Review hidden':'Review restored, reports dismissed'); loadReports(); }
+  else toast('Failed',false);
 }
 
 /* ── Edit Shop Modal ── */
@@ -1038,17 +1126,18 @@ function confirmDelete(type, id, name) {
     queue:{icon:'🔢',title:`Cancel entry for "${name}"?`,msg:'The customer will be removed from the queue.'},
     sub:{icon:'💳',title:`Cancel subscription for "${name}"?`,msg:'The shop will lose queue management access immediately.'},
     promo:{icon:'🎯',title:`Delete promotion "${name}"?`,msg:'This promotion will be permanently removed.'},
+    review:{icon:'🚩',title:'Delete this review?',msg:'The review and its reports will be permanently removed.'},
   }[type];
   document.getElementById('confirm-icon').textContent=msgs.icon;
   document.getElementById('confirm-title').textContent=msgs.title;
   document.getElementById('confirm-msg').textContent=msgs.msg;
   _deleteHandler=async()=>{
-    const ep={user:'/api/users/'+id,shop:'/api/shops/'+id,queue:'/api/queues/'+id,sub:'/api/subscriptions/'+id,promo:'/api/promotions/'+id}[type];
+    const ep={user:'/api/users/'+id,shop:'/api/shops/'+id,queue:'/api/queues/'+id,sub:'/api/subscriptions/'+id,promo:'/api/promotions/'+id,review:'/api/reviews/'+encodeURIComponent(id)}[type];
     const r=await api(ep,{method:'DELETE'});
     if(r?.success){
       toast('Deleted successfully');
       closeModal('modal-confirm');
-      const sec={user:'users',shop:'shops',queue:'queues',sub:'subscriptions',promo:'promotions'}[type];
+      const sec={user:'users',shop:'shops',queue:'queues',sub:'subscriptions',promo:'promotions',review:'reports'}[type];
       loadSection(sec);
     } else toast('Delete failed',false);
   };

@@ -129,7 +129,8 @@ class TestNotifyComing:
         assert len(owner_notifs) == 1
         assert owner_notifs[0]["type"] == "coming"
 
-    def test_notifies_assigned_staff_too(self):
+    def test_only_the_owner_is_notified(self):
+        # Single queue per shop: staff are informational, so only the owner gets "on the way".
         from app.services import queue_service
 
         entry = make_queue_entry(status="waiting", user_id="cust-001", staff_id="staff-uid-001")
@@ -150,9 +151,7 @@ class TestNotifyComing:
             mock_sup.table = chain.table
             queue_service.notify_coming("entry-001", "cust-001")
 
-        recipient_ids = {n["user_id"] for n in notifs}
-        assert "owner-001" in recipient_ids
-        assert "staff-uid-001" in recipient_ids
+        assert [n["user_id"] for n in notifs] == ["owner-001"]
 
 
 # ── get_shop_queue ────────────────────────────────────────────────────────────
@@ -162,8 +161,7 @@ class TestGetShopQueue:
         from app.services import queue_service
         from fastapi import HTTPException
 
-        with patch("app.services.queue_service.require_staff_or_owner",
-                   side_effect=HTTPException(status_code=403, detail="Not authorized")):
+        with patch("app.services.queue_service._is_owner", return_value=False):
             with pytest.raises(HTTPException) as exc:
                 queue_service.get_shop_queue("shop-001", "random-user")
             assert exc.value.status_code == 403
@@ -175,8 +173,7 @@ class TestGetShopQueue:
         execute_one_calls = iter([MagicMock(data=shop_data)])
         chain = make_chain(ok_list([]))
 
-        with patch("app.services.queue_service.require_staff_or_owner"), \
-             patch("app.services.staff_service._is_owner", return_value=True), \
+        with patch("app.services.queue_service._is_owner", return_value=True), \
              patch("app.services.queue_service.execute_one", side_effect=lambda q: next(execute_one_calls)), \
              patch("app.services.queue_service.supabase") as mock_sup:
             mock_sup.table = chain.table
@@ -192,17 +189,16 @@ class TestGetShopQueue:
             make_queue_entry(entry_id="e1", token=1, status="serving"),
             make_queue_entry(entry_id="e2", token=2, status="waiting"),
         ]
-        profile_a = MagicMock(data={"name": "Customer A", "phone": "+91111"})
-        profile_b = MagicMock(data={"name": "Customer B", "phone": "+91222"})
+        # Customer profiles are fetched in one batch query (no per-entry lookups).
+        profiles = [{"id": e["user_id"], "name": f"Customer {e['token_number']}", "phone": "+91111"} for e in entries]
+        execute_one_calls = iter([MagicMock(data=shop_data)])
+        entries_chain, profiles_chain = make_chain(ok_list(entries)), make_chain(ok_list(profiles))
 
-        execute_one_calls = iter([MagicMock(data=shop_data), profile_a, profile_b])
-        chain = make_chain(ok_list(entries))
-
-        with patch("app.services.queue_service.require_staff_or_owner"), \
-             patch("app.services.staff_service._is_owner", return_value=True), \
+        with patch("app.services.queue_service._is_owner", return_value=True), \
              patch("app.services.queue_service.execute_one", side_effect=lambda q: next(execute_one_calls)), \
+             patch("app.services.queue_service._fetch_services_by_ids", return_value=[]), \
              patch("app.services.queue_service.supabase") as mock_sup:
-            mock_sup.table = chain.table
+            mock_sup.table.side_effect = lambda name: (profiles_chain if name == "profiles" else entries_chain).table(name)
             result = queue_service.get_shop_queue("shop-001", "owner-001")
 
         assert result["total_waiting"] == 1
@@ -221,7 +217,7 @@ class TestPauseResumeQueue:
         chain.update.side_effect = lambda data: updates.append(data) or chain
         chain.insert.side_effect = lambda data: inserts.append(data) or chain
 
-        with patch("app.services.staff_service._is_owner", return_value=True), \
+        with patch("app.services.queue_service._is_owner", return_value=True), \
              patch("app.services.queue_service.supabase") as mock_sup:
             mock_sup.table = chain.table
             result = queue_service.pause_queue("shop-001", "owner-001")
@@ -237,7 +233,7 @@ class TestPauseResumeQueue:
         chain.update.side_effect = lambda data: updates.append(data) or chain
         chain.insert.return_value = chain
 
-        with patch("app.services.staff_service._is_owner", return_value=True), \
+        with patch("app.services.queue_service._is_owner", return_value=True), \
              patch("app.services.queue_service.supabase") as mock_sup:
             mock_sup.table = chain.table
             result = queue_service.resume_queue("shop-001", "owner-001")
@@ -249,9 +245,12 @@ class TestPauseResumeQueue:
         from app.services import queue_service
         from fastapi import HTTPException
 
-        with patch("app.services.staff_service._is_owner", return_value=False):
+        # queue_service imported _is_owner, so patch ITS binding (patching staff_service's does nothing).
+        with patch("app.services.queue_service._is_owner", return_value=False), \
+             patch("app.services.queue_service.supabase") as mock_sup:
             with pytest.raises(HTTPException) as exc:
                 queue_service.pause_queue("shop-001", "staff-uid")
+            mock_sup.table.assert_not_called()
             assert exc.value.status_code == 403
 
 
@@ -268,12 +267,13 @@ class TestGetCustomerHistory:
             "actual_service_minutes": 15,
         }
         shop = {"name": "Raj Salon", "category": "Salon", "city": "Pune"}
-        service = {"name": "Haircut"}
 
-        execute_one_calls = iter([MagicMock(data=shop), MagicMock(data=service)])
+        execute_one_calls = iter([MagicMock(data=shop)])
         chain = make_chain(ok_list([entry]))
 
         with patch("app.services.queue_service.execute_one", side_effect=lambda q: next(execute_one_calls)), \
+             patch("app.services.queue_service._fetch_services_by_ids",
+                   return_value=[{"id": "svc-001", "name": "Haircut"}]), \
              patch("app.services.queue_service.supabase") as mock_sup:
             mock_sup.table = chain.table
             result = queue_service.get_customer_history("cust-001")

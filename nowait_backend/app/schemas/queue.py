@@ -3,9 +3,9 @@ from pydantic import BaseModel, Field
 
 
 class JoinQueueRequest(BaseModel):
-    shop_id: str
-    service_id: Optional[str] = None
-    service_ids: List[str] = []
+    shop_id: str = Field(max_length=64)
+    service_id: Optional[str] = Field(default=None, max_length=64)
+    service_ids: List[str] = Field(default=[], max_length=20)
 
 
 class SelectedService(BaseModel):

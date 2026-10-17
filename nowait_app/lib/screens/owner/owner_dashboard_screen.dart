@@ -11,6 +11,7 @@ import '../../services/api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/profile_details_card.dart';
+import '../../widgets/report_review_sheet.dart';
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'manage_shop_screen.dart';
@@ -927,6 +928,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                     _formatDate(review.createdAt),
                     style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                   ),
+                  ReportReviewButton(review: review),
                   if (hasText) ...[
                     const SizedBox(width: 6),
                     AnimatedRotation(

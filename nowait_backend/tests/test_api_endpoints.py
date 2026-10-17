@@ -209,13 +209,15 @@ class TestQueueEndpoints:
         assert resp.status_code == 201
         assert resp.json()["token_number"] == 5
 
-    def test_join_queue_passes_staff_id(self, customer_client):
+    def test_join_queue_passes_the_chosen_services(self, customer_client):
+        # One FIFO queue per shop: a staff_id sent by an old app build is ignored.
         with patch("app.routers.queues.queue_service.join_queue",
-                   return_value=self._entry_resp(staff_id="staff-001")) as mock_join:
+                   return_value=self._entry_resp()) as mock_join:
             customer_client.post("/queues/join",
-                                 json={"shop_id": "shop-001", "staff_id": "staff-001"})
+                                 json={"shop_id": "shop-001", "staff_id": "staff-001",
+                                       "service_ids": ["svc-1", "svc-2"]})
         mock_join.assert_called_once_with(
-            "shop-001", "cust-uid-001", staff_id="staff-001", service_id=None
+            "shop-001", "cust-uid-001", service_id=None, service_ids=["svc-1", "svc-2"]
         )
 
     def test_get_queue_status(self, customer_client):

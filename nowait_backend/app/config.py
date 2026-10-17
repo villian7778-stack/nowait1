@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     # person" record). Set a long random value in .env and never change it afterwards:
     # changing it makes every earlier claim unrecognisable, so people could claim again.
     TRIAL_HASH_KEY: str = "nowait-free-trial-v1"
+    # Shown on the public policy pages (/legal/...), which Google Play and Razorpay require.
+    # Razorpay will ask for your registered business name and address - set them before launch.
+    LEGAL_BUSINESS_NAME: str = "NOWAITT"
+    SUPPORT_EMAIL: str = "nowaitt778@gmail.com"
+    SUPPORT_PHONE: str = ""
+    LEGAL_ADDRESS: str = ""
+    LEGAL_JURISDICTION: str = ""  # e.g. "Akola, Maharashtra" - defaults to "India"
+    # Cloudflare in front of the server (see PRODUCTION.md). Leave empty until the API is
+    # reached through Cloudflare. When set, a Cloudflare Transform Rule must add this value to
+    # every request as the X-Origin-Secret header: requests without it (someone going straight
+    # to *.onrender.com, around Cloudflare) are refused, and rate limits use the visitor IP
+    # Cloudflare puts in CF-Connecting-IP instead of the X-Forwarded-For header anyone can fake.
+    CLOUDFLARE_ORIGIN_SECRET: str = ""
 
     @property
     def is_production(self) -> bool:

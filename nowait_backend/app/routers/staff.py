@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_current_owner, get_current_user
+from app.schemas.staff import AddStaffByNameRequest
 from app.services import staff_service
 
 router = APIRouter(prefix="/staff", tags=["Staff"])
@@ -17,8 +18,8 @@ def get_staff(shop_id: str, current_user: dict = Depends(get_current_owner)):
 
 
 @router.post("/shops/{shop_id}/by-name", summary="Add staff by display name — no app account required (owner only)")
-def add_staff_by_name(shop_id: str, body: dict, current_user: dict = Depends(get_current_owner)):
-    name = body.get("name", "").strip()
+def add_staff_by_name(shop_id: str, body: AddStaffByNameRequest, current_user: dict = Depends(get_current_owner)):
+    name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
     return staff_service.add_staff_by_name(shop_id, current_user["id"], name)

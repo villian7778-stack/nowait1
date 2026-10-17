@@ -50,3 +50,6 @@ key.properties
 
 # Scratch data
 tmp_*.json
+
+# Production build settings (see nowait_app/release.env.example)
+nowait_app/release.env

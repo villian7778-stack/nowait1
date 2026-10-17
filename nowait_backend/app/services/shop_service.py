@@ -157,6 +157,9 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
             "queue_count": total,
             "now_serving_token": serving,
             **rev,
+            # "rating" is what older app builds show and what the list sorts by: keep it equal
+            # to the real review average (the shops.rating column is never updated).
+            "rating": rev["avg_review_rating"],
         })
 
     return {"shops": shops, "total": len(shops)}
@@ -176,6 +179,7 @@ def get_shop(shop_id: str) -> dict:
     rev = review_service.get_review_summary(shop_id)
     shop["avg_review_rating"] = rev["average_rating"]
     shop["review_count"] = rev["total_reviews"]
+    shop["rating"] = rev["average_rating"]
     return shop
 
 
@@ -310,13 +314,16 @@ def upload_shop_image(shop_id: str, owner_id: str, file_data: bytes, original_fi
     if len(current_images) >= MAX_SHOP_IMAGES:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_SHOP_IMAGES} images allowed per shop")
 
-    ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else "jpg"
+    # Extension from the checked content type, never from the uploader's file name.
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(content_type)
+    if ext is None:
+        raise HTTPException(status_code=415, detail="Only JPEG, PNG, WebP, or GIF images are allowed.")
     storage_path = f"{shop_id}/{uuid.uuid4()}.{ext}"
 
     supabase.storage.from_(_STORAGE_BUCKET).upload(
         path=storage_path,
         file=file_data,
-        file_options={"content-type": content_type, "upsert": "true"},
+        file_options={"content-type": content_type, "upsert": "false"},
     )
 
     public_url: str = supabase.storage.from_(_STORAGE_BUCKET).get_public_url(storage_path)

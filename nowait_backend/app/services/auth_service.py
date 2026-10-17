@@ -153,6 +153,10 @@ def forgot_password(email: str) -> dict:
 
 
 def complete_profile(user_id: str, email: str, data: CompleteProfileRequest) -> dict:
+    # Only for a brand-new Google sign-in. Without this, anyone with a profile could call it
+    # again to change their role or mobile number (profiles are read-only in the app).
+    if execute_one(supabase.table("profiles").select("id").eq("id", user_id)).data:
+        raise HTTPException(status_code=409, detail="Your profile is already set up.")
     existing_phone = execute_one(
         supabase.table("profiles").select("id").eq("phone", data.phone).neq("id", user_id)
     )

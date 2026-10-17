@@ -110,6 +110,21 @@ def toggle_open(shop_id: str, current_user: dict = Depends(get_current_owner)):
 
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    """The real type of an image from its first bytes (the uploader's content-type header and
+    file name can say anything). Returns None for anything that is not JPEG / PNG / WebP / GIF."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return None
+
 # Each image must be <= 0.5 MB (the app compresses to this before uploading); with the
 # 5-image cap per shop that keeps a shop's photos within 2.5 MB in total.
 _MAX_IMAGE_BYTES = 512 * 1024
@@ -144,12 +159,16 @@ async def upload_shop_image(
         chunks.append(chunk)
     file_data = b"".join(chunks)
 
+    real_type = _sniff_image_type(file_data)
+    if real_type is None:
+        raise HTTPException(status_code=415, detail="Only JPEG, PNG, WebP, or GIF images are allowed.")
+
     return shop_service.upload_shop_image(
         shop_id,
         current_user["id"],
         file_data,
         file.filename or "image.jpg",
-        content_type,
+        real_type,
     )
 
 

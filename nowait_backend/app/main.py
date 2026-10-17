@@ -1,13 +1,15 @@
+import hmac
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.rate_limit import limiter
-from app.routers import admin, analytics, auth, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
+from app.routers import admin, analytics, auth, legal, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
 
 # uvicorn only prints its own loggers, so our INFO lines (e.g. "Razorpay order ... created
 # (test mode)") were invisible on Render. Attach a handler to the "app" loggers only —
@@ -65,6 +67,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+@app.middleware("http")
+async def require_cloudflare(request: Request, call_next):
+    """With CLOUDFLARE_ORIGIN_SECRET set, only requests that came through Cloudflare (which adds
+    the X-Origin-Secret header) are served. /health stays open for Render's health check."""
+    secret = settings.CLOUDFLARE_ORIGIN_SECRET
+    if secret and request.url.path != "/health":
+        given = request.headers.get("x-origin-secret", "")
+        if not hmac.compare_digest(given.encode(), secret.encode()):
+            return JSONResponse({"detail": "Forbidden"}, status_code=403)
+    return await call_next(request)
+
 app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(reviews.router)
@@ -77,6 +91,7 @@ app.include_router(notifications.router)
 app.include_router(promotions.router)
 app.include_router(subscriptions.router)
 app.include_router(payments.router)
+app.include_router(legal.router)
 
 
 @app.get("/", tags=["Health"])

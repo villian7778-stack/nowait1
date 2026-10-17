@@ -143,7 +143,7 @@ class TestRemoveStaff:
             result = staff_service.remove_staff("shop-001", "owner-001", "staff-uid")
 
         assert any(u.get("is_active") is False for u in updates)
-        assert result["user_id"] == "staff-uid"
+        assert result["id"] == "staff-uid"   # removal is by staff_members.id
 
 
 class TestSelfRegisterAsStaff:
@@ -196,21 +196,15 @@ class TestSelfRegisterAsStaff:
         assert result["message"] == "Registered as staff"
 
 
-class TestIsStaffOrOwner:
-    def test_true_for_owner(self):
-        from app.services import staff_service
-        with patch("app.services.staff_service._is_owner", return_value=True):
-            assert staff_service.is_staff_or_owner("shop-001", "owner-001") is True
+class TestIsOwner:
+    """Staff are informational only; the single access check is "is this the shop's owner"."""
 
-    def test_true_for_active_staff(self):
+    def test_true_when_the_shop_belongs_to_the_user(self):
         from app.services import staff_service
-        sm = {"id": "sm-001"}
-        with patch("app.services.staff_service._is_owner", return_value=False), \
-             patch("app.services.staff_service.execute_one", return_value=MagicMock(data=sm)):
-            assert staff_service.is_staff_or_owner("shop-001", "staff-uid") is True
+        with patch("app.services.staff_service.execute_one", return_value=MagicMock(data={"id": "shop-001"})):
+            assert staff_service._is_owner("shop-001", "owner-001") is True
 
-    def test_false_for_random_user(self):
+    def test_false_for_anyone_else(self):
         from app.services import staff_service
-        with patch("app.services.staff_service._is_owner", return_value=False), \
-             patch("app.services.staff_service.execute_one", return_value=MagicMock(data=None)):
-            assert staff_service.is_staff_or_owner("shop-001", "random-uid") is False
+        with patch("app.services.staff_service.execute_one", return_value=MagicMock(data=None)):
+            assert staff_service._is_owner("shop-001", "random-uid") is False

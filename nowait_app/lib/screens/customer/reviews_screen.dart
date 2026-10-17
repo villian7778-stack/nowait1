@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/review_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/report_review_sheet.dart';
 
 class ReviewsScreen extends StatefulWidget {
   final ShopModel shop;
@@ -299,6 +300,7 @@ class _ReviewTile extends StatelessWidget {
                 ),
               ),
               _StarRow(rating: review.rating.toDouble(), size: 14),
+              ReportReviewButton(review: review),
             ],
           ),
           if (review.review != null && review.review!.isNotEmpty) ...[

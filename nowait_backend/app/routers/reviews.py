@@ -1,7 +1,15 @@
 from fastapi import APIRouter, Depends, Query
 
-from app.dependencies import get_token_user_id
-from app.schemas.review import ReviewCreate, ReviewListResponse, ReviewResponse, ReviewSummary
+from app.dependencies import get_current_user, get_token_user_id
+from app.rate_limit import per_user_limit
+from app.schemas.review import (
+    ReviewCreate,
+    ReviewListResponse,
+    ReviewReportRequest,
+    ReviewReportResponse,
+    ReviewResponse,
+    ReviewSummary,
+)
 from app.services import review_service
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
@@ -48,3 +56,16 @@ def get_reviews(
 def get_summary(shop_id: str):
     """Returns average rating, total review count, and per-star distribution."""
     return review_service.get_review_summary(shop_id)
+
+
+@router.post(
+    "/{review_id}/report",
+    response_model=ReviewReportResponse,
+    summary="Report a review as spam, offensive or fake",
+    dependencies=[Depends(per_user_limit("report-review", 10))],
+)
+def report_review(review_id: str, body: ReviewReportRequest, current_user: dict = Depends(get_current_user)):
+    """Any signed-in user can report a review (not their own) once. After
+    review_service.AUTO_HIDE_REPORTS different people report it, it is hidden from everyone
+    until an admin restores or deletes it (admin panel -> Reported Reviews)."""
+    return review_service.report_review(review_id, current_user["id"], body.reason, body.details)

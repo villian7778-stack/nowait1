@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../config/app_config.dart';
 import '../services/locale_service.dart';
 import '../theme/app_theme.dart';
 
@@ -51,6 +53,27 @@ class HelpSupportScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
+                _sectionLabel(l.tr('legalSection')),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10, offset: const Offset(0, 2))],
+                  ),
+                  child: Column(
+                    children: [
+                      for (final (icon, key, page) in const [
+                        (Icons.privacy_tip_outlined, 'privacyPolicy', 'privacy'),
+                        (Icons.description_outlined, 'termsOfService', 'terms'),
+                        (Icons.receipt_long_outlined, 'refundPolicy', 'refund-policy'),
+                        (Icons.person_remove_outlined, 'deleteAccountInfo', 'delete-account'),
+                      ])
+                        _linkTile(context, icon: icon, label: l.tr(key), url: AppConfig.legalUrl(page)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
                 _sectionLabel(l.tr('faqSection')),
                 const SizedBox(height: 10),
                 ...faqs.map((faq) => _FaqItem(question: faq.$1, answer: faq.$2)),
@@ -66,6 +89,38 @@ class HelpSupportScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// Opens one of the public policy pages in the browser.
+  Widget _linkTile(BuildContext context, {required IconData icon, required String label, required String url}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final failed = LocaleService.instance.tr('linkOpenFailed');
+        bool ok = false;
+        try {
+          ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        } catch (_) {}
+        if (!ok) messenger.showSnackBar(SnackBar(content: Text(failed), behavior: SnackBarBehavior.floating));
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: AppColors.primary, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface))),
+            const Icon(Icons.open_in_new_rounded, size: 16, color: AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
     );
   }
 

@@ -187,6 +187,18 @@ CREATE TABLE IF NOT EXISTS trial_claims (
     CHECK (email_hash IS NOT NULL OR phone_hash IS NOT NULL)
 );
 
+-- Reports of objectionable reviews (Google Play user-generated-content policy). One report per
+-- person per review; the backend hides a review once 3 different people have reported it.
+CREATE TABLE IF NOT EXISTS review_reports (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    review_id   UUID NOT NULL REFERENCES shop_reviews(id) ON DELETE CASCADE,
+    reporter_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    reason      TEXT NOT NULL DEFAULT 'other' CHECK (reason IN ('spam', 'offensive', 'fake', 'other')),
+    details     TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (review_id, reporter_id)
+);
+
 -- ============================================================
 -- ADDITIVE COLUMNS (no-op on a fresh install; fills gaps on an
 -- existing database created before these were introduced)
@@ -222,6 +234,9 @@ ALTER TABLE promotions ADD COLUMN IF NOT EXISTS is_active  BOOLEAN NOT NULL DEFA
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+-- Hidden reviews (too many reports, or hidden by an admin) are left out of every public list.
+ALTER TABLE shop_reviews ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS service_ids            UUID[] NOT NULL DEFAULT '{}';
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER;
@@ -265,6 +280,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_transactions_shop_id  ON payment_transact
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_owner_id ON payment_transactions(owner_id);
 CREATE INDEX IF NOT EXISTS idx_payment_transactions_status   ON payment_transactions(status);
 CREATE INDEX IF NOT EXISTS idx_profiles_email                ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_review_reports_review_id      ON review_reports(review_id);
 
 -- ============================================================
 -- UPDATED_AT TRIGGER
@@ -452,6 +468,7 @@ ALTER TABLE queue_events         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_reviews         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trial_claims         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE review_reports       ENABLE ROW LEVEL SECURITY;
 
 -- No client-facing policies on purpose. The Flutter app only uses Supabase for sign-in;
 -- every data call goes through the FastAPI backend (service_role key bypasses RLS).
@@ -468,7 +485,7 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename IN ('profiles','shops','services','subscriptions','promotions',
                         'queue_entries','notifications','staff_members','queue_events',
-                        'shop_reviews','payment_transactions','trial_claims','shop_staff','reviews')
+                        'shop_reviews','payment_transactions','trial_claims','review_reports','shop_staff','reviews')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
   END LOOP;
@@ -480,7 +497,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['profiles','shops','services','subscriptions','promotions',
                            'queue_entries','notifications','staff_members','queue_events',
-                           'shop_reviews','payment_transactions','trial_claims']
+                           'shop_reviews','payment_transactions','trial_claims','review_reports']
   LOOP
     IF to_regclass('public.' || t) IS NOT NULL THEN
       EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
@@ -517,6 +534,12 @@ END $$;
 --    (public READ stays: the bucket is public so image URLs load in the app.)
 DROP POLICY IF EXISTS "Authenticated users can upload" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can delete" ON storage.objects;
+
+-- The bucket shop photos are stored in. Public so photo links load in the app; only the backend
+-- (service role) can upload or delete. Created here so a brand-new project needs no manual step.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('shop-images', 'shop-images', true)
+ON CONFLICT (id) DO NOTHING;
 
 
 -- ============================================================

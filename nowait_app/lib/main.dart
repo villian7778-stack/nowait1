@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
@@ -15,6 +16,12 @@ import 'screens/owner/owner_dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Never let a release build that points at a development server reach users.
+  final configProblem = kReleaseMode ? AppConfig.releaseConfigProblem() : null;
+  if (configProblem != null) {
+    runApp(_MisconfiguredBuildApp(problem: configProblem));
+    return;
+  }
   await Future.wait([
     AuthService.instance.loadFromStorage(),
     LocaleService.instance.loadFromStorage(),
@@ -125,6 +132,41 @@ class _NoWaitAppState extends State<NoWaitApp> {
       theme: AppTheme.light,
       navigatorKey: _navigatorKey,
       home: home,
+    );
+  }
+}
+
+
+/// Shown instead of the app when a release build was made without the production settings
+/// (see nowait_app/build_release.ps1). Only a developer should ever see this.
+class _MisconfiguredBuildApp extends StatelessWidget {
+  final String problem;
+  const _MisconfiguredBuildApp({required this.problem});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.build_circle_outlined, size: 48, color: AppColors.error),
+                const SizedBox(height: 16),
+                const Text('This build is not configured for production.', textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text(problem, textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                const Text('Build it with build_release.ps1.', textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

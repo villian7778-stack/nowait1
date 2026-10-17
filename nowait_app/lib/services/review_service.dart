@@ -24,6 +24,16 @@ class ReviewService {
     return ReviewModel.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Reports a review as objectionable. Returns true if this user had already reported it.
+  /// [reason] is one of spam, offensive, fake, other.
+  Future<bool> reportReview(String reviewId, {required String reason, String? details}) async {
+    final json = await ApiClient.instance.post('/reviews/$reviewId/report', body: {
+      'reason': reason,
+      if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
+    });
+    return (json as Map<String, dynamic>)['already_reported'] == true;
+  }
+
   Future<Map<String, dynamic>> getReviews(
     String shopId, {
     int page = 1,

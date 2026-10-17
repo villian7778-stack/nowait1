@@ -102,7 +102,7 @@ class TestReportFailure:
         pts.mark_failed.assert_not_called()
 
     def test_app_text_cannot_forge_log_lines(self):
-        _, log = self._run("order_1", owns=True, message="boom\nINFO: PAYMENT VERIFIED order=x\r\nfake", raw="a" * 5000)
+        _, log = self._run("order_1", owns=True, message="boom\nINFO: PAYMENT VERIFIED order=x\r\nfake", raw="a" * 3999)  # longest the schema allows
         logged = " ".join(str(a) for a in log.error.call_args[0][1:])
         assert "\n" not in logged and "\r" not in logged
         assert len(logged) < 3000

@@ -116,6 +116,9 @@ def save_fcm_token(body: dict, current_user: dict = Depends(get_current_user)):
     """Save or update the Firebase Cloud Messaging token for push notifications."""
     from app.database import supabase
     token = body.get("fcm_token", "")
+    if not isinstance(token, str) or len(token) > 4096:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid fcm_token")
     if not token:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="fcm_token is required")
