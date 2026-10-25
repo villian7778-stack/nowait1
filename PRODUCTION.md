@@ -95,6 +95,8 @@ Add your domain (e.g. `api.nowaitt.in`) under *Custom Domains* — HTTPS is auto
 | `TRIAL_HASH_KEY` | new long random value; save it forever, never change it |
 | `LEGAL_BUSINESS_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `LEGAL_ADDRESS`, `LEGAL_JURISDICTION` | shown on the policy pages; Razorpay checks name + address |
 | `CLOUDFLARE_ORIGIN_SECRET` | only once Cloudflare is set up (section 4b) — **secret** |
+| `APP_MIN_BUILD_ANDROID`, `APP_MIN_BUILD_IOS` | `0` (off) — raise only to force an update (section 10) |
+| `APP_STORE_URL_IOS` | your App Store link, once the iPhone app is published |
 
 **After deploying, open:** `/health` (should say healthy), `/legal/privacy` (should show your
 business name), and `/docs` (should be *Not Found* in production).
@@ -252,5 +254,24 @@ is personal) → Production. Read the *Pre-launch report* Play generates for cra
 - **Logs** (server): search `WEBHOOK`, `CHECKOUT FAILED`, `RECONCILED`, `LEDGER`, `SIGNATURE` for payments.
 - **Moderation**: admin panel (`/nowaitt_778admin`) → *Reported Reviews* — hide, restore or delete.
 - **Backups**: Supabase Pro takes daily backups; download one occasionally.
-- **Scaling later**: the server runs one worker on purpose (admin logins and rate limits are kept in
-  memory). If you ever add more workers or servers, those need a shared store (e.g. Redis) first.
+- **Scaling later**: the server runs one worker on purpose (admin logins, rate limits and the
+  "one at a time" locks that stop double payments / double shops are kept in memory). If you ever add
+  more workers or servers, those need a shared store (e.g. Redis) first.
+
+### Forcing everyone onto a new app version
+
+The app sends its **build number** (the number after `+` in `nowait_app/pubspec.yaml`, e.g.
+`version: 1.0.1+2` → build **2**) with every request. A build older than the minimum you set sees only
+an **"Update required"** screen whose button opens the Play Store (Android) or App Store (iPhone).
+
+1. Raise the version in `pubspec.yaml` for every release, e.g. `1.0.0+1` → `1.0.1+2` (Play needs a higher
+   build number for each upload anyway). Build and upload it to Play.
+2. **Wait until the new version is live on the Play Store** (review can take hours or days).
+3. Render → Environment → `APP_MIN_BUILD_ANDROID` = the new build number (e.g. `2`) → save.
+   Every older app shows the update screen immediately, even if it was left open.
+4. iPhone (once on the App Store): same with `APP_MIN_BUILD_IOS`, and set `APP_STORE_URL_IOS`
+   (e.g. `https://apps.apple.com/app/id1234567890`).
+
+Never set the minimum higher than the build that is live on the store — nobody could use the app.
+Made a mistake? Set it back (or to `0` = off) and the app unlocks again the next time it is opened.
+Payments already in progress always finish, even for an old build.

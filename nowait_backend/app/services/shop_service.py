@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
+from app.locks import lock_for
 from app.schemas.shop import ShopCreate, ShopUpdate
 from app.services import review_service
 
@@ -190,11 +191,20 @@ def get_owner_shop(owner_id: str) -> dict:
     return get_shop(result.data["id"])
 
 
+_ONE_SHOP_MESSAGE = "You already have a shop. Use update to modify it."
+
+
 def create_shop(owner_id: str, data: ShopCreate) -> dict:
-    # Prevent owner from having multiple shops
+    # One shop per owner. The lock stops a double tap / retry creating two shops at once; the
+    # UNIQUE index on shops.owner_id (sql/final_consolidated.sql) backs it up in the database.
+    with lock_for(f"create-shop:{owner_id}"):
+        return _create_shop_locked(owner_id, data)
+
+
+def _create_shop_locked(owner_id: str, data: ShopCreate) -> dict:
     existing = execute_one(supabase.table("shops").select("id").eq("owner_id", owner_id))
     if existing.data:
-        raise HTTPException(status_code=400, detail="You already have a shop. Use update to modify it.")
+        raise HTTPException(status_code=400, detail=_ONE_SHOP_MESSAGE)
 
     shop_data = {
         "owner_id": owner_id,
@@ -210,7 +220,12 @@ def create_shop(owner_id: str, data: ShopCreate) -> dict:
         **({"latitude": data.latitude} if data.latitude is not None else {}),
         **({"longitude": data.longitude} if data.longitude is not None else {}),
     }
-    result = supabase.table("shops").insert(shop_data).execute()
+    try:
+        result = supabase.table("shops").insert(shop_data).execute()
+    except Exception as e:
+        if getattr(e, "code", None) == "23505" or "duplicate key" in str(e).lower():
+            raise HTTPException(status_code=400, detail=_ONE_SHOP_MESSAGE)
+        raise
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create shop")
     shop = result.data[0]

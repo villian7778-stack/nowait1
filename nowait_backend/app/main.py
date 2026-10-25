@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.rate_limit import limiter
-from app.routers import admin, analytics, auth, legal, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
+from app.routers import admin, analytics, app_version, auth, legal, maps, notifications, payments, promotions, queues, reviews, shops, staff, subscriptions
 
 # uvicorn only prints its own loggers, so our INFO lines (e.g. "Razorpay order ... created
 # (test mode)") were invisible on Render. Attach a handler to the "app" loggers only —
@@ -68,6 +68,32 @@ app.add_middleware(
 )
 
 
+# Starlette runs the middleware added last first: the Cloudflare check below wraps this one.
+# Paths an out-of-date app may still use: the version check itself, and payments, so a checkout
+# that was already open when the minimum was raised still completes and activates.
+_UPDATE_EXEMPT_PREFIXES = ("/app/", "/payments/", "/health")
+
+
+@app.middleware("http")
+async def require_current_app(request: Request, call_next):
+    """App builds older than APP_MIN_BUILD_<PLATFORM> get 426 on every call, so the app shows its
+    "Update required" screen even if it was left open. Requests without the app's build header
+    (older builds, browsers, Razorpay webhooks, the admin panel) are not affected."""
+    if not request.url.path.startswith(_UPDATE_EXEMPT_PREFIXES):
+        platform = request.headers.get("x-app-platform", "").strip().lower()
+        try:
+            build = int(request.headers.get("x-app-build", ""))
+        except ValueError:
+            build = None
+        if app_version.update_required(platform, build):
+            return JSONResponse(
+                {"detail": "A new version of the app is available. Please update to continue.",
+                 "update_required": True, "store_url": app_version.store_url(platform)},
+                status_code=426,
+            )
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def require_cloudflare(request: Request, call_next):
     """With CLOUDFLARE_ORIGIN_SECRET set, only requests that came through Cloudflare (which adds
@@ -78,6 +104,7 @@ async def require_cloudflare(request: Request, call_next):
         if not hmac.compare_digest(given.encode(), secret.encode()):
             return JSONResponse({"detail": "Forbidden"}, status_code=403)
     return await call_next(request)
+
 
 app.include_router(admin.router)
 app.include_router(auth.router)
@@ -92,6 +119,7 @@ app.include_router(promotions.router)
 app.include_router(subscriptions.router)
 app.include_router(payments.router)
 app.include_router(legal.router)
+app.include_router(app_version.router)
 
 
 @app.get("/", tags=["Health"])

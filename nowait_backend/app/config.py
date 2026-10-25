@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # to *.onrender.com, around Cloudflare) are refused, and rate limits use the visitor IP
     # Cloudflare puts in CF-Connecting-IP instead of the X-Forwarded-For header anyone can fake.
     CLOUDFLARE_ORIGIN_SECRET: str = ""
+    # Forced app update. Each app build sends its build number (the +N in pubspec.yaml's
+    # "version: 1.0.3+N"). Builds below the minimum get the "Update required" screen and every
+    # API call answers 426 until the user installs the new version from the store. 0 = no minimum.
+    # Raise it only AFTER the new build is live on the store, or nobody can use the app.
+    APP_MIN_BUILD_ANDROID: int = 0
+    APP_MIN_BUILD_IOS: int = 0
+    APP_STORE_URL_ANDROID: str = "https://play.google.com/store/apps/details?id=com.nowait.nowait_app"
+    APP_STORE_URL_IOS: str = ""  # e.g. https://apps.apple.com/app/id1234567890 once on the App Store
 
     @property
     def is_production(self) -> bool:

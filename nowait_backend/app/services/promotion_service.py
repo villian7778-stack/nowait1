@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
+from app.locks import lock_for
 from app.schemas.promotion import PromotionCreate, PromotionUpdate
 from app.services.notification_service import create_notification
 
@@ -72,17 +73,19 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: b
     shop_name = shop.data.get("name", "A shop")
     shop_city = shop.data.get("city", "")
 
-    # Only one scheme can be active at a time: a new scheme replaces the previous one.
-    if data.title.strip() != FEATURED_TITLE:
-        supabase.table("promotions").delete().eq("shop_id", shop_id).neq("title", FEATURED_TITLE).execute()
+    # Only one scheme can be active at a time: a new scheme replaces the previous one. The lock
+    # keeps a double tap from leaving two schemes (both deletes run before both inserts).
+    with lock_for(f"promotions:{shop_id}"):
+        if data.title.strip() != FEATURED_TITLE:
+            supabase.table("promotions").delete().eq("shop_id", shop_id).neq("title", FEATURED_TITLE).execute()
 
-    result = supabase.table("promotions").insert({
-        "shop_id": shop_id,
-        "title": data.title,
-        "description": data.description,
-        "valid_until": data.valid_until,
-        "is_active": True,
-    }).execute()
+        result = supabase.table("promotions").insert({
+            "shop_id": shop_id,
+            "title": data.title,
+            "description": data.description,
+            "valid_until": data.valid_until,
+            "is_active": True,
+        }).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create promotion")

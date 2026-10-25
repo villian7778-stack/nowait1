@@ -266,6 +266,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_queue_per_user
     ON queue_entries(user_id)
     WHERE status IN ('waiting', 'serving');
 
+-- One shop per owner, enforced by the database (a double tap on "Create shop" can't make two).
+-- Skipped with a notice if some owner already has two shops: delete the extra one, run again.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT owner_id FROM shops GROUP BY owner_id HAVING COUNT(*) > 1) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_one_shop_per_owner ON shops(owner_id);
+  ELSE
+    RAISE NOTICE 'idx_one_shop_per_owner NOT created: some owners have more than one shop';
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_queue_entries_shop_status ON queue_entries(shop_id, status, token_number);
 CREATE INDEX IF NOT EXISTS idx_queue_entries_user        ON queue_entries(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_shops_city_category       ON shops(city, category);
@@ -403,6 +414,10 @@ DECLARE
     v_completed queue_entries%ROWTYPE;
     v_next      queue_entries%ROWTYPE;
 BEGIN
+    -- One advance at a time per shop: without this, two "Next" presses at the same moment
+    -- (double tap, or owner and staff together) could leave two customers "serving".
+    PERFORM 1 FROM shops WHERE id = p_shop_id FOR UPDATE;
+
     UPDATE queue_entries
     SET status = 'completed', served_at = NOW()
     WHERE shop_id = p_shop_id AND status = 'serving'
@@ -437,7 +452,8 @@ DECLARE
 BEGIN
     SELECT * INTO v_entry
     FROM queue_entries
-    WHERE id = p_entry_id AND status IN ('waiting', 'serving');
+    WHERE id = p_entry_id AND status IN ('waiting', 'serving')
+    FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'NOT_FOUND: Entry not found or not skippable';

@@ -122,7 +122,8 @@ class TestCreateOrder:
         end = datetime.now(timezone.utc) + timedelta(days=12)
         res, rec = self._call(end, extend=True, plan="basic", duration=90)
         assert res["order_id"] == "o1"
-        assert rec.call_args[0][5] == {"plan": "basic", "duration_days": 90}
+        stored = rec.call_args[0][5]
+        assert stored["plan"] == "basic" and stored["duration_days"] == 90 and "key_id" in stored
 
     @pytest.mark.parametrize("days,paise", [(30, 4900), (90, 13000)])
     def test_order_is_charged_the_real_plan_price(self, days, paise):

@@ -163,6 +163,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
   }
 
   Future<void> _runPayment({required bool extending}) async {
+    if (_isLoading) return; // a payment is already running
     final days = _selectedDays;
     final endBefore = _activePromotion?['valid_until'];
     setState(() => _isLoading = true);

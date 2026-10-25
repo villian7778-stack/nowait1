@@ -27,7 +27,7 @@ flutter test --name "description text"          # Run tests matching a name
 
 Flutter widget tests only — no backend tests exist in `nowait_app/`.
 
-**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker`, `flutter_map`, `latlong2`, `geolocator`, `url_launcher`, `razorpay_flutter`, `supabase_flutter` — no state management library, no DI framework. Map rendering uses OpenStreetMap via `flutter_map` (no API key required). Geocoding and Places search are proxied through the backend (`/maps/*` endpoints) using the server's `GOOGLE_MAP_KEY`. `supabase_flutter` is used only for Google sign-in and password-recovery deep links (`SUPABASE_URL`/`SUPABASE_ANON_KEY` dart-defines) — all other data access, including email/password auth, goes through the FastAPI backend via `ApiClient`.
+**Flutter SDK requirement:** `^3.11.4` (see `pubspec.yaml`). Runtime dependencies are intentionally minimal: `google_fonts`, `http`, `shared_preferences`, `image_picker`, `flutter_map`, `latlong2`, `geolocator`, `url_launcher`, `razorpay_flutter`, `supabase_flutter`, `package_info_plus` (build number for forced updates) — no state management library, no DI framework. Map rendering uses OpenStreetMap via `flutter_map` (no API key required). Geocoding and Places search are proxied through the backend (`/maps/*` endpoints) using the server's `GOOGLE_MAP_KEY`. `supabase_flutter` is used only for Google sign-in and password-recovery deep links (`SUPABASE_URL`/`SUPABASE_ANON_KEY` dart-defines) — all other data access, including email/password auth, goes through the FastAPI backend via `ApiClient`.
 
 **To set the backend URL** (defaults to `http://localhost:8000`):
 ```bash
@@ -80,7 +80,9 @@ flutter run --dart-define=BASE_URL=http://192.168.1.x:8000
 
 **Key conventions:**
 - `AuthService.instance`, `ApiClient.instance`, and all domain services are singletons — never instantiate with `new`
-- `GradientButton` wraps `GestureDetector` + `AnimatedScale` — use it for primary CTAs; `GhostButton` for secondary actions
+- `GradientButton` wraps `GestureDetector` + `AnimatedScale` — use it for primary CTAs; `GhostButton` for secondary actions. Both take `FutureOr<void> Function()` and ignore taps (showing a spinner) while an async `onPressed` is still running — declare handlers `Future<void> f() async`, not `void f() async`, or the guard can't see when they finish
+- **Double taps / retries / two people at once** — guarded on both sides. App: the buttons above, `PaymentService.openCheckout` refuses a second checkout while one is open, `_callNext` sends `expected_serving_token`. Server (`app/locks.py` `lock_for(key)`, in-process per-key locks — fine for the single worker): `create-order` hands out the owner's open unpaid order for the same purchase again for 15 min (`payment_transaction_service.find_open_order`; Razorpay takes one payment per order, so no double charge), activations run one at a time per shop and `create_or_renew_subscription` writes only if `expires_at` is unchanged (retries), shop creation is locked + UNIQUE index `idx_one_shop_per_owner`, scheme replace and add-staff (same name → 409) are locked, `POST /queues/shop/{id}/next?expected_serving_token=N` answers `already_moved` instead of advancing again and `advance_queue_v2`/`skip_customer_v2` lock rows. Tests: `tests/test_concurrency_and_update.py`, `test/update_and_double_tap_test.dart`
+- **Forced update** — the app sends `X-App-Platform`/`X-App-Build` (pubspec `+N`) on every request; builds below `APP_MIN_BUILD_ANDROID`/`_IOS` get 426 from every endpoint except `/app/*`, `/payments/*`, `/health` (so a checkout in progress still completes), and `GET /app/version?platform=&build=` is checked at start-up and on resume. `AppUpdateService` (a `ChangeNotifier`) then makes `MaterialApp.builder` show only `UpdateRequiredScreen`, whose button opens the Play Store (`market://`, then https) or `APP_STORE_URL_IOS`. Requests without the headers (old builds, webhooks, admin) are never blocked. Steps in PRODUCTION.md section 10
 - Shadows use `AppColors.shadowPrimary` (`rgba(31,76,221,0.08)`), never `Colors.black`
 - Phone numbers use a hardcoded `+91` prefix (India); uniqueness is enforced by the UNIQUE `profiles.phone` column plus explicit checks in `auth_service.py` (no pattern/"fake number" filtering by design)
 - **No-refund policy:** all owner payments (subscription, renewal/extension, Featured Promotion) are final. `NoRefundNotice` (text key `noRefundPolicy`, en/hi/mr, also a Help FAQ) is shown in every pay/extend/cancel dialog; there is deliberately no refund endpoint — don't add one without changing the policy text
@@ -151,7 +153,7 @@ pytest tests/                          # Run all backend tests
 pytest tests/test_queue_service.py     # Run a single test file
 pytest tests/ -k "test_join_queue"     # Run tests matching a name
 ```
-The whole backend suite passes (no known failures — keep it that way). Test files (`nowait_backend/tests/`; production features in `test_production_readiness.py`; security attacks in `test_security.py`; analytics income in `test_analytics_income.py`; payment-related: `test_payments.py`, `test_payment_recovery.py`, `test_payment_security.py`, `test_payment_webhook.py`, `test_trial_service.py`): `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
+The whole backend suite passes (no known failures — keep it that way). Test files (`nowait_backend/tests/`; production features in `test_production_readiness.py`; security attacks in `test_security.py`; double taps / concurrency / forced update in `test_concurrency_and_update.py`; analytics income in `test_analytics_income.py`; payment-related: `test_payments.py`, `test_payment_recovery.py`, `test_payment_security.py`, `test_payment_webhook.py`, `test_trial_service.py`): `test_api_endpoints.py`, `test_queue_service.py`, `test_shop_service.py`, `test_subscription_service.py`, `test_staff_service.py`, `test_notification_service.py`.
 
 The `conftest.py` patches `supabase.create_client` before any imports, so no real Supabase credentials are needed. Each test module must patch its own local `supabase` binding (e.g. `patch("app.services.queue_service.supabase", ...)`), not just `app.database.supabase`.
 
@@ -246,7 +248,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | POST | `/queues/{id}/coming` | Customer | Notify shop customer is on the way |
 | GET | `/queues/history` | Customer | Past visit history |
 | GET | `/queues/shop/{id}` | Owner/Staff | Full shop queue with customer details |
-| POST | `/queues/shop/{id}/next` | Owner/Staff | Advance queue (optional `staff_id` query param) |
+| POST | `/queues/shop/{id}/next` | Owner/Staff | Advance queue (optional `expected_serving_token`: if the queue already moved, returns `already_moved` without advancing) |
 | POST | `/queues/{id}/skip` | Owner/Staff | Skip a customer |
 | GET | `/queues/shop/{id}/by-staff` | Owner | Queue grouped by staff member |
 | POST | `/queues/shop/{id}/pause` | Owner | Pause entire shop queue |
@@ -279,6 +281,7 @@ Estimated wait: `(position - 1) * avg_wait_minutes` (shop owner sets `avg_wait_m
 | GET | `/reviews/shops/{id}/summary` | — | Avg rating, total count, per-star distribution |
 | POST | `/reviews/{id}/report` | User | Report a review (once per person; auto-hidden after 3 reporters) |
 | GET | `/legal/{privacy,terms,refund-policy,contact,delete-account}` | — | Public policy pages (HTML) |
+| GET | `/app/version` | — | `platform`, `build` → `update_required`, `min_build`, `store_url` (forced update) |
 
 **Security notes:** `/maps/*` are owner-only (only the shop forms use them), rate-limited to 60/min per owner, and always ask Google for fixed fields only (the caller can't pick costlier ones), since they spend the server's Google key. `/auth/complete-profile` returns 409 once a profile exists (it can't be re-run to change role/phone). `/auth/fcm-token` takes only a short string. Request schemas cap text lengths. Android `allowBackup` is off. Cloudflare (PRODUCTION.md 4b): with `CLOUDFLARE_ORIGIN_SECRET` set, `main.py` refuses (403) every request except `/health` that lacks the matching `X-Origin-Secret` header (added by a Cloudflare Transform Rule), and `rate_limit.client_ip` keys per-IP limits on `CF-Connecting-IP`; unset, behaviour is unchanged (uvicorn's leftmost `X-Forwarded-For`, which a caller can fake). `tests/test_security.py` holds the attack-style tests for all of this. Dependencies were checked with `pip-audit` (no known vulnerabilities as of 2026-10); re-run it before each release.
 

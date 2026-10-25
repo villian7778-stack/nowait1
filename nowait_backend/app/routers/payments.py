@@ -9,6 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.config import settings
 from app.database import execute_one, supabase
 from app.dependencies import get_current_owner
+from app.locks import lock_for
 from app.rate_limit import per_owner_limit
 from app.schemas.payment import (
     CheckoutFailureReport,
@@ -29,6 +30,27 @@ logger = logging.getLogger(__name__)
 # Orders are charged at their real price - subscriptions from subscription_service.DURATION_PRICES,
 # Featured Promotions at promotion_service.PROMOTION_PRICE_PER_DAY per day. With Razorpay *test*
 # keys no real money moves.
+
+
+def _create_or_reuse_order(shop_id: str, owner_id: str, purpose: str, amount_paise: int,
+                           metadata: dict, receipt_prefix: str) -> dict:
+    """A Razorpay order for this purchase. If the owner already has an unpaid order for exactly
+    the same thing from the last few minutes (double tap, retry after a timeout, a second phone),
+    that order is handed out again instead of a new one: Razorpay accepts only one payment per
+    order, so the owner can't be charged twice for one purchase."""
+    metadata = {**metadata, "key_id": settings.RAZORPAY_KEY_ID}  # never reuse a test order with live keys
+    with lock_for(f"order:{owner_id}:{purpose}"):
+        existing = payment_transaction_service.find_open_order(shop_id, owner_id, purpose, amount_paise, metadata)
+        if existing:
+            logger.info("Reusing open Razorpay order %s for owner=%s purpose=%s",
+                        existing["razorpay_order_id"], owner_id, purpose)
+            return {"order_id": existing["razorpay_order_id"], "amount": existing["amount_paise"],
+                    "currency": "INR", "key_id": settings.RAZORPAY_KEY_ID}
+        order = razorpay_service.create_order(amount_paise, _receipt(receipt_prefix, shop_id))
+        payment_transaction_service.record_order(
+            shop_id, owner_id, purpose, order["order_id"], order["amount"], metadata,
+        )
+        return order
 
 
 def _receipt(prefix: str, shop_id: str) -> str:
@@ -110,7 +132,13 @@ def report_checkout_failure(body: CheckoutFailureReport, current_user: dict = De
 def _activate(txn: dict):
     """Grants what a paid order bought, using only what was stored when the order was
     created. Built inside the activation step so any problem releases the claim instead
-    of leaving a paid-but-never-activated order that can't be retried."""
+    of leaving a paid-but-never-activated order that can't be retried. Activations for one
+    shop run one at a time, so two payments landing together both add their days."""
+    with lock_for(f"activate:{txn['shop_id']}"):
+        return _activate_unlocked(txn)
+
+
+def _activate_unlocked(txn: dict):
     meta = txn.get("metadata") or {}
     if txn["purpose"] == "subscription":
         sub_data = SubscriptionCreate(plan=meta.get("plan"), duration_days=meta.get("duration_days"))
@@ -172,13 +200,10 @@ def create_subscription_order(
             status_code=409,
             detail=subscription_service.already_active_message(expires_at, body.duration_days),
         )
-    receipt = _receipt("sub", shop_id)
-    order = razorpay_service.create_order(subscription_service.price_paise(body.duration_days), receipt)
-    payment_transaction_service.record_order(
-        shop_id, current_user["id"], "subscription", order["order_id"], order["amount"],
-        {"plan": body.plan, "duration_days": body.duration_days},
+    return _create_or_reuse_order(
+        shop_id, current_user["id"], "subscription", subscription_service.price_paise(body.duration_days),
+        {"plan": body.plan, "duration_days": body.duration_days}, "sub",
     )
-    return order
 
 
 @router.post(
@@ -214,18 +239,16 @@ def create_promotion_order(
 ):
     _require_shop_owner(shop_id, current_user["id"])
     promotion_service.validate_promotion_days(body.days)
-    receipt = _receipt("promo", shop_id)
-    order = razorpay_service.create_order(promotion_service.promotion_price_paise(body.days), receipt)
     plural = "" if body.days == 1 else "s"
-    payment_transaction_service.record_order(
-        shop_id, current_user["id"], "promotion", order["order_id"], order["amount"],
+    return _create_or_reuse_order(
+        shop_id, current_user["id"], "promotion", promotion_service.promotion_price_paise(body.days),
         {
             "title": promotion_service.FEATURED_TITLE,
             "description": f"Shop promoted for {body.days} day{plural}",
             "days": body.days,
         },
+        "promo",
     )
-    return order
 
 
 @router.post(

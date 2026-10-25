@@ -57,8 +57,14 @@ def get_shop_queue(shop_id: str, current_user: dict = Depends(get_current_owner)
 
 
 @router.post("/shop/{shop_id}/next", response_model=AdvanceQueueResponse, summary="Serve next customer (owner only)")
-def advance_queue(shop_id: str, current_user: dict = Depends(get_current_owner)):
-    return queue_service.advance_queue(shop_id, current_user["id"])
+def advance_queue(
+    shop_id: str,
+    expected_serving_token: Optional[int] = Query(
+        None, ge=0, description="Token the app shows as now serving (0 = nobody). If the queue has "
+                                "moved on since, nothing is advanced."),
+    current_user: dict = Depends(get_current_owner),
+):
+    return queue_service.advance_queue(shop_id, current_user["id"], expected_serving_token)
 
 
 @router.post("/{entry_id}/skip", summary="Skip a customer (owner only)")

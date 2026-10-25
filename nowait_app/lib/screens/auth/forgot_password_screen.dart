@@ -49,7 +49,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _sendResetLink() async {
+  Future<void> _sendResetLink() async {
     if (!_isValid) return;
     setState(() => _isLoading = true);
     try {

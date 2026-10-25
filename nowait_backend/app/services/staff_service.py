@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
+from app.locks import lock_for
 
 
 def _is_owner(shop_id: str, user_id: str) -> bool:
@@ -96,14 +97,28 @@ def add_staff_by_name(shop_id: str, owner_id: str, display_name: str) -> dict:
     if not display_name.strip():
         raise HTTPException(status_code=400, detail="Staff name is required")
 
-    result = supabase.table("staff_members").insert({
-        "shop_id": shop_id,
-        "user_id": None,
-        "added_by": owner_id,
-        "display_name": display_name.strip(),
-        "is_owner_staff": False,
-        "is_active": True,
-    }).execute()
+    # Same name twice is almost always a double tap or a retry on a slow connection.
+    with lock_for(f"staff:{shop_id}"):
+        same = (
+            supabase.table("staff_members")
+            .select("id")
+            .eq("shop_id", shop_id)
+            .eq("is_active", True)
+            .ilike("display_name", display_name.strip().replace("%", r"\%").replace("_", r"\_"))
+            .limit(1)
+            .execute()
+        ).data
+        if same:
+            raise HTTPException(status_code=409, detail="A staff member with this name already exists.")
+
+        result = supabase.table("staff_members").insert({
+            "shop_id": shop_id,
+            "user_id": None,
+            "added_by": owner_id,
+            "display_name": display_name.strip(),
+            "is_owner_staff": False,
+            "is_active": True,
+        }).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to add staff")

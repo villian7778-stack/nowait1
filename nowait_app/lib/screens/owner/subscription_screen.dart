@@ -80,6 +80,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   /// "Activate Free Trial": the shop goes live for 90 days (3 months) with no payment. Afterwards the
   /// 1-month / 3-month plans show and paying for one extends from the end of the trial.
   Future<void> _startTrial() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     String? error;
     try {

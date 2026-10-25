@@ -56,6 +56,11 @@ class PaymentService {
     String? email,
     String purpose = 'subscription',
   }) {
+    // Never two checkouts at once (double tap, or a second tap while one is still open):
+    // the owner could otherwise pay twice.
+    if (_completer != null && !_completer!.isCompleted) {
+      return Future.error(PaymentException('A payment is already open. Please finish or close it first.'));
+    }
     _razorpay?.clear();
     _orderId = orderId;
     _purpose = purpose;

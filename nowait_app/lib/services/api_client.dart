@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
+import 'app_update_service.dart';
 import 'auth_service.dart';
 
 class ApiException implements Exception {
@@ -25,6 +26,7 @@ class ApiClient {
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      ...AppUpdateService.instance.requestHeaders,
     };
   }
 
@@ -154,6 +156,7 @@ class ApiClient {
     final token = AuthService.instance.accessToken;
     final request = http.MultipartRequest('POST', _uri(path));
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    request.headers.addAll(AppUpdateService.instance.requestHeaders);
 
     final parts = mimeType.split('/');
     request.files.add(http.MultipartFile.fromBytes(
@@ -174,6 +177,7 @@ class ApiClient {
     401: 'Your session has expired. Please log in again.',
     403: "You don't have permission to do that.",
     404: "That couldn't be found.",
+    426: 'A new version of the app is available. Please update to continue.',
     429: 'Too many attempts. Please wait a moment and try again.',
     500: 'Something went wrong on our end. Please try again.',
     502: 'The server is temporarily unavailable. Please try again shortly.',
@@ -189,6 +193,10 @@ class ApiClient {
     String message = _statusFallbacks[res.statusCode] ?? 'Request failed (${res.statusCode})';
     try {
       final body = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 426 && body is Map && body['update_required'] == true) {
+        // This build is too old: the app swaps to the "Update required" screen.
+        AppUpdateService.instance.markRequired(body['store_url'] as String?);
+      }
       if (body is Map) {
         final detail = body['detail'];
         if (detail is String) {

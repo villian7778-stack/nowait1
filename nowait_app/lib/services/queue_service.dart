@@ -41,8 +41,12 @@ class QueueService {
     return await ApiClient.instance.get('/queues/shop/$shopId/public');
   }
 
-  Future<Map<String, dynamic>> advanceQueue(String shopId) async {
-    return await ApiClient.instance.post('/queues/shop/$shopId/next');
+  /// [expectedServingToken] is the token the screen shows as now serving (0 = nobody). If the
+  /// queue has already moved on (double tap, or owner and staff pressing together), the server
+  /// doesn't advance again and answers `already_moved: true`.
+  Future<Map<String, dynamic>> advanceQueue(String shopId, {int? expectedServingToken}) async {
+    return await ApiClient.instance.post('/queues/shop/$shopId/next',
+        query: {if (expectedServingToken != null) 'expected_serving_token': expectedServingToken});
   }
 
   Future<void> skipCustomer(String entryId, {String? note}) async {

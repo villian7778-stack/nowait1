@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
@@ -29,6 +30,38 @@ def record_order(shop_id: str, owner_id: str, purpose: str, order_id: str, amoun
         logger.error("LEDGER WRITE FAILED for Razorpay order %s (shop=%s owner=%s purpose=%s): %s: %r",
                      order_id, shop_id, owner_id, purpose, type(e).__name__, e)
         raise HTTPException(status_code=500, detail="Could not start the payment. Please try again.")
+
+
+# How long an unpaid order is handed out again for the same purchase (see find_open_order).
+REUSE_WINDOW_MINUTES = 15
+
+
+def find_open_order(shop_id: str, owner_id: str, purpose: str, amount_paise: int, metadata: dict) -> dict | None:
+    """This owner's most recent unpaid order for exactly this purchase (same shop, purpose,
+    amount and stored details) from the last REUSE_WINDOW_MINUTES, or None."""
+    since = (datetime.now(timezone.utc) - timedelta(minutes=REUSE_WINDOW_MINUTES)).isoformat()
+    try:
+        rows = (
+            supabase.table("payment_transactions")
+            .select("*")
+            .eq("shop_id", shop_id)
+            .eq("owner_id", owner_id)
+            .eq("purpose", purpose)
+            .eq("amount_paise", amount_paise)
+            .eq("status", "created")
+            .gte("created_at", since)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        ).data or []
+    except Exception as e:
+        logger.warning("Could not look up open orders for owner %s: %s", owner_id, e)
+        return None
+    for row in rows:
+        stored = row.get("metadata") or {}
+        if all(stored.get(k) == v for k, v in metadata.items()):
+            return row
+    return None
 
 
 def get_order(order_id: str) -> dict | None:

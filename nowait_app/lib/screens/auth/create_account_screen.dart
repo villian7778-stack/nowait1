@@ -218,7 +218,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         _agreedToTerms;
   }
 
-  void _createAccount() async {
+  Future<void> _createAccount() async {
     if (!_isValid) {
       setState(() => _submitted = true);
       ScaffoldMessenger.of(context).showSnackBar(

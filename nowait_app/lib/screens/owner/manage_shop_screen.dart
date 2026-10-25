@@ -36,6 +36,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   bool _limitDialogOpen = false;
   List<Map<String, dynamic>> _queueItems = [];
   bool _loadingQueue = false;
+  bool _queueLoadedOnce = false; // _queueItems reflects the server at least once
   int _unreadCount = 0;
   int? _subscriptionDaysLeft;
   Timer? _refreshTimer;
@@ -122,6 +123,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
             }
           }
           _loadingQueue = false;
+          _queueLoadedOnce = true;
         });
         if (res['limit_request_pending'] == true) _showLimitRequestDialog();
       }
@@ -797,6 +799,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   }
 
   Future<void> _callNext() async {
+    if (_isCallingNext) return;
     if (!_shop.hasActiveSubscription) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Activate a subscription to manage your queue')),
@@ -815,8 +818,27 @@ class _ManageShopScreenState extends State<ManageShopScreen>
       return;
     }
     setState(() => _isCallingNext = true);
+    // What this screen shows as now serving, so a second "Next" for the same customer (double
+    // tap, or a staff member pressing at the same time) doesn't skip the next one. Unknown until
+    // the queue list has loaded once: then the server just advances.
+    int? expected;
+    if (_queueLoadedOnce) {
+      final serving = _queueItems.where((e) => e['status'] == 'serving');
+      expected = serving.isEmpty ? 0 : serving.first['token_number'] as int?;
+    }
     try {
-      final res = await QueueService.instance.advanceQueue(_shop.id);
+      final res = await QueueService.instance.advanceQueue(_shop.id, expectedServingToken: expected);
+      if (res['already_moved'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_l.tr('queueAlreadyUpdated')), behavior: SnackBarBehavior.floating),
+          );
+          final updatedShop = await ShopService.instance.getShop(_shop.id);
+          if (mounted) setState(() => _shop = updatedShop);
+          _loadQueue();
+        }
+        return;
+      }
       final nowServingToken = res['now_serving_token'] as int? ?? (_shop.currentToken + 1);
       if (mounted) {
         // Refresh shop data instead of manually reconstructing ShopModel

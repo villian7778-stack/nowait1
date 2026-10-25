@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
   void _onLocale() => setState(() {});
 
-  void _login() async {
+  Future<void> _login() async {
     if (!_isValid) return;
     setState(() => _isLoading = true);
     try {
@@ -142,7 +142,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     }
   }
 
-  void _continueWithGoogle() async {
+  Future<void> _continueWithGoogle() async {
+    if (_isGoogleLoading) return;
     setState(() => _isGoogleLoading = true);
     try {
       await sb.Supabase.instance.client.auth.signInWithOAuth(

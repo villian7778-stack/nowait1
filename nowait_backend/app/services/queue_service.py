@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
+from app.locks import lock_for
 from app.services.notification_service import create_notification
 from app.services.staff_service import _is_owner
 
@@ -526,10 +527,51 @@ def get_public_shop_queue(shop_id: str) -> dict:
 
 # ── advance / skip ────────────────────────────────────────────────────────────
 
-def advance_queue(shop_id: str, owner_id: str) -> dict:
+def _serving_token(shop_id: str) -> int:
+    """Token number currently being served at the shop, 0 if nobody."""
+    rows = (
+        supabase.table("queue_entries")
+        .select("token_number")
+        .eq("shop_id", shop_id)
+        .eq("status", "serving")
+        .order("token_number")
+        .limit(1)
+        .execute()
+    ).data or []
+    return rows[0]["token_number"] if rows else 0
+
+
+def _remaining(shop_id: str) -> int:
+    result = (
+        supabase.table("queue_entries")
+        .select("id", count="exact")
+        .eq("shop_id", shop_id)
+        .in_("status", ["waiting", "serving"])
+        .execute()
+    )
+    return result.count or 0
+
+
+def advance_queue(shop_id: str, owner_id: str, expected_serving_token: Optional[int] = None) -> dict:
     if not _is_owner(shop_id, owner_id):
         raise HTTPException(status_code=403, detail="Not authorized")
+    # One advance at a time per shop (the SQL function also locks the shop row).
+    with lock_for(f"queue:{shop_id}"):
+        if expected_serving_token is not None:
+            current = _serving_token(shop_id)
+            if current != expected_serving_token:
+                # The screen was out of date: someone already pressed Next. Don't move again.
+                return {
+                    "message": "The queue was already updated",
+                    "completed_token": None,
+                    "now_serving_token": current or None,
+                    "total_remaining": _remaining(shop_id),
+                    "already_moved": True,
+                }
+        return _advance_locked(shop_id, owner_id)
 
+
+def _advance_locked(shop_id: str, owner_id: str) -> dict:
     try:
         result = supabase.rpc("advance_queue_v2", {
             "p_shop_id": shop_id,
@@ -566,19 +608,11 @@ def advance_queue(shop_id: str, owner_id: str) -> dict:
                 )
                 _notify_upcoming_customers(shop_id, shop_name)
 
-    remaining = (
-        supabase.table("queue_entries")
-        .select("id", count="exact")
-        .eq("shop_id", shop_id)
-        .in_("status", ["waiting", "serving"])
-        .execute()
-    )
-
     return {
         "message": "Queue advanced" if next_serving_token else "Queue advanced — no more customers waiting",
         "completed_token": completed_token,
         "now_serving_token": next_serving_token,
-        "total_remaining": remaining.count or 0,
+        "total_remaining": _remaining(shop_id),
     }
 
 

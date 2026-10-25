@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'config/app_config.dart';
 import 'theme/app_theme.dart';
+import 'services/app_update_service.dart';
 import 'services/auth_service.dart';
 import 'services/locale_service.dart';
 import 'services/queue_monitor_service.dart';
@@ -13,6 +14,7 @@ import 'screens/auth/create_account_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/customer/home_screen.dart';
 import 'screens/owner/owner_dashboard_screen.dart';
+import 'screens/update_required_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,7 @@ void main() async {
   await Future.wait([
     AuthService.instance.loadFromStorage(),
     LocaleService.instance.loadFromStorage(),
+    AppUpdateService.instance.init(),
   ]);
   // Only used for Google sign-in + password-recovery deep links — email/password
   // login/register go through the FastAPI backend regardless of this.
@@ -40,6 +43,9 @@ void main() async {
     statusBarIconBrightness: Brightness.dark,
   ));
   runApp(const NoWaitApp());
+  // Not awaited: a slow or sleeping server must not hold up start-up. If this build is too old
+  // the "Update required" screen replaces the app as soon as the answer arrives.
+  AppUpdateService.instance.check();
 }
 
 class NoWaitApp extends StatefulWidget {
@@ -49,7 +55,7 @@ class NoWaitApp extends StatefulWidget {
   State<NoWaitApp> createState() => _NoWaitAppState();
 }
 
-class _NoWaitAppState extends State<NoWaitApp> {
+class _NoWaitAppState extends State<NoWaitApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription<sb.AuthState>? _authSub;
 
@@ -58,6 +64,8 @@ class _NoWaitAppState extends State<NoWaitApp> {
     super.initState();
     LocaleService.instance.addListener(_onLocaleChanged);
     AuthService.instance.addListener(_onLocaleChanged);
+    AppUpdateService.instance.addListener(_onLocaleChanged);
+    WidgetsBinding.instance.addObserver(this);
     // Give the monitor the global key so it can show sheets from anywhere.
     QueueMonitorService.instance.navigatorKey = _navigatorKey;
 
@@ -70,12 +78,20 @@ class _NoWaitAppState extends State<NoWaitApp> {
   void dispose() {
     LocaleService.instance.removeListener(_onLocaleChanged);
     AuthService.instance.removeListener(_onLocaleChanged);
+    AppUpdateService.instance.removeListener(_onLocaleChanged);
+    WidgetsBinding.instance.removeObserver(this);
     QueueMonitorService.instance.stop();
     _authSub?.cancel();
     super.dispose();
   }
 
   void _onLocaleChanged() => setState(() {});
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back to the app (e.g. from the store after updating, or after a long time away).
+    if (state == AppLifecycleState.resumed) AppUpdateService.instance.check();
+  }
 
   /// Handles the two deep-link-driven Supabase auth events: a completed
   /// Google OAuth sign-in, and an opened password-recovery link.
@@ -132,6 +148,9 @@ class _NoWaitAppState extends State<NoWaitApp> {
       theme: AppTheme.light,
       navigatorKey: _navigatorKey,
       home: home,
+      // An out-of-date build sees only the update screen, on top of every route and dialog.
+      builder: (context, child) =>
+          AppUpdateService.instance.updateRequired ? const UpdateRequiredScreen() : child!,
     );
   }
 }

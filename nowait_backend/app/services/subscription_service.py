@@ -115,46 +115,74 @@ def create_or_renew_subscription(shop_id: str, owner_id: str, data: Subscription
 
     validate_plan(data.plan, data.duration_days)
 
-    now = datetime.now(timezone.utc)
+    # Read the current end date, then write the new one only if nobody changed it in between, so
+    # two payments activating at the same moment both add their days. Retries a few times.
+    for _ in range(5):
+        now = datetime.now(timezone.utc)
+        existing = execute_one(
+            supabase.table("subscriptions")
+            .select("*")
+            .eq("shop_id", shop_id)
+        )
 
-    existing = execute_one(
-        supabase.table("subscriptions")
-        .select("*")
-        .eq("shop_id", shop_id)
-    )
+        # Extend from the current end date while the subscription is still active, so the
+        # days already paid for are never lost; otherwise start counting from now.
+        started_at = now
+        base = now
+        prev = existing.data or {}
+        if prev.get("status") == "active" and prev.get("expires_at"):
+            prev_expiry = _parse_dt(prev["expires_at"])
+            if prev_expiry > now:
+                base = prev_expiry
+                if prev.get("started_at"):
+                    started_at = _parse_dt(prev["started_at"])
+        expires_at = base + timedelta(days=data.duration_days)
 
-    # Extend from the current end date while the subscription is still active, so the
-    # days already paid for are never lost; otherwise start counting from now.
-    started_at = now
-    base = now
-    prev = existing.data or {}
-    if prev.get("status") == "active" and prev.get("expires_at"):
-        prev_expiry = _parse_dt(prev["expires_at"])
-        if prev_expiry > now:
-            base = prev_expiry
-            if prev.get("started_at"):
-                started_at = _parse_dt(prev["started_at"])
-    expires_at = base + timedelta(days=data.duration_days)
+        sub_data = {
+            "shop_id": shop_id,
+            "plan": data.plan,
+            "status": "active",
+            "started_at": started_at.isoformat(),
+            "expires_at": expires_at.isoformat(),
+        }
 
-    sub_data = {
-        "shop_id": shop_id,
-        "plan": data.plan,
-        "status": "active",
-        "started_at": started_at.isoformat(),
-        "expires_at": expires_at.isoformat(),
-    }
+        if existing.data:
+            result = _update_if_unchanged(shop_id, sub_data, prev.get("expires_at"))
+        else:
+            try:
+                result = supabase.table("subscriptions").insert(sub_data).execute()
+            except Exception as e:
+                if _is_unique_violation(e):
+                    continue  # created by a payment that landed at the same moment: extend it instead
+                raise
+        if result is not None and result.data:
+            sub = result.data[0]
+            days_remaining = _days_left(expires_at, now)
+            return {"has_active_subscription": True, "subscription": {**sub, "days_remaining": days_remaining}}
+        if result is not None:
+            raise HTTPException(status_code=500, detail="Failed to create/renew subscription")
+    raise HTTPException(status_code=503, detail="Your subscription is being updated. Please try again in a moment.")
 
-    if existing.data:
-        result = supabase.table("subscriptions").update(sub_data).eq("shop_id", shop_id).execute()
-    else:
-        result = supabase.table("subscriptions").insert(sub_data).execute()
 
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to create/renew subscription")
+def _update_if_unchanged(shop_id: str, sub_data: dict, prev_expires_at):
+    """Writes sub_data only if the end date is still prev_expires_at. Returns the result, or None
+    when another activation changed it first (the caller re-reads and recalculates)."""
+    query = supabase.table("subscriptions").update(sub_data).eq("shop_id", shop_id)
+    if prev_expires_at:
+        query = query.eq("expires_at", prev_expires_at)
+    result = query.execute()
+    if result.data or not prev_expires_at:
+        return result
+    current = execute_one(supabase.table("subscriptions").select("expires_at").eq("shop_id", shop_id)).data or {}
+    if current.get("expires_at") == prev_expires_at:
+        # Nothing changed, the match just failed on formatting: write without the condition
+        # rather than leaving a paid plan unactivated.
+        return supabase.table("subscriptions").update(sub_data).eq("shop_id", shop_id).execute()
+    return None
 
-    sub = result.data[0]
-    days_remaining = _days_left(expires_at, now)
-    return {"has_active_subscription": True, "subscription": {**sub, "days_remaining": days_remaining}}
+
+def _is_unique_violation(e: Exception) -> bool:
+    return getattr(e, "code", None) == "23505" or "23505" in str(e) or "duplicate key" in str(e).lower()
 
 
 def cancel_subscription(shop_id: str, owner_id: str) -> dict:

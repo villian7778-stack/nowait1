@@ -82,6 +82,9 @@ class AdvanceQueueResponse(BaseModel):
     completed_token: Optional[int]
     now_serving_token: Optional[int]
     total_remaining: int
+    # True when nothing was advanced because the queue had already moved on (double tap, or the
+    # owner and a staff member pressing Next together): the app just refreshes.
+    already_moved: bool = False
 
 
 class CancelQueueResponse(BaseModel):
