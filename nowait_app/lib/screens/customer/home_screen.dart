@@ -200,7 +200,7 @@ class _HomeTabState extends State<_HomeTab> {
       icon: Icons.face_retouching_natural,
     ),
     _CategoryInfo(
-      name: 'Hospital',
+      name: 'Hospital/Clinics',
       subtitle: 'OPD · Dentist · Lab Tests',
       color: Color(0xFF059669),
       icon: Icons.local_hospital,
@@ -813,6 +813,7 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
           MaterialPageRoute(
               builder: (_) => CategoryScreen(
                     category: widget.info.filterKey,
+                    title: widget.info.name,
                     initialCity: widget.selectedCity,
                   )),
         );

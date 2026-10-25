@@ -16,10 +16,12 @@ IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
 
 class CategoryScreen extends StatefulWidget {
   final String category;
+  /// Shown in the header instead of [category] (e.g. 'Hospital/Clinics' for 'Hospital/Clinic').
+  final String? title;
   /// City passed from the home screen. If null, falls back to SharedPreferences.
   final String? initialCity;
 
-  const CategoryScreen({super.key, required this.category, this.initialCity});
+  const CategoryScreen({super.key, required this.category, this.title, this.initialCity});
 
   @override
   State<CategoryScreen> createState() => _CategoryScreenState();
@@ -160,7 +162,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ),
             ),
             title: Text(
-              widget.category,
+              widget.title ?? widget.category,
               style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             actions: [
