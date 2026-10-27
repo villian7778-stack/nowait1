@@ -19,7 +19,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "com.nowait.nowait_app"
+    namespace = "com.nowaitt.nowaitt_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -33,7 +33,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nowait.nowait_app"
+        applicationId = "com.nowaitt.nowaitt_app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

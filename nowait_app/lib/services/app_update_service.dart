@@ -15,7 +15,7 @@ class AppUpdateService extends ChangeNotifier {
   static final AppUpdateService instance = AppUpdateService._();
   AppUpdateService._();
 
-  static const _fallbackPackage = 'com.nowait.nowait_app';
+  static const _fallbackPackage = 'com.nowaitt.nowaitt_app';
 
   bool _required = false;
   String? _storeUrl;

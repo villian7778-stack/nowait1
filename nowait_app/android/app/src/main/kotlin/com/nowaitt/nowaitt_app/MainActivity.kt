@@ -1,4 +1,4 @@
-package com.nowait.nowait_app
+package com.nowaitt.nowaitt_app
 
 import com.razorpay.Checkout
 import io.flutter.embedding.android.FlutterActivity

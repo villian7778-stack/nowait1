@@ -434,7 +434,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.nowait.nowait_app',
+                  userAgentPackageName: 'com.nowaitt.nowaitt_app',
                   maxZoom: 19,
                 ),
               ],

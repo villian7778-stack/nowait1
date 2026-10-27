@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # Raise it only AFTER the new build is live on the store, or nobody can use the app.
     APP_MIN_BUILD_ANDROID: int = 0
     APP_MIN_BUILD_IOS: int = 0
-    APP_STORE_URL_ANDROID: str = "https://play.google.com/store/apps/details?id=com.nowait.nowait_app"
+    APP_STORE_URL_ANDROID: str = "https://play.google.com/store/apps/details?id=com.nowaitt.nowaitt_app"
     APP_STORE_URL_IOS: str = ""  # e.g. https://apps.apple.com/app/id1234567890 once on the App Store
 
     @property

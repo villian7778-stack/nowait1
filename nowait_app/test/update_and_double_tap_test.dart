@@ -19,7 +19,7 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'NOWAIT', packageName: 'com.nowait.nowait_app', version: '1.0.0', buildNumber: '3',
+      appName: 'NOWAIT', packageName: 'com.nowaitt.nowaitt_app', version: '1.0.0', buildNumber: '3',
       buildSignature: '', installerStore: null);
     await AppUpdateService.instance.init();
   });
@@ -67,7 +67,7 @@ void main() {
       final l = LocaleService.instance;
       expect(find.text(l.tr('continueWithGoogle')), findsOneWidget);
 
-      AppUpdateService.instance.markRequired('https://play.google.com/store/apps/details?id=com.nowait.nowait_app');
+      AppUpdateService.instance.markRequired('https://play.google.com/store/apps/details?id=com.nowaitt.nowaitt_app');
       await tester.pump();
       expect(find.text(l.tr('updateRequiredTitle')), findsOneWidget);
       expect(find.text(l.tr('updateNow')), findsOneWidget);
