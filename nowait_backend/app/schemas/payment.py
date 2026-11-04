@@ -8,6 +8,9 @@ class CreateOrderResponse(BaseModel):
     amount: int
     currency: str
     key_id: str
+    # The owner's name / email / mobile (+91...) for Razorpay checkout's prefill, so checkout
+    # never has to ask for them. Keys are left out when unknown.
+    prefill: dict[str, str] = {}
 
 
 class CheckoutFailureReport(BaseModel):

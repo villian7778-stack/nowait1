@@ -195,6 +195,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
         description: description,
         contact: AuthService.instance.profile?['phone'] as String?,
         email: AuthService.instance.profile?['email'] as String?,
+        prefill: (order['prefill'] as Map?)?.cast<String, dynamic>(),
         purpose: 'promotion',
       );
       paymentCaptured = true;

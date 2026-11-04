@@ -278,6 +278,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   description: '$_planName subscription',
                   contact: AuthService.instance.profile?['phone'] as String?,
                   email: AuthService.instance.profile?['email'] as String?,
+                  prefill: (order['prefill'] as Map?)?.cast<String, dynamic>(),
                 );
                 paymentCaptured = true;
                 await SubscriptionService.instance.verifyPaymentAndActivate(

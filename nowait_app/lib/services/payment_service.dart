@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'auth_service.dart';
 import 'api_client.dart';
 
 class PaymentException implements Exception {
@@ -46,6 +47,54 @@ class PaymentService {
   String? _orderId;
   String _purpose = 'subscription';
 
+  /// '+91 98765-43210', '919876543210', '09876543210' or '9876543210' -> '+919876543210'
+  /// (Razorpay wants the country code). Same rule as the server's normalize_indian_mobile.
+  static String normalizeIndianMobile(String? phone) {
+    var digits = (phone ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 11 && digits.startsWith('0')) digits = digits.substring(1);
+    if (digits.length == 10) return '+91$digits';
+    if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
+    return digits.isEmpty ? '' : '+$digits';
+  }
+
+  /// Options for Razorpay checkout. Mobile and email are always prefilled when known - otherwise
+  /// checkout stops and asks the owner for them. The server's details (create-order `prefill`,
+  /// from the owner's profile / login) win; the profile saved in the app is the fallback.
+  static Map<String, dynamic> checkoutOptions({
+    required String keyId,
+    required String orderId,
+    required int amountPaise,
+    required String description,
+    Map<String, dynamic>? serverPrefill,
+    String? contact,
+    String? email,
+  }) {
+    String pick(String key, String? fallback) {
+      final fromServer = serverPrefill?[key];
+      if (fromServer is String && fromServer.trim().isNotEmpty) return fromServer.trim();
+      return (fallback ?? '').trim();
+    }
+
+    final profile = AuthService.instance.profile;
+    final phone = normalizeIndianMobile(pick('contact', contact ?? profile?['phone'] as String?));
+    final mail = pick('email', email ?? profile?['email'] as String?);
+    final name = pick('name', profile?['name'] as String?);
+    return {
+      'key': keyId,
+      'order_id': orderId,
+      'amount': amountPaise,
+      'currency': 'INR',
+      'name': 'NOWAIT',
+      'description': description,
+      'prefill': {
+        if (phone.isNotEmpty) 'contact': phone,
+        if (mail.isNotEmpty) 'email': mail,
+        if (name.isNotEmpty) 'name': name,
+      },
+      'theme': {'color': '#1f4cdd'},
+    };
+  }
+
   Future<PaymentResult> openCheckout({
     required String keyId,
     required String orderId,
@@ -54,6 +103,7 @@ class PaymentService {
     required String description,
     String? contact,
     String? email,
+    Map<String, dynamic>? prefill,
     String purpose = 'subscription',
   }) {
     // Never two checkouts at once (double tap, or a second tap while one is still open):
@@ -73,20 +123,15 @@ class PaymentService {
     razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onError);
     razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
 
-    razorpay.open({
-      'key': keyId,
-      'order_id': orderId,
-      'amount': amountPaise,
-      'currency': 'INR',
-      'name': 'NOWAIT',
-      'description': description,
-      // Prefilling contact/email skips Checkout's own contact-entry step.
-      'prefill': {
-        if (contact != null && contact.isNotEmpty) 'contact': contact,
-        if (email != null && email.isNotEmpty) 'email': email,
-      },
-      'theme': {'color': '#1f4cdd'},
-    });
+    razorpay.open(checkoutOptions(
+      keyId: keyId,
+      orderId: orderId,
+      amountPaise: amountPaise,
+      description: description,
+      serverPrefill: prefill,
+      contact: contact,
+      email: email,
+    ));
 
     _startPaidPoll(orderId, completer);
 

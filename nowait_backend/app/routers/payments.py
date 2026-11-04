@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import execute_one, supabase
-from app.dependencies import get_current_owner
+from app.dependencies import get_current_owner, get_token_claims
 from app.locks import lock_for
 from app.rate_limit import per_owner_limit
 from app.schemas.payment import (
@@ -51,6 +51,31 @@ def _create_or_reuse_order(shop_id: str, owner_id: str, purpose: str, amount_pai
             shop_id, owner_id, purpose, order["order_id"], order["amount"], metadata,
         )
         return order
+
+
+def normalize_indian_mobile(phone: str | None) -> str:
+    """'+91 98765-43210', '919876543210', '09876543210' or '9876543210' -> '+919876543210'.
+    Anything else is returned as digits with a leading + (or '' when there are none)."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return "+91" + digits
+    if len(digits) == 12 and digits.startswith("91"):
+        return "+" + digits
+    return "+" + digits if digits else ""
+
+
+def _checkout_prefill(owner: dict, claims: dict) -> dict:
+    """Name, email and mobile for Razorpay checkout, so it never asks the owner for them. The
+    email falls back to the login's email (older profiles have none stored)."""
+    claims = claims if isinstance(claims, dict) else {}  # direct calls (tests) pass no token claims
+    prefill = {
+        "name": (owner.get("name") or "").strip(),
+        "email": (owner.get("email") or claims.get("email") or "").strip(),
+        "contact": normalize_indian_mobile(owner.get("phone") or claims.get("phone")),
+    }
+    return {k: v for k, v in prefill.items() if v}
 
 
 def _receipt(prefix: str, shop_id: str) -> str:
@@ -189,7 +214,8 @@ def _activate_or_explain(activate_fn, payment_id: str, order_id: str):
     dependencies=[Depends(per_owner_limit("create-order", 10))],
 )
 def create_subscription_order(
-    shop_id: str, body: SubscriptionOrderRequest, current_user: dict = Depends(get_current_owner)
+    shop_id: str, body: SubscriptionOrderRequest, current_user: dict = Depends(get_current_owner),
+    claims: dict = Depends(get_token_claims),
 ):
     _require_shop_owner(shop_id, current_user["id"])
     subscription_service.validate_plan(body.plan, body.duration_days)
@@ -200,10 +226,11 @@ def create_subscription_order(
             status_code=409,
             detail=subscription_service.already_active_message(expires_at, body.duration_days),
         )
-    return _create_or_reuse_order(
+    order = _create_or_reuse_order(
         shop_id, current_user["id"], "subscription", subscription_service.price_paise(body.duration_days),
         {"plan": body.plan, "duration_days": body.duration_days}, "sub",
     )
+    return {**order, "prefill": _checkout_prefill(current_user, claims)}
 
 
 @router.post(
@@ -235,12 +262,13 @@ def verify_subscription_payment(
     dependencies=[Depends(per_owner_limit("create-order", 10))],
 )
 def create_promotion_order(
-    shop_id: str, body: PromotionOrderRequest, current_user: dict = Depends(get_current_owner)
+    shop_id: str, body: PromotionOrderRequest, current_user: dict = Depends(get_current_owner),
+    claims: dict = Depends(get_token_claims),
 ):
     _require_shop_owner(shop_id, current_user["id"])
     promotion_service.validate_promotion_days(body.days)
     plural = "" if body.days == 1 else "s"
-    return _create_or_reuse_order(
+    order = _create_or_reuse_order(
         shop_id, current_user["id"], "promotion", promotion_service.promotion_price_paise(body.days),
         {
             "title": promotion_service.FEATURED_TITLE,
@@ -249,6 +277,7 @@ def create_promotion_order(
         },
         "promo",
     )
+    return {**order, "prefill": _checkout_prefill(current_user, claims)}
 
 
 @router.post(

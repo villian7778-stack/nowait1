@@ -412,3 +412,56 @@ class TestSchemeLength:
         with pytest.raises(HTTPException) as e:
             _check_scheme_length((datetime.now(timezone.utc) + timedelta(days=30)).isoformat())
         assert e.value.status_code == 400
+
+
+class TestCheckoutPrefill:
+    """Razorpay checkout asks for mobile / email itself whenever the app doesn't pass them, so
+    every create-order answer carries them, from the server's own records."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("9876543210", "+919876543210"),
+        ("+91 98765-43210", "+919876543210"),
+        ("919876543210", "+919876543210"),
+        ("09876543210", "+919876543210"),
+        ("+919876543210", "+919876543210"),
+        ("", ""),
+        (None, ""),
+    ])
+    def test_mobile_is_normalised_to_plus_91(self, raw, expected):
+        from app.routers.payments import normalize_indian_mobile
+        assert normalize_indian_mobile(raw) == expected
+
+    def test_profile_details_are_used(self):
+        from app.routers.payments import _checkout_prefill
+        owner = {"name": " Asha Patil ", "email": "asha@example.com", "phone": "9876543210"}
+        assert _checkout_prefill(owner, {"email": "other@example.com"}) == {
+            "name": "Asha Patil", "email": "asha@example.com", "contact": "+919876543210"}
+
+    def test_email_falls_back_to_the_login_email_for_older_profiles(self):
+        from app.routers.payments import _checkout_prefill
+        owner = {"name": "Old Owner", "email": None, "phone": "+919876543210"}
+        assert _checkout_prefill(owner, {"email": "old@example.com"})["email"] == "old@example.com"
+
+    def test_unknown_values_are_left_out_not_sent_empty(self):
+        from app.routers.payments import _checkout_prefill
+        assert _checkout_prefill({"name": "", "email": "", "phone": ""}, {}) == {}
+
+    @pytest.mark.parametrize("purpose", ["subscription", "promotion"])
+    def test_both_create_order_endpoints_return_it(self, purpose):
+        from app.routers import payments
+        from app.schemas.payment import PromotionOrderRequest, SubscriptionOrderRequest
+        owner = {"id": "owner-001", "name": "Asha", "email": None, "phone": "9876543210"}
+        claims = {"email": "asha@example.com"}
+        with patch.object(payments, "_require_shop_owner"), \
+             patch.object(payments.subscription_service, "active_expiry", return_value=None), \
+             patch.object(payments.payment_transaction_service, "find_open_order", return_value=None), \
+             patch.object(payments.razorpay_service, "create_order",
+                          return_value={"order_id": "o1", "amount": 4900, "currency": "INR", "key_id": "k"}), \
+             patch.object(payments.payment_transaction_service, "record_order"):
+            if purpose == "subscription":
+                out = payments.create_subscription_order(
+                    "shop-001", SubscriptionOrderRequest(plan="basic", duration_days=30), owner, claims)
+            else:
+                out = payments.create_promotion_order("shop-001", PromotionOrderRequest(days=3), owner, claims)
+        assert out["prefill"] == {"name": "Asha", "email": "asha@example.com", "contact": "+919876543210"}
+        assert out["order_id"] == "o1"
