@@ -236,3 +236,14 @@ class TestAdminModeration:
         html = self._authed(client).get("/nowaitt_778admin/dashboard").text
         assert "function esc(" in html and "esc(p.title)" in html and "esc(u.name" in html
         assert "${u.name||'—'}" not in html
+
+
+def test_no_refund_for_any_reason_on_every_policy_page(client):
+    refund = client.get("/legal/refund-policy").text
+    assert "No refund will be given for any reason" in refund
+    assert "refund the payment" not in refund  # the old "or we refund" exception is gone
+    assert "we will activate what you paid for" in refund
+    assert "No refund will be given for any reason" in client.get("/legal/terms").text
+    assert "does not refund any payment" in client.get("/legal/delete-account").text
+    # Razorpay gets the owner's contact details for checkout - said in the privacy policy
+    assert "name, email and mobile number with Razorpay" in client.get("/legal/privacy").text

@@ -11,6 +11,7 @@ import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/no_refund_notice.dart';
+import 'subscription_screen.dart';
 
 class PromotionScreen extends StatefulWidget {
   final ShopModel shop;
@@ -35,6 +36,11 @@ class _PromotionScreenState extends State<PromotionScreen> {
 
   // Active promotion loaded from API
   Map<String, dynamic>? _activePromotion;
+
+  /// End of the running subscription / free trial (null = none, or not loaded yet). A promotion
+  /// must end before it: after that the shop is hidden from customers (the server checks too).
+  DateTime? _subscriptionEnd;
+  bool _subscriptionLoaded = false;
   bool _loadingPromotion = true;
 
   final _l = LocaleService.instance;
@@ -53,6 +59,83 @@ class _PromotionScreenState extends State<PromotionScreen> {
   }
 
   void _onLocale() => setState(() {});
+
+  Future<void> _loadSubscriptionEnd() async {
+    try {
+      final res = await SubscriptionService.instance.getSubscription(widget.shop.id);
+      final active = res['has_active_subscription'] == true;
+      final end = DateTime.tryParse((res['subscription'] as Map?)?['expires_at'] as String? ?? '');
+      if (!mounted) return;
+      setState(() {
+        _subscriptionEnd = active ? end?.toLocal() : null;
+        _subscriptionLoaded = true;
+        // Pre-select the longest length that still fits, if the current one doesn't
+        if (!_fits(_selectedDays)) {
+          final fitting = _dayOptions.where(_fits).toList();
+          if (fitting.isNotEmpty) _selectedDays = fitting.last;
+        }
+      });
+    } catch (_) {
+      // Unknown: let the owner try - the server still refuses a promotion that doesn't fit.
+      if (mounted) setState(() => _subscriptionLoaded = false);
+    }
+  }
+
+  static const _dayOptions = [3, 7, 15];
+
+  /// Whether [days] more days (after a running promotion) end before the subscription does.
+  bool _fits(int days) {
+    if (!_subscriptionLoaded) return true;
+    final end = _subscriptionEnd;
+    if (end == null) return false;
+    final now = DateTime.now();
+    final activeEnd = _activeEnd;
+    final start = activeEnd != null && activeEnd.isAfter(now) ? activeEnd : now;
+    return !start.add(Duration(days: days)).isAfter(end.add(const Duration(hours: 1)));
+  }
+
+  bool get _noSubscription => _subscriptionLoaded && _subscriptionEnd == null;
+
+  /// "You are trying to get a 7-day promotion, but your subscription ends in 3 days (on ...)",
+  /// with Choose shorter / Extend subscription.
+  Future<void> _explainTooLong(int days) async {
+    final end = _subscriptionEnd;
+    if (end == null) return;
+    final hours = end.difference(DateTime.now()).inHours;
+    final left = hours <= 0 ? 0 : (hours / 24).ceil();
+    final params = {'days': '$days', 'left': '$left', 'date': _fmtDate(end)};
+    final body = _l.tr(
+      left == 0 ? 'promoTooLongBodyToday' : left == 1 ? 'promoTooLongBodyOne' : 'promoTooLongBody',
+      params: params,
+    );
+    final extend = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AccentScope(
+        colors: _accent,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.event_busy_rounded, color: _accent.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_l.tr('promoTooLongTitle'))),
+            ],
+          ),
+          content: Text(body),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(_l.tr('chooseShorter'))),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(_l.tr('extendSubscription'))),
+          ],
+        ),
+      ),
+    );
+    if (extend == true && mounted) await _openSubscription();
+  }
+
+  Future<void> _openSubscription() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: widget.shop)));
+    if (mounted) _loadActivePromotion();
+  }
 
   Future<void> _loadActivePromotion() async {
     // Picks up any earlier payment Razorpay captured but we never activated.
@@ -80,6 +163,8 @@ class _PromotionScreenState extends State<PromotionScreen> {
     } catch (_) {
       if (mounted) setState(() => _loadingPromotion = false);
     }
+    // After the running promotion is known: extra days count from its end.
+    await _loadSubscriptionEnd();
   }
 
   static const _pricePerDay = PromotionScreen.pricePerDay;
@@ -111,6 +196,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
   bool get _hasActivePromotion => _activePromotion != null;
 
   void _payAndActivate() {
+    if (_noSubscription || !_fits(_selectedDays)) return; // buttons are disabled; belt and braces
     final end = _activeEnd;
     final extending = _hasActivePromotion && end != null && end.isAfter(DateTime.now());
     final daysText = '$_selectedDays day${_selectedDays == 1 ? '' : 's'}';
@@ -468,10 +554,14 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: [3, 7, 15].map((days) {
+                    children: _dayOptions.map((days) {
                       final selected = _selectedDays == days;
+                      final fits = _fits(days);
                       return GestureDetector(
-                        onTap: () => setState(() => _selectedDays = days),
+                        // A length that would outlast the subscription explains why instead
+                        onTap: () => fits ? setState(() => _selectedDays = days) : _explainTooLong(days),
+                        child: Opacity(
+                        opacity: fits ? 1 : 0.4,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -506,9 +596,27 @@ class _PromotionScreenState extends State<PromotionScreen> {
                             ],
                           ),
                         ),
+                        ),
                       );
                     }).toList(),
                   ),
+                  // Why some lengths are greyed out
+                  if (_subscriptionEnd != null && _dayOptions.any((d) => !_fits(d))) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 15, color: AppColors.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _l.tr('promoMustEndBeforeSubscription', params: {'date': _fmtDate(_subscriptionEnd!)}),
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -567,11 +675,30 @@ class _PromotionScreenState extends State<PromotionScreen> {
                             ),
                           ),
                         )
-                      : GradientButton(
-                          label: _hasActivePromotion ? 'Extend Promotion  ₹$_totalCost' : 'Pay & Activate  ₹$_totalCost',
-                          onPressed: _payAndActivate,
-                          icon: Icons.payment_rounded,
-                        ),
+                      : (_noSubscription || !_dayOptions.any(_fits))
+                          ? Column(
+                              children: [
+                                Text(
+                                  _noSubscription
+                                      ? _l.tr('subscriptionNeededBody')
+                                      : _l.tr('promoExtendSubscriptionFirst',
+                                          params: {'date': _fmtDate(_subscriptionEnd!)}),
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.4),
+                                ),
+                                const SizedBox(height: 12),
+                                GradientButton(
+                                  label: _l.tr('openSubscription'),
+                                  onPressed: _openSubscription,
+                                  icon: Icons.workspace_premium_outlined,
+                                ),
+                              ],
+                            )
+                          : GradientButton(
+                              label: _hasActivePromotion ? 'Extend Promotion  ₹$_totalCost' : 'Pay & Activate  ₹$_totalCost',
+                              onPressed: _payAndActivate,
+                              icon: Icons.payment_rounded,
+                            ),
                 ),
                 if (_hasActivePromotion && !_isCancelling) ...[
                   const SizedBox(height: 8),

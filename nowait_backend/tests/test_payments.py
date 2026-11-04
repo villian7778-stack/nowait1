@@ -332,6 +332,7 @@ class TestPromotionOrder:
         from app.routers import payments
         from app.schemas.payment import PromotionOrderRequest
         with patch.object(payments, "_require_shop_owner"), \
+             patch.object(payments.promotion_service, "check_promotion_fits_subscription"), \
              patch.object(payments.razorpay_service, "create_order",
                           return_value={"order_id": "o1", "amount": 0, "currency": "INR", "key_id": "k"}) as create, \
              patch.object(payments.payment_transaction_service, "record_order") as rec:
@@ -453,6 +454,7 @@ class TestCheckoutPrefill:
         owner = {"id": "owner-001", "name": "Asha", "email": None, "phone": "9876543210"}
         claims = {"email": "asha@example.com"}
         with patch.object(payments, "_require_shop_owner"), \
+             patch.object(payments.promotion_service, "check_promotion_fits_subscription"), \
              patch.object(payments.subscription_service, "active_expiry", return_value=None), \
              patch.object(payments.payment_transaction_service, "find_open_order", return_value=None), \
              patch.object(payments.razorpay_service, "create_order",

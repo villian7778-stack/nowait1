@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -6,6 +7,7 @@ from fastapi import HTTPException
 from app.database import execute_one, supabase
 from app.locks import lock_for
 from app.schemas.promotion import PromotionCreate, PromotionUpdate
+from app.services import subscription_service
 from app.services.notification_service import create_notification
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,63 @@ def _check_scheme_length(valid_until: str | None) -> None:
         raise HTTPException(status_code=400, detail="A scheme can run for at most 15 days.")
 
 
+SUBSCRIPTION_REQUIRED = (
+    "Schemes and Featured Promotions need an active subscription or free trial. "
+    "Activate one from the Subscription screen first."
+)
+
+
+def require_active_subscription(shop_id: str) -> datetime:
+    """End of the shop's running subscription / free trial. 403 when there is none: an
+    unsubscribed shop is hidden from customers, so a scheme or a paid boost would reach nobody."""
+    expires_at = subscription_service.active_expiry(shop_id)
+    if not expires_at:
+        raise HTTPException(status_code=403, detail=SUBSCRIPTION_REQUIRED)
+    return expires_at
+
+
+def _running_featured_end(shop_id: str) -> datetime | None:
+    now = datetime.now(timezone.utc)
+    row = (
+        supabase.table("promotions")
+        .select("valid_until")
+        .eq("shop_id", shop_id)
+        .eq("title", FEATURED_TITLE)
+        .eq("is_active", True)
+        .gt("valid_until", now.isoformat())
+        .order("valid_until", desc=True)
+        .limit(1)
+        .execute()
+    ).data
+    return _parse_dt(row[0]["valid_until"]) if row else None
+
+
+def check_promotion_fits_subscription(shop_id: str, days: int) -> None:
+    """Before taking money for a Featured Promotion: the shop must be subscribed, and the paid
+    days (added after a promotion that is still running) must end before the subscription does.
+    After that the shop is hidden, so those days would be paid for and never seen - and payments
+    are not refunded."""
+    expires_at = require_active_subscription(shop_id)
+    now = datetime.now(timezone.utc)
+    start = max(_running_featured_end(shop_id) or now, now)
+    if start + timedelta(days=days) <= expires_at + timedelta(hours=1):
+        return
+    fits = [d for d in sorted(PROMOTION_DAYS) if start + timedelta(days=d) <= expires_at + timedelta(hours=1)]
+    raise HTTPException(status_code=409, detail=promotion_too_long_message(days, expires_at, fits[-1] if fits else None))
+
+
+def promotion_too_long_message(days: int, expires_at: datetime, longest_fitting: int | None) -> str:
+    """e.g. "You're trying to get a 7-day promotion, but your subscription ends in 3 days (on
+    12 Nov 2026). Extend your subscription, or choose 3 days or fewer."""
+    left = max(0, math.ceil((expires_at - datetime.now(timezone.utc)).total_seconds() / 86400))
+    left_text = "today" if left == 0 else f"in {left} day{'' if left == 1 else 's'}"
+    text = (f"You're trying to get a {days}-day promotion, but your subscription ends {left_text} "
+            f"(on {expires_at.strftime('%d %b %Y')}). ")
+    if longest_fitting:
+        return text + f"Extend your subscription, or choose {longest_fitting} days or fewer."
+    return text + "Extend your subscription first, then promote your shop."
+
+
 def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: bool = False) -> dict:
     # "Featured Promotion" is the paid visibility boost; only the payment-verify flow
     # (paid=True) may create one. Free callers can only create schemes/offers.
@@ -69,6 +128,10 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: b
     )
     if not shop.data:
         raise HTTPException(status_code=403, detail="Not authorized or shop not found")
+
+    # A paid Featured Promotion (paid=True) is always granted: the money was taken already.
+    if not paid:
+        require_active_subscription(shop_id)
 
     shop_name = shop.data.get("name", "A shop")
     shop_city = shop.data.get("city", "")
@@ -200,6 +263,7 @@ def update_promotion(promotion_id: str, owner_id: str, data: PromotionUpdate) ->
     if promo.data.get("title") == FEATURED_TITLE or new_title == FEATURED_TITLE:
         raise HTTPException(status_code=403, detail="Featured Promotions can't be edited. Create a new one through payment.")
 
+    require_active_subscription(promo.data["shop_id"])
     _check_scheme_length(data.valid_until)
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     result = supabase.table("promotions").update(update_data).eq("id", promotion_id).execute()

@@ -62,6 +62,26 @@ def _fetch_services_by_ids(service_ids: list) -> list:
     return result.data or []
 
 
+def _require_shop_services(shop_id: str, service_ids: list) -> None:
+    """The services a customer picks when joining must be this shop's own. The owner's estimated
+    income and the wait estimate are computed from them, so another shop's (or a made-up) service
+    ID - only possible from a modified app - is refused."""
+    if not service_ids:
+        return
+    try:
+        rows = (
+            supabase.table("services")
+            .select("id")
+            .eq("shop_id", shop_id)
+            .in_("id", service_ids)
+            .execute()
+        ).data or []
+    except Exception:  # e.g. a malformed id the database can't even compare
+        rows = []
+    if {r["id"] for r in rows} != set(service_ids):
+        raise HTTPException(status_code=400, detail="Some selected services are not offered by this shop.")
+
+
 def _calculate_total_duration(service_ids: list, avg_wait: int) -> int:
     """Sum durations of selected services; fall back to avg_wait if none."""
     if not service_ids:
@@ -233,6 +253,7 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
     avg_wait = shop_row.get("avg_wait_minutes", 10)
     category = shop_row.get("category", "")
 
+    _require_shop_services(shop_id, unique_ids)
     total_duration = _calculate_total_duration(unique_ids, avg_wait) if unique_ids else None
 
     # Enforce per-category cancellation cooldown before hitting the DB

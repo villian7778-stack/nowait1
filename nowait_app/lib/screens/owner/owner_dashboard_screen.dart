@@ -172,6 +172,38 @@ class _ShopsTabState extends State<_ShopsTab> {
     super.dispose();
   }
 
+  /// Promote Shop / Schemes without a subscription: explain, and offer the Subscription screen
+  /// (where the free trial is, too).
+  Future<void> _showSubscriptionNeeded() async {
+    final l = LocaleService.instance;
+    final accent = Accent.of(context);
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AccentScope(
+        colors: accent,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: accent.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(l.tr('subscriptionNeededTitle'))),
+            ],
+          ),
+          content: Text(l.tr('subscriptionNeededBody')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(l.tr('notNow'))),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(l.tr('openSubscription'))),
+          ],
+        ),
+      ),
+    );
+    if (open == true && mounted && _shop != null) {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => SubscriptionScreen(shop: _shop!)));
+      if (mounted) _loadShop();
+    }
+  }
+
   Future<void> _loadShop() async {
     try {
       final shop = await ShopService.instance.getMyShop();
@@ -412,12 +444,20 @@ class _ShopsTabState extends State<_ShopsTab> {
                     iconBg: Accent.of(context).primary.withValues(alpha: 0.1),
                     title: LocaleService.instance.tr('promoteShop'),
                     subtitle: LocaleService.instance.tr('promoteSubtitle'),
-                    badge: _shop!.isPromoted ? 'Active' : '₹${PromotionScreen.pricePerDay}/day',
-                    badgeColor: _shop!.isPromoted ? AppColors.tertiary : Accent.of(context).primary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => PromotionScreen(shop: _shop!)),
-                    ).then((_) => _loadShop()),
+                    badge: !_shop!.hasActiveSubscription
+                        ? LocaleService.instance.tr('needsSubscription')
+                        : _shop!.isPromoted ? 'Active' : '₹${PromotionScreen.pricePerDay}/day',
+                    badgeColor: !_shop!.hasActiveSubscription
+                        ? AppColors.error
+                        : _shop!.isPromoted ? AppColors.tertiary : Accent.of(context).primary,
+                    // Needs a running subscription / free trial: without one the shop is hidden
+                    // from customers, so a paid boost would reach nobody (the server refuses too).
+                    onTap: () => _shop!.hasActiveSubscription
+                        ? Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => PromotionScreen(shop: _shop!)),
+                          ).then((_) => _loadShop())
+                        : _showSubscriptionNeeded(),
                   ),
                   _DashActionTile(
                     icon: Icons.local_offer_outlined,
@@ -425,12 +465,18 @@ class _ShopsTabState extends State<_ShopsTab> {
                     iconBg: Accent.of(context).secondary.withValues(alpha: 0.1),
                     title: LocaleService.instance.tr('addEditScheme'),
                     subtitle: LocaleService.instance.tr('addEditSchemeSubtitle'),
-                    badge: _shop!.activeScheme != null ? _shop!.activeScheme!.validityText : 'None',
-                    badgeColor: _shop!.activeScheme != null ? Accent.of(context).secondary : AppColors.onSurfaceVariant,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => SchemeScreen(shop: _shop!)),
-                    ).then((_) => _loadShop()),
+                    badge: !_shop!.hasActiveSubscription
+                        ? LocaleService.instance.tr('needsSubscription')
+                        : _shop!.activeScheme != null ? _shop!.activeScheme!.validityText : 'None',
+                    badgeColor: !_shop!.hasActiveSubscription
+                        ? AppColors.error
+                        : _shop!.activeScheme != null ? Accent.of(context).secondary : AppColors.onSurfaceVariant,
+                    onTap: () => _shop!.hasActiveSubscription
+                        ? Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => SchemeScreen(shop: _shop!)),
+                          ).then((_) => _loadShop())
+                        : _showSubscriptionNeeded(),
                   ),
                   _DashActionTile(
                     icon: Icons.workspace_premium_outlined,

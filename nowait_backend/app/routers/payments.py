@@ -267,6 +267,9 @@ def create_promotion_order(
 ):
     _require_shop_owner(shop_id, current_user["id"])
     promotion_service.validate_promotion_days(body.days)
+    # No money is taken for a promotion that customers could not see (no subscription, or
+    # days running past its end).
+    promotion_service.check_promotion_fits_subscription(shop_id, body.days)
     plural = "" if body.days == 1 else "s"
     order = _create_or_reuse_order(
         shop_id, current_user["id"], "promotion", promotion_service.promotion_price_paise(body.days),

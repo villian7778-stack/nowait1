@@ -236,7 +236,9 @@ def _create_shop_locked(owner_id: str, data: ShopCreate) -> dict:
         "city": data.city,
         "state": data.state,
         "avg_wait_minutes": data.avg_wait_minutes,
-        "images": data.images,
+        # Photos are added only through POST /shops/{id}/images, which checks the file and names it
+        # itself; addresses sent with the form (e.g. pictures hosted anywhere) are not taken.
+        "images": [],
         "description": data.description,
         **({"opening_hours": data.opening_hours} if data.opening_hours else {}),
         **({"latitude": data.latitude} if data.latitude is not None else {}),
@@ -267,12 +269,19 @@ def update_shop(shop_id: str, owner_id: str, data: ShopUpdate) -> dict:
     # Verify ownership
     existing = execute_one(
         supabase.table("shops")
-        .select("id")
+        .select("id, images")
         .eq("id", shop_id)
         .eq("owner_id", owner_id)
     )
     if not existing.data:
         raise HTTPException(status_code=403, detail="Not authorized to update this shop")
+
+    # The photo list may only keep / reorder / drop photos the shop already has: new ones come
+    # through the upload endpoint, never as an address from the request.
+    if data.images is not None:
+        current = set(existing.data.get("images") or [])
+        if not set(data.images) <= current:
+            raise HTTPException(status_code=400, detail="Add new photos with the upload button.")
 
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     if not update_data:

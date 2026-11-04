@@ -101,7 +101,7 @@ owners manage their queue. This policy explains what information we collect, why
 <li><b>Queue activity:</b> the queues you join, your token number, the services you choose, visit times and status, and notifications we send you.</li>
 <li><b>Reviews:</b> star ratings and comments you write about a visit, and reports you make about reviews.</li>
 <li><b>Location:</b> only when you choose to use a location feature (for example picking your shop on the map or finding nearby shops). We do not track your location in the background.</li>
-<li><b>Payments (shop owners):</b> payments are processed by Razorpay. We receive the payment reference, amount and status. We never see or store your card, UPI or bank details.</li>
+<li><b>Payments (shop owners):</b> payments are processed by Razorpay. We share your name, email and mobile number with Razorpay so its payment screen doesn't have to ask for them, and we receive the payment reference, amount and status. We never see or store your card, UPI or bank details.</li>
 </ul>
 
 <h2>How we use it</h2>
@@ -170,7 +170,8 @@ Waiting times shown in the app are estimates; the shop decides when to serve eac
 <li>A subscription is needed to open your shop to customers: ₹{p['month']} for 1 month or ₹{p['quarter']} for 3 months.
 New shop owners can activate a free trial of {p['trial_months']} months once per person (per email and mobile number).</li>
 <li>Featured Promotion costs ₹{p['promo_per_day']} per day and can be bought for {p['promo_days']} days.</li>
-<li>All payments are final - see the <a href="/legal/refund-policy">Refund &amp; Cancellation Policy</a>.</li>
+<li>All payments are final. <b>No refund will be given for any reason</b> - see the
+<a href="/legal/refund-policy">Refund &amp; Cancellation Policy</a>.</li>
 <li>Treat customers' names and mobile numbers only as needed to serve them.</li>
 </ul>
 
@@ -205,20 +206,24 @@ paid us in the 3 months before the claim.</p>
 def refund_policy():
     b, p = _business(), _prices()
     body = f"""
-<h2>Payments are final</h2>
+<h2>No refunds for any reason</h2>
 <p>Subscriptions (₹{p['month']} for 1 month, ₹{p['quarter']} for 3 months), renewals and extensions, and Featured Promotions
-(₹{p['promo_per_day']} per day) are final and non-refundable. No refund is given for unused days, for cancelling a subscription
-or promotion early, or for closing your shop.</p>
+(₹{p['promo_per_day']} per day) are final. <b>No refund will be given for any reason</b> - including unused days, cancelling a
+subscription or promotion early, closing your shop, deleting your account, or not using the service. Please check the plan,
+the length and the price before you pay.</p>
 
 <h2>Cancellation</h2>
 <p>You can cancel your subscription in the app (Manage Shop → Subscription). Cancelling closes your shop to new customers
-straight away and is not refunded.</p>
+straight away. No refund is given for the remaining days.</p>
 
 <h2>If you were charged but nothing was activated</h2>
 <p>The app checks with our payment provider and normally activates a paid plan automatically, even if the app was closed during
 payment. If money was taken but your plan or promotion is still not active after a few minutes, write to us with the payment
-reference shown by Razorpay, within 7 days. We will activate what you paid for, or, if that is not possible, refund the payment
-to the original payment method within 5-7 working days.</p>
+reference shown by Razorpay, within 7 days, and we will activate what you paid for.</p>
+
+<h2>Failed payments</h2>
+<p>A payment that fails is not charged by us. If your bank still debited the amount, it is reversed to you automatically by your
+bank or our payment provider, Razorpay, usually within 5-7 working days - this is not a refund from us.</p>
 
 <h2>Delivery of the service</h2>
 <p>{b} is a digital service. Subscriptions and promotions are activated in the app as soon as the payment is confirmed;
@@ -254,5 +259,6 @@ your queue history, reviews and notifications.</p>
 
 <h2>What is kept</h2>
 <p>A scrambled code made from your email and mobile number, so the free trial cannot be claimed again. It cannot be turned back into
-your details. Payment records are kept by our payment provider, Razorpay, as the law requires.</p>"""
+your details. Payment records are kept by our payment provider, Razorpay, as the law requires.</p>
+<p>Deleting your account does not refund any payment, including any unused subscription or promotion days.</p>"""
     return _page("Delete your account", body)
