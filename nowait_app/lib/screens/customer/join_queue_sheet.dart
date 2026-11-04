@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import 'queue_status_screen.dart';
@@ -18,6 +19,9 @@ class JoinQueueSheet extends StatefulWidget {
 }
 
 class _JoinQueueSheetState extends State<JoinQueueSheet> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   final Set<String> _selectedIds = {};
   bool _isJoining = false;
   final _l = LocaleService.instance;
@@ -88,7 +92,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
   Future<void> _showCannotJoinDialog(String message) {
     return showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -106,10 +110,10 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text('OK', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -117,7 +121,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
   Future<void> _showAlreadyInQueueDialog() async {
     final goToQueue = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Already in Queue',
@@ -139,10 +143,10 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
             onPressed: () => Navigator.pop(context, true),
             child: Text('View Queue',
                 style: GoogleFonts.inter(
-                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+                    color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
 
     if (goToQueue == true && mounted) {
@@ -168,7 +172,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
   void _showCrossShopDialog(String message) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Already in a Queue',
@@ -183,10 +187,10 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
             onPressed: () => Navigator.pop(context),
             child: Text('OK',
                 style: GoogleFonts.inter(
-                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+                    color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -194,7 +198,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
   void _showBanDialog(String message) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -224,15 +228,18 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
             onPressed: () => Navigator.pop(context),
             child: Text('OK',
                 style: GoogleFonts.inter(
-                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+                    color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
@@ -242,7 +249,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.15),
+            color: _accent.primary.withValues(alpha: 0.15),
             blurRadius: 40,
             offset: const Offset(0, -8),
           ),
@@ -277,7 +284,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      color: _accent.primary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -323,7 +330,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient135,
+                        gradient: _accent.gradient135,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
@@ -387,21 +394,21 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
+                      color: _accent.primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                      border: Border.all(color: _accent.primary.withValues(alpha: 0.15)),
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: _accent.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.notifications_active_outlined,
-                            color: AppColors.primary,
+                            color: _accent.primary,
                             size: 20,
                           ),
                         ),
@@ -458,7 +465,7 @@ class _JoinQueueSheetState extends State<JoinQueueSheet> {
                       ? Container(
                           height: 52,
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient135,
+                            gradient: _accent.gradient135,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Center(
@@ -534,12 +541,12 @@ class _ServiceTile extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withValues(alpha: 0.08)
+              ? Accent.of(context).primary.withValues(alpha: 0.08)
               : AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected
-                ? AppColors.primary.withValues(alpha: 0.4)
+                ? Accent.of(context).primary.withValues(alpha: 0.4)
                 : AppColors.outline.withValues(alpha: 0.15),
             width: selected ? 1.5 : 1,
           ),
@@ -560,7 +567,7 @@ class _ServiceTile extends StatelessWidget {
               height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: selected ? AppColors.primaryGradient135 : null,
+                gradient: selected ? Accent.of(context).gradient135 : null,
                 color: selected ? null : Colors.transparent,
                 border: selected
                     ? null
@@ -609,7 +616,7 @@ class _ServiceTile extends StatelessWidget {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.primary : AppColors.onSurface,
+                    color: selected ? Accent.of(context).primary : AppColors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -693,7 +700,7 @@ class _InfoCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: gradient ? AppColors.primaryGradient135 : null,
+        gradient: gradient ? Accent.of(context).gradient135 : null,
         color: gradient ? null : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
@@ -707,7 +714,7 @@ class _InfoCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: gradient ? Colors.white : AppColors.primary, size: 20),
+          Icon(icon, color: gradient ? Colors.white : Accent.of(context).primary, size: 20),
           const SizedBox(height: 8),
           Text(
             value,

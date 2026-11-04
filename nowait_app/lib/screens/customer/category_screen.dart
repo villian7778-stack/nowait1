@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/models.dart';
+import '../../services/location_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
@@ -532,27 +533,18 @@ class _CategoryScreenState extends State<CategoryScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          'Promotions',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onSurface,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: _categoryGradient),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${_promotedShops.length}',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                        // Shrinks a little on narrow screens / long city names instead of overflowing
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _l.tr('trendingShops'),
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onSurface,
+                              ),
                             ),
                           ),
                         ),
@@ -560,7 +552,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Height follows the tallest card so there is no blank space below it
+                  // Every card has the same rows and the same fixed height
                   AutoScroll(
                     controller: _promoScroll,
                     step: _promoCardWidth(context) + 12,
@@ -568,9 +560,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     controller: _promoScroll,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: IntrinsicHeight(
+                    child: SizedBox(
+                      height: _PromotedShopCard.height + 16, // + room for the shadow
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           for (var i = 0; i < _promotedShops.length; i++) ...[
                             if (i > 0) const SizedBox(width: 12),
@@ -599,16 +592,23 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      Text(
-                        _filterQuery.isEmpty
-                            ? (_selectedCity != null
-                                ? '${widget.category}s in $_selectedCity'
-                                : 'All ${widget.category}s')
-                            : '${filtered.length} Result${filtered.length == 1 ? '' : 's'}',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
+                      // Shrinks a little on narrow screens / long city names instead of overflowing
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _filterQuery.isEmpty
+                                ? (_selectedCity != null
+                                    ? _l.tr('exploreMoreIn', params: {'city': _selectedCity!})
+                                    : _l.tr('exploreMore'))
+                                : '${filtered.length} Result${filtered.length == 1 ? '' : 's'}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -678,199 +678,218 @@ class _PromotedShopCard extends StatelessWidget {
 
   const _PromotedShopCard({required this.shop, required this.gradient, required this.onTap, required this.width});
 
+  /// Same for every card: each one has exactly the same rows (photo, name, address, rating,
+  /// status line), so there is never blank space at the bottom of one.
+  static const height = 238.0;
+  static const _imageHeight = 92.0;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: width,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.shadowPrimary,
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image / gradient hero
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-              child: SizedBox(
-                height: 95,
+    final l = LocaleService.instance;
+    final hasScheme = shop.activeScheme?.isActive ?? false;
+    final hasLocation = shop.latitude != null && shop.longitude != null;
+
+    Widget placeholder() => Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          ),
+          child: Center(child: Icon(_categoryIconFor(shop.category), color: Colors.white.withValues(alpha: 0.5), size: 44)),
+        );
+
+    // Elite: the shop's own category gradient (as in the list below). Offer: white with text in
+    // the category colour, so the two badges never look alike.
+    final shopGradient = CategoryTheme.gradient(shop.category);
+    final shopColor = CategoryTheme.color(shop.category);
+
+    Widget badge(IconData icon, String text, {Gradient? fill, Color? color, Color fg = Colors.white}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            gradient: fill,
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 1))],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 9, color: fg),
+              const SizedBox(width: 3),
+              Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
+            ],
+          ),
+        );
+
+    return MediaQuery.withClampedTextScaling(
+      // Fixed height: very large system fonts would not fit in it.
+      maxScaleFactor: 1.1,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16, offset: const Offset(0, 4))],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Photo, "Elite" badge, and "Offer" when a scheme is running
+              SizedBox(
+                height: _imageHeight,
                 width: double.infinity,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (shop.images.isNotEmpty)
-                      Image.network(
-                        shop.images.first,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                          ),
-                          child: Center(child: Icon(_categoryIconFor(shop.category), color: Colors.white.withValues(alpha: 0.5), size: 48)),
-                        ),
-                      )
-                    else
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                        ),
-                        child: Center(child: Icon(_categoryIconFor(shop.category), color: Colors.white.withValues(alpha: 0.5), size: 48)),
+                    shop.images.isNotEmpty
+                        ? Image.network(shop.images.first, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder())
+                        : placeholder(),
+                    Positioned(top: 8, left: 8, child: badge(Icons.star_rounded, LocaleService.instance.tr('eliteBadge'),
+                            fill: LinearGradient(colors: shopGradient, begin: Alignment.topLeft, end: Alignment.bottomRight))),
+                    if (hasScheme)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: badge(Icons.local_offer_rounded, l.tr('offerBadge'), color: Colors.white, fg: shopColor),
                       ),
-                  Positioned(
-                    top: 8,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient135,
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shop.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface),
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 2),
+                      Row(
                         children: [
-                          Icon(Icons.star_rounded, size: 9, color: Colors.white),
-                          SizedBox(width: 3),
-                          Text('Featured', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
+                          const Icon(Icons.location_on_outlined, size: 11, color: AppColors.onSurfaceVariant),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              shop.address.isNotEmpty ? '${shop.address}, ${shop.city}' : shop.city,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ),
-                  // Open / closed is shown once, in the card body (_StatusPill) below.
-                ],
-              ),
-            ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    shop.name,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on_outlined, size: 11, color: AppColors.onSurfaceVariant),
-                      Expanded(
-                        child: Text(
-                          shop.address.isNotEmpty ? '${shop.address}, ${shop.city}' : shop.city,
-                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      const SizedBox(height: 6),
+                      _rating(l),
+                      const Spacer(),
+                      // Open / closed, queue + waiting time, and a directions button - one line
+                      Row(
+                        children: [
+                          _StatusPill(shop: shop),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: shop.isQueuePausedByOwner
+                                ? const QueuePausedNote(fontSize: 10, fit: true)
+                                : FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.group_outlined, size: 12, color: AppColors.onSurfaceVariant),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '${shop.queueCount} · ~${shop.queueCount * shop.avgWaitMinutes}m',
+                                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Directions along the bottom of every card (greyed out without a saved location,
+                      // so all cards keep the same layout)
+                      _DirectionsButton(
+                        lat: hasLocation ? shop.latitude : null,
+                        lng: hasLocation ? shop.longitude : null,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  ShopRatingRow(shop: shop, starSize: 12),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 4,
-                    children: [
-                      _StatusPill(shop: shop),
-                      if (shop.canAcceptQueue) ...[
-                        _promoInfoBadge(Icons.group_outlined, '${shop.queueCount}'),
-                        _promoInfoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
-                      ],
-                      if (shop.latitude != null && shop.longitude != null)
-                        DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
-                    ],
-                  ),
-                  if (shop.isQueuePausedByOwner) ...[
-                    const SizedBox(height: 6),
-                    const QueuePausedNote(fontSize: 10),
-                  ],
-                  // Scheme badge
-                  if (shop.activeScheme != null &&
-                      shop.activeScheme!.isActive) ...[
-                    const SizedBox(height: 6),
-                    GestureDetector(
-                      onTap: () => showSchemeSheet(context, shop.activeScheme!),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: gradient.first.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: gradient.first.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.local_offer_rounded,
-                                size: 11, color: gradient.first),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                'Scheme On · ${shop.activeScheme!.title}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: gradient.first,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            Icon(Icons.chevron_right_rounded,
-                                size: 12, color: gradient.first),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _promoInfoBadge(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: AppColors.onSurfaceVariant),
+  /// Always one line: stars + score (count), or "New" with no reviews yet - so every card has it.
+  Widget _rating(LocaleService l) {
+    final count = shop.reviewCount;
+    final avg = shop.avgReviewRating;
+    return Row(
+      children: [
+        Icon(Icons.star_rounded, size: 14, color: count > 0 ? const Color(0xFFFFC107) : AppColors.outline.withValues(alpha: 0.5)),
+        const SizedBox(width: 3),
+        Text(
+          count > 0 ? avg.toStringAsFixed(1) : l.tr('newShop'),
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+        ),
+        if (count > 0) ...[
           const SizedBox(width: 3),
-          Text(
-            text,
-            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
-          ),
+          Text('($count)', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
         ],
+      ],
+    );
+  }
+}
+
+/// Full-width "Directions" button: opens Google / Apple Maps for the shop. Disabled (grey) when
+/// the shop has no saved location.
+class _DirectionsButton extends StatelessWidget {
+  final double? lat;
+  final double? lng;
+
+  const _DirectionsButton({required this.lat, required this.lng});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = lat != null && lng != null;
+    final fg = enabled ? AppColors.primary : AppColors.onSurfaceVariant.withValues(alpha: 0.5);
+    return GestureDetector(
+      onTap: enabled ? () => LocationService.instance.launchDirections(lat!, lng!) : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 30,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: enabled ? AppColors.primary.withValues(alpha: 0.08) : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: enabled ? Border.all(color: AppColors.primary.withValues(alpha: 0.18)) : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.directions_rounded, size: 15, color: fg),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                LocaleService.instance.tr('directions'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -956,14 +975,14 @@ class _ShopListCard extends StatelessWidget {
                                     categoryColor)),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.star_rounded, size: 9, color: Colors.white),
-                              SizedBox(width: 3),
+                              const Icon(Icons.star_rounded, size: 9, color: Colors.white),
+                              const SizedBox(width: 3),
                               Text(
-                                'Promoted',
-                                style: TextStyle(
+                                LocaleService.instance.tr('eliteBadge'),
+                                style: const TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,

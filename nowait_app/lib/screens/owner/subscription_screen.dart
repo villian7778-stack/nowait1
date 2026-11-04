@@ -6,6 +6,7 @@ import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/no_refund_notice.dart';
 import '../../widgets/gradient_button.dart';
@@ -20,6 +21,9 @@ class SubscriptionScreen extends StatefulWidget {
 }
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   late bool _isActive;
   String _selectedPlan = 'monthly';
   bool _isLoading = false;
@@ -162,7 +166,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       final length = _selectedPlan == 'quarterly' ? '3 months' : '1 month';
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text('Subscription already active', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
           content: Column(
@@ -188,10 +192,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 Navigator.pop(ctx);
                 _showPaymentDialog(extend: true);
               },
-              child: Text('Extend', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+              child: Text('Extend', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
             ),
           ],
-        ),
+        ))),
       );
       return;
     }
@@ -201,7 +205,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   void _showPaymentDialog({bool extend = false}) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Confirm Payment', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         content: Column(
@@ -211,7 +215,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient135,
+                gradient: _accent.gradient135,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -359,7 +363,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         // that can be missed.
                         showDialog(
                           context: context,
-                          builder: (_) => AlertDialog(
+                          builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             title: Row(
                               children: [
@@ -372,10 +376,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context),
-                                child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                                child: Text('OK', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
                               ),
                             ],
-                          ),
+                          ))),
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -387,10 +391,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 }
               }
             },
-            child: Text('Pay ₹$_price', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text('Pay ₹$_price', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -398,7 +402,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final confirmCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) {
           final confirmed = confirmCtrl.text == 'CANCEL'; // exact: no spaces, no lowercase
           Widget point(String text) => Padding(
@@ -449,7 +453,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                child: Text('Keep Active', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w600)),
               ),
               TextButton(
                 onPressed: !confirmed
@@ -492,12 +496,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ],
           );
         },
-      ),
+      ))),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     // Offer the free trial only to a shop with no plan yet whose owner hasn't used theirs.
     final trialOffer = !_isActive && _trialAvailable;
     return Scaffold(
@@ -565,10 +572,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     children: [
                                       Text(
                                         trialOffer ? 'Try 3 months free trial' : 'Choose a plan',
-                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _accent.primary),
                                       ),
                                       const SizedBox(width: 4),
-                                      const Icon(Icons.arrow_downward_rounded, size: 16, color: AppColors.primary),
+                                      Icon(Icons.arrow_downward_rounded, size: 16, color: _accent.primary),
                                     ],
                                   ),
                                 ),
@@ -596,7 +603,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                       Text('${widget.shop.name} is live and accepting queues', style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
                                       if (_formatExpiry().isNotEmpty) ...[
                                         const SizedBox(height: 2),
-                                        Text(_formatExpiry(), style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                                        Text(_formatExpiry(), style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: _accent.primary)),
                                       ],
                                     ],
                                   ),
@@ -630,9 +637,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient135,
+                              gradient: _accent.gradient135,
                               borderRadius: BorderRadius.circular(16),
-                              boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))],
+                              boxShadow: [BoxShadow(color: _accent.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -666,7 +673,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   duration: const Duration(milliseconds: 150),
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    gradient: _selectedPlan == 'monthly' ? AppColors.primaryGradient135 : null,
+                                    gradient: _selectedPlan == 'monthly' ? _accent.gradient135 : null,
                                     color: _selectedPlan == 'monthly' ? null : AppColors.surfaceContainerLowest,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
@@ -675,7 +682,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           : AppColors.outline.withValues(alpha: 0.3),
                                     ),
                                     boxShadow: _selectedPlan == 'monthly'
-                                        ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))]
+                                        ? [BoxShadow(color: _accent.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))]
                                         : [],
                                   ),
                                   child: Column(
@@ -708,7 +715,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   duration: const Duration(milliseconds: 150),
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    gradient: _selectedPlan == 'quarterly' ? AppColors.primaryGradient135 : null,
+                                    gradient: _selectedPlan == 'quarterly' ? _accent.gradient135 : null,
                                     color: _selectedPlan == 'quarterly' ? null : AppColors.surfaceContainerLowest,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
@@ -717,7 +724,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                           : AppColors.outline.withValues(alpha: 0.3),
                                     ),
                                     boxShadow: _selectedPlan == 'quarterly'
-                                        ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))]
+                                        ? [BoxShadow(color: _accent.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))]
                                         : [],
                                   ),
                                   child: Column(
@@ -840,13 +847,13 @@ class _BenefitTile extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: included
-                  ? AppColors.primary.withValues(alpha: 0.08)
+                  ? Accent.of(context).primary.withValues(alpha: 0.08)
                   : AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
-              color: included ? AppColors.primary : AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+              color: included ? Accent.of(context).primary : AppColors.onSurfaceVariant.withValues(alpha: 0.5),
               size: 18,
             ),
           ),

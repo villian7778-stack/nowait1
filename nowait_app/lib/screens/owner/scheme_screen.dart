@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/promotion_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 
@@ -17,6 +18,9 @@ class SchemeScreen extends StatefulWidget {
 }
 
 class _SchemeScreenState extends State<SchemeScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   int _durationDays = 7;
@@ -196,7 +200,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
     if (schemeId == null || schemeId.isEmpty) return;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Cancel Scheme?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         content: Text(
@@ -206,7 +210,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            child: Text('Keep Active', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w600)),
           ),
           TextButton(
             onPressed: () async {
@@ -236,12 +240,15 @@ class _SchemeScreenState extends State<SchemeScreen> {
             child: Text('Cancel Scheme', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -279,16 +286,16 @@ class _SchemeScreenState extends State<SchemeScreen> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
+                      color: _accent.primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                      border: Border.all(color: _accent.primary.withValues(alpha: 0.2)),
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient135,
+                            gradient: _accent.gradient135,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.local_offer_outlined, color: Colors.white, size: 16),
@@ -314,7 +321,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                         ),
                         Text(
                           'Valid $_durationDays days',
-                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primary),
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: _accent.primary),
                         ),
                       ],
                     ),
@@ -360,7 +367,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                      borderSide: BorderSide(color: _accent.primary, width: 2),
                     ),
                     filled: true,
                     fillColor: AppColors.surfaceContainerLowest,
@@ -382,7 +389,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                         duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          gradient: sel ? AppColors.primaryGradient135 : null,
+                          gradient: sel ? _accent.gradient135 : null,
                           color: sel ? null : AppColors.surfaceContainerLowest,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
@@ -443,7 +450,7 @@ class _SchemeScreenState extends State<SchemeScreen> {
                         ? Container(
                             height: 52,
                             decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient135,
+                              gradient: _accent.gradient135,
                               borderRadius: BorderRadius.circular(24),
                             ),
                             child: const Center(

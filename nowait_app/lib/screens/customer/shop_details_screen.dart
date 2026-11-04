@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 import '../../widgets/gradient_button.dart';
@@ -27,6 +28,9 @@ class ShopDetailsScreen extends StatefulWidget {
 }
 
 class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(_shop?.category);
+
   int _currentImage = 0;
   final PageController _pageController = PageController();
   ShopModel? _shop;
@@ -94,7 +98,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => JoinQueueSheet(shop: _shop!),
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => JoinQueueSheet(shop: _shop!))),
     );
     if (entry == null || !mounted) return;
     Navigator.push(
@@ -113,7 +117,10 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     if (_isLoadingShop) {
       return Scaffold(
         backgroundColor: AppColors.surface,
@@ -158,7 +165,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                                   ? child
                                   : Container(
                                       color: AppColors.surfaceContainerLow,
-                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                                      child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _accent.primary)),
                                     ),
                               errorBuilder: (_, __, ___) => _placeholderPage(shop, i),
                             );
@@ -349,12 +356,12 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: shop.activeScheme!.isActive
-                                  ? AppColors.primary.withValues(alpha: 0.06)
+                                  ? _accent.primary.withValues(alpha: 0.06)
                                   : AppColors.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                   color: shop.activeScheme!.isActive
-                                      ? AppColors.primary.withValues(alpha: 0.2)
+                                      ? _accent.primary.withValues(alpha: 0.2)
                                       : AppColors.outline.withValues(alpha: 0.2)),
                             ),
                             child: Row(
@@ -363,7 +370,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
                                     gradient: shop.activeScheme!.isActive
-                                        ? AppColors.primaryGradient135
+                                        ? _accent.gradient135
                                         : null,
                                     color: shop.activeScheme!.isActive
                                         ? null
@@ -412,14 +419,14 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
                                           color: shop.activeScheme!.isActive
-                                              ? AppColors.primary
+                                              ? _accent.primary
                                               : AppColors.error),
                                     ),
                                     const SizedBox(height: 2),
                                     Icon(Icons.chevron_right_rounded,
                                         size: 16,
                                         color: shop.activeScheme!.isActive
-                                            ? AppColors.primary
+                                            ? _accent.primary
                                             : AppColors.onSurfaceVariant),
                                   ],
                                 ),
@@ -654,7 +661,7 @@ class _StaffSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: Accent.of(context).primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -662,7 +669,7 @@ class _StaffSection extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: Accent.of(context).primary,
                 ),
               ),
             ),
@@ -699,15 +706,15 @@ class _StaffAvatar extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              gradient: staff.isOwnerStaff ? AppColors.primaryGradient135 : null,
-              color: staff.isOwnerStaff ? null : AppColors.primary.withValues(alpha: 0.1),
+              gradient: staff.isOwnerStaff ? Accent.of(context).gradient135 : null,
+              color: staff.isOwnerStaff ? null : Accent.of(context).primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 initial,
                 style: TextStyle(
-                  color: staff.isOwnerStaff ? Colors.white : AppColors.primary,
+                  color: staff.isOwnerStaff ? Colors.white : Accent.of(context).primary,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
@@ -729,7 +736,7 @@ class _StaffAvatar extends StatelessWidget {
           if (staff.isOwnerStaff)
             Text(
               'Owner',
-              style: GoogleFonts.inter(fontSize: 9, color: AppColors.primary, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(fontSize: 9, color: Accent.of(context).primary, fontWeight: FontWeight.w600),
             ),
         ],
       ),
@@ -773,7 +780,7 @@ class _BentoCell extends StatelessWidget {
       child: fullWidth
           ? Row(
               children: [
-                Icon(icon, color: AppColors.primary, size: 20),
+                Icon(icon, color: Accent.of(context).primary, size: 20),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -798,7 +805,7 @@ class _BentoCell extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: AppColors.primary, size: 20),
+                Icon(icon, color: Accent.of(context).primary, size: 20),
                 const SizedBox(height: 8),
                 Text(
                   value,
@@ -847,11 +854,11 @@ class _ServiceTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
+              color: Accent.of(context).primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.spa_outlined,
-                color: AppColors.primary, size: 22),
+            child: Icon(Icons.spa_outlined,
+                color: Accent.of(context).primary, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -878,7 +885,7 @@ class _ServiceTile extends StatelessWidget {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: AppColors.primary,
+              color: Accent.of(context).primary,
             ),
           ),
         ],
@@ -964,31 +971,31 @@ class _DirectionsButtonState extends State<_DirectionsButton> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
+          color: Accent.of(context).primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+          border: Border.all(color: Accent.of(context).primary.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             _loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppColors.primary,
+                      color: Accent.of(context).primary,
                     ),
                   )
-                : const Icon(Icons.directions_rounded,
-                    size: 16, color: AppColors.primary),
+                : Icon(Icons.directions_rounded,
+                    size: 16, color: Accent.of(context).primary),
             const SizedBox(width: 8),
             Text(
               'Get Directions',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+                color: Accent.of(context).primary,
               ),
             ),
           ],

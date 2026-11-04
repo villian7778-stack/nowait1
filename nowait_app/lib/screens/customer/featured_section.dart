@@ -22,7 +22,7 @@ const featuredTabs = <(String?, String)>[
   ('Hospital/Clinic', 'catHospital'),
 ];
 
-/// Home screen "Featured" section: category tabs over one horizontally scrolling row of promoted
+/// Home screen "Trending Shops" section (paid Featured Promotions): category tabs over one horizontally scrolling row of promoted
 /// shop cards. [shops] must already be the shuffled promoted shops of the selected city; the
 /// caller leaves the section out entirely when there are none.
 class FeaturedShopsSection extends StatefulWidget {
@@ -95,12 +95,19 @@ class _FeaturedShopsSectionState extends State<FeaturedShopsSection> {
                 child: const Icon(Icons.auto_awesome_rounded, size: 15, color: AppColors.primary),
               ),
               const SizedBox(width: 8),
-              Text(
-                l.tr('featured'),
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+              // Shrinks a little on narrow screens / long city names instead of overflowing
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    l.tr('trendingShops'),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
+import '../services/locale_service.dart';
 import '../services/location_service.dart';
 import '../services/review_service.dart';
 import '../theme/app_theme.dart';
@@ -118,17 +119,17 @@ class ShopCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 7, vertical: 3),
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient135,
+                            gradient: LinearGradient(colors: CategoryTheme.gradient(shop.category)), // Elite: category colours
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.star_rounded, size: 9, color: Colors.white),
-                              SizedBox(width: 3),
+                              const Icon(Icons.star_rounded, size: 9, color: Colors.white),
+                              const SizedBox(width: 3),
                               Text(
-                                'Promoted',
-                                style: TextStyle(
+                                LocaleService.instance.tr('eliteBadge'),
+                                style: const TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,

@@ -9,6 +9,7 @@ import 'package:nowait_app/models/models.dart';
 import 'package:nowait_app/screens/customer/category_screen.dart';
 import 'package:nowait_app/screens/customer/home_screen.dart';
 import 'package:nowait_app/screens/owner/promotion_screen.dart';
+import 'package:nowait_app/theme/category_theme.dart';
 
 Map<String, dynamic> _shop(String id, String name, {double? min, double? max, double rating = 0, int reviews = 0}) => {
       'id': id, 'name': name, 'category': 'Salon', 'address': 'Main road', 'city': 'Pune',
@@ -134,6 +135,64 @@ void main() {
     }, () => MockClient((req) async => req.url.path == '/shops'
         ? http.Response(jsonEncode({'shops': [promoted], 'total': 1}), 200)
         : _api(req)));
+  });
+
+  testWidgets('category Promotions: every card the same height, Offer only where a scheme runs', (tester) async {
+    final until = DateTime.now().add(const Duration(days: 3)).toUtc().toIso8601String();
+    Map<String, dynamic> promo(String id, String name, {bool scheme = false, bool paused = false, bool located = false, int reviews = 0}) => {
+          ..._shop(id, name, min: 10, max: 20, rating: reviews > 0 ? 4.5 : 0, reviews: reviews),
+          'is_promoted': true,
+          'queue_paused': paused,
+          if (located) ...{'latitude': 20.7, 'longitude': 76.5},
+          'active_promotions': [
+            {'id': 'f$id', 'title': 'Featured Promotion', 'description': '', 'is_active': true, 'valid_until': until},
+            if (scheme) {'id': 's$id', 'title': '20% off', 'description': 'Today', 'is_active': true, 'valid_until': until},
+          ],
+        };
+    final shops = [
+      promo('a', 'Rich Salon', scheme: true, located: true, reviews: 3),
+      promo('b', 'Plain Salon'),
+      promo('c', 'Paused Salon', paused: true),
+    ];
+    for (final width in [360.0, 900.0]) {
+      tester.view.physicalSize = Size(width, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await http.runWithClient(() async {
+        await tester.pumpWidget(const MaterialApp(home: CategoryScreen(category: 'Salon', initialCity: 'Pune')));
+        await tester.pumpAndSettle();
+        final cards = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_PromotedShopCard', skipOffstage: false);
+        final heights = cards.evaluate().map((e) => e.size!.height).toSet();
+        expect(heights.length, 1, reason: 'all promoted cards share one height ($width px)');
+        Finder inCard(String shop, Finder f) => find.descendant(
+            of: find.ancestor(of: find.text(shop).first, matching: cards), matching: f, skipOffstage: false);
+        // Section titles and badges
+        expect(find.text('Trending Shops'), findsOneWidget);
+        expect(find.text('Promotions'), findsNothing);
+        expect(find.text('3'), findsNothing, reason: 'no shop count next to the title');
+        expect(find.text('Explore more in Pune'), findsOneWidget);
+        expect(inCard('Rich Salon', find.text('Elite')), findsOneWidget);
+        // Elite badge in the shop's category colours (Salon), Offer badge white
+        BoxDecoration badgeBox(String text) => tester
+            .widget<Container>(find.ancestor(of: inCard('Rich Salon', find.text(text)), matching: find.byType(Container)).first)
+            .decoration! as BoxDecoration;
+        expect((badgeBox('Elite').gradient! as LinearGradient).colors, CategoryTheme.gradient('Salon'));
+        expect(badgeBox('Offer').color, Colors.white);
+        expect(find.text('Featured'), findsNothing);
+        expect(find.text('Promoted'), findsNothing);
+        expect(inCard('Rich Salon', find.text('Offer')), findsOneWidget);
+        expect(inCard('Plain Salon', find.text('Offer')), findsNothing);
+        expect(inCard('Plain Salon', find.text('New')), findsOneWidget); // rating line is always there
+        // Directions along the bottom of every card (disabled without a saved location)
+        expect(inCard('Rich Salon', find.text('Directions')), findsOneWidget);
+        expect(inCard('Plain Salon', find.text('Directions')), findsOneWidget);
+        // The promo card only says "Offer"; the offer itself shows on the shop page (and in the list below)
+        expect(find.descendant(of: cards, matching: find.textContaining('20% off'), skipOffstage: false), findsNothing);
+        await tester.pumpWidget(const SizedBox()); // any overflow above fails the test
+      }, () => MockClient((req) async => req.url.path == '/shops'
+          ? http.Response(jsonEncode({'shops': shops, 'total': shops.length}), 200)
+          : _api(req)));
+    }
   });
 
   test('Featured Promotion is ₹10/day everywhere the owner sees it', () {

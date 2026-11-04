@@ -340,7 +340,7 @@ class _SalonListScreenState extends State<SalonListScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Promoted',
+              LocaleService.instance.tr('trendingShops'),
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -416,12 +416,12 @@ class _PromotedShopCard extends StatelessWidget {
                         border: Border.all(
                             color: Colors.white.withValues(alpha: 0.3)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.star_rounded, size: 10, color: Colors.white),
-                          SizedBox(width: 3),
-                          Text('Promoted', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                          const Icon(Icons.star_rounded, size: 10, color: Colors.white),
+                          const SizedBox(width: 3),
+                          Text(LocaleService.instance.tr('eliteBadge'), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
                         ],
                       ),
                     ),

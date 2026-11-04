@@ -116,9 +116,9 @@ void main() {
     await http.runWithClient(() async {
       await _pumpHome(tester, city: 'Pune');
 
-      expect(find.text('Featured'), findsOneWidget);
+      expect(find.text('Trending Shops'), findsOneWidget);
       // Above Explore
-      expect(tester.getTopLeft(find.text('Featured')).dy, lessThan(tester.getTopLeft(find.text('Explore')).dy));
+      expect(tester.getTopLeft(find.text('Trending Shops')).dy, lessThan(tester.getTopLeft(find.text('Explore')).dy));
       expect((await _featuredNames(tester)).toSet(), {'Pune Cuts', 'Style Hub', 'Fix Garage'});
 
       // Tabs: All, Salon, Garage. No Beauty Parlor / Hospital tab (none promoted there).
@@ -183,7 +183,7 @@ void main() {
       (tester) async {
     await http.runWithClient(() async {
       await _pumpHome(tester, city: 'Pune');
-      expect(find.text('Featured'), findsOneWidget);
+      expect(find.text('Trending Shops'), findsOneWidget);
 
       await tester.tap(find.text('Pune').first); // city pill in the header
       await tester.pump(const Duration(milliseconds: 500));
@@ -194,7 +194,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
       }
 
-      expect(find.text('Featured'), findsNothing);
+      expect(find.text('Trending Shops'), findsNothing);
       expect(find.byType(FeaturedShopCard), findsNothing);
       expect(find.text('Explore'), findsOneWidget);
       expect(find.text('Open Now'), findsNothing); // section removed
@@ -314,14 +314,14 @@ void main() {
         // With Featured: Featured + Explore on the first screen.
         await _pumpHome(tester, city: 'Pune', size: size);
         final exploreBottom = tester.getBottomLeft(find.text('Garage').last).dy; // last Explore card text
-        expect(tester.getTopLeft(find.text('Featured')).dy, greaterThan(0));
+        expect(tester.getTopLeft(find.text('Trending Shops')).dy, greaterThan(0));
         expect(exploreBottom, lessThanOrEqualTo(_visibleBottom(tester)),
             reason: 'Explore must be fully visible together with Featured');
 
         // Without Featured: only the four Explore cards, all on the first screen.
         await tester.pumpWidget(const SizedBox());
         await _pumpHome(tester, city: 'Nagpur', size: size);
-        expect(find.text('Featured'), findsNothing);
+        expect(find.text('Trending Shops'), findsNothing);
         expect(find.text('Open Now'), findsNothing);
         for (final name in ['Salon', 'Beauty Parlour', 'Hospital/Clinics', 'Garage']) {
           expect(tester.getBottomLeft(find.text(name)).dy, lessThanOrEqualTo(_visibleBottom(tester)), reason: name);

@@ -244,6 +244,8 @@ class QueueEntry {
   final String entryId;
   final String shopId;
   final String shopName;
+  /// The shop's category (from the server's `shop_category`), for the queue screens' colours.
+  final String shopCategory;
   final String token;
   final int position;
   int peopleAhead;
@@ -264,6 +266,7 @@ class QueueEntry {
     required this.entryId,
     required this.shopId,
     required this.shopName,
+    this.shopCategory = '',
     required this.token,
     required this.position,
     required this.peopleAhead,
@@ -323,6 +326,7 @@ class QueueEntry {
       entryId: entryId,
       shopId: json['shop_id'] ?? '',
       shopName: json['shop_name'] ?? '',
+      shopCategory: json['shop_category'] as String? ?? '',
       token: '#${json['token_number']}',
       position: json['position'] ?? 0,
       peopleAhead: json['people_ahead'] ?? 0,

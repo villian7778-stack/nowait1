@@ -8,6 +8,7 @@ import '../../services/location_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/ping_dot.dart';
@@ -27,6 +28,9 @@ class QueueStatusScreen extends StatefulWidget {
 
 class _QueueStatusScreenState extends State<QueueStatusScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shopCategory.isNotEmpty ? widget.shopCategory : widget.entry.shopCategory);
+
   late AnimationController _spinController;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -200,7 +204,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
   void _cancelQueue() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(_l.tr('leaveQueue'),
             style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
@@ -246,7 +250,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
             onPressed: () => Navigator.pop(context),
             child: Text(_l.tr('stay'),
                 style: GoogleFonts.inter(
-                    color: AppColors.primary, fontWeight: FontWeight.w600)),
+                    color: _accent.primary, fontWeight: FontWeight.w600)),
           ),
           TextButton(
             onPressed: () async {
@@ -286,7 +290,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -356,7 +360,10 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: CustomScrollView(
@@ -432,7 +439,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                             width: 52,
                             height: 52,
                             decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient135,
+                              gradient: _accent.gradient135,
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: const Icon(Icons.storefront_rounded,
@@ -493,14 +500,14 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                           Row(
                             children: [
                               Icon(Icons.content_cut_rounded,
-                                  size: 14, color: AppColors.primary),
+                                  size: 14, color: _accent.primary),
                               const SizedBox(width: 6),
                               Text(
                                 'Your Services',
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
+                                  color: _accent.primary,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -527,7 +534,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    color: _accent.primary.withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -535,7 +542,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.primary,
+                                      color: _accent.primary,
                                     ),
                                   ),
                                 ),
@@ -550,12 +557,12 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary
+                                        color: _accent.primary
                                             .withValues(alpha: 0.08),
                                         borderRadius:
                                             BorderRadius.circular(20),
                                         border: Border.all(
-                                            color: AppColors.primary
+                                            color: _accent.primary
                                                 .withValues(alpha: 0.2)),
                                       ),
                                       child: Text(
@@ -563,7 +570,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                         style: GoogleFonts.inter(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: AppColors.primary,
+                                          color: _accent.primary,
                                         ),
                                       ),
                                     ))
@@ -696,7 +703,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                               ? Container(
                                   height: 52,
                                   decoration: BoxDecoration(
-                                      gradient: AppColors.primaryGradient135,
+                                      gradient: _accent.gradient135,
                                       borderRadius:
                                           BorderRadius.circular(16)),
                                   child: const Center(
@@ -761,7 +768,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: _accent.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -769,7 +776,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: _accent.primary,
                 ),
               ),
             ),
@@ -847,7 +854,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
+                      gradient: _accent.gradient135,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -865,7 +872,7 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 48,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
+                      color: _accent.primary,
                       letterSpacing: -2,
                     ),
                   ),
@@ -948,9 +955,9 @@ class _QueueListRow extends StatelessWidget {
       bgColor = AppColors.error.withValues(alpha: 0.12);
       borderColor = AppColors.error.withValues(alpha: 0.45);
     } else {
-      accentColor = AppColors.primary;
-      bgColor = AppColors.primary.withValues(alpha: 0.06);
-      borderColor = AppColors.primary.withValues(alpha: 0.18);
+      accentColor = Accent.of(context).primary;
+      bgColor = Accent.of(context).primary.withValues(alpha: 0.06);
+      borderColor = Accent.of(context).primary.withValues(alpha: 0.18);
     }
 
     final hasCountdown = waitSeconds > 0;
@@ -1156,24 +1163,24 @@ class _QueueDirectionsButtonState extends State<_QueueDirectionsButton> {
         height: 34,
         margin: const EdgeInsets.only(right: 4),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
+          color: Accent.of(context).primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
         child: _launching
-            ? const Center(
+            ? Center(
                 child: SizedBox(
                   width: 14,
                   height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
-                    color: AppColors.primary,
+                    color: Accent.of(context).primary,
                   ),
                 ),
               )
-            : const Icon(
+            : Icon(
                 Icons.directions_rounded,
                 size: 18,
-                color: AppColors.primary,
+                color: Accent.of(context).primary,
               ),
       ),
     );
@@ -1209,7 +1216,7 @@ class _StatCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppColors.primary, size: 18),
+          Icon(icon, color: Accent.of(context).primary, size: 18),
           const SizedBox(height: 8),
           RichText(
             text: TextSpan(

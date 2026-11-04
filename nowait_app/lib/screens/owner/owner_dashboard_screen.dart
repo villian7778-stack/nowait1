@@ -8,6 +8,7 @@ import '../../services/locale_service.dart';
 import '../../services/review_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/api_client.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/profile_details_card.dart';
@@ -30,6 +31,9 @@ class OwnerDashboardScreen extends StatefulWidget {
 }
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(_cachedShop?.category);
+
   int _tabIndex = 0;
   ShopModel? _cachedShop;
 
@@ -48,7 +52,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   void _onLocale() => setState(() {});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: IndexedStack(
@@ -106,7 +113,7 @@ class _OwnerNav extends StatelessWidget {
                   duration: const Duration(milliseconds: 200),
                   padding: EdgeInsets.symmetric(horizontal: isActive ? 24 : 16, vertical: 8),
                   decoration: BoxDecoration(
-                    gradient: isActive ? AppColors.primaryGradient135 : null,
+                    gradient: isActive ? Accent.of(context).gradient135 : null,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -226,7 +233,7 @@ class _ShopsTabState extends State<_ShopsTab> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
+                      gradient: Accent.of(context).gradient135,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
@@ -300,17 +307,17 @@ class _ShopsTabState extends State<_ShopsTab> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
+                      color: Accent.of(context).primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.15)),
+                          color: Accent.of(context).primary.withValues(alpha: 0.15)),
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient135,
+                            gradient: Accent.of(context).gradient135,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.info_outline_rounded,
@@ -322,7 +329,7 @@ class _ShopsTabState extends State<_ShopsTab> {
                             LocaleService.instance.tr('ownerInfo'),
                             style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: AppColors.primary,
+                                color: Accent.of(context).primary,
                                 height: 1.4),
                           ),
                         ),
@@ -401,12 +408,12 @@ class _ShopsTabState extends State<_ShopsTab> {
                   ),
                   _DashActionTile(
                     icon: Icons.rocket_launch_outlined,
-                    iconColor: AppColors.primary,
-                    iconBg: AppColors.primary.withValues(alpha: 0.1),
+                    iconColor: Accent.of(context).primary,
+                    iconBg: Accent.of(context).primary.withValues(alpha: 0.1),
                     title: LocaleService.instance.tr('promoteShop'),
                     subtitle: LocaleService.instance.tr('promoteSubtitle'),
                     badge: _shop!.isPromoted ? 'Active' : '₹${PromotionScreen.pricePerDay}/day',
-                    badgeColor: _shop!.isPromoted ? AppColors.tertiary : AppColors.primary,
+                    badgeColor: _shop!.isPromoted ? AppColors.tertiary : Accent.of(context).primary,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => PromotionScreen(shop: _shop!)),
@@ -414,12 +421,12 @@ class _ShopsTabState extends State<_ShopsTab> {
                   ),
                   _DashActionTile(
                     icon: Icons.local_offer_outlined,
-                    iconColor: AppColors.secondary,
-                    iconBg: AppColors.secondary.withValues(alpha: 0.1),
+                    iconColor: Accent.of(context).secondary,
+                    iconBg: Accent.of(context).secondary.withValues(alpha: 0.1),
                     title: LocaleService.instance.tr('addEditScheme'),
                     subtitle: LocaleService.instance.tr('addEditSchemeSubtitle'),
                     badge: _shop!.activeScheme != null ? _shop!.activeScheme!.validityText : 'None',
-                    badgeColor: _shop!.activeScheme != null ? AppColors.secondary : AppColors.onSurfaceVariant,
+                    badgeColor: _shop!.activeScheme != null ? Accent.of(context).secondary : AppColors.onSurfaceVariant,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => SchemeScreen(shop: _shop!)),
@@ -488,7 +495,7 @@ class _OwnerShopCard extends StatelessWidget {
                     height: 56,
                     decoration: BoxDecoration(
                       gradient: shop.hasActiveSubscription
-                          ? AppColors.primaryGradient135
+                          ? Accent.of(context).gradient135
                           : const LinearGradient(colors: [Color(0xFFB0B8D1), Color(0xFF9099B3)]),
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -801,9 +808,9 @@ class _OwnerReviewsSectionState extends State<_OwnerReviewsSection> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 13),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.07),
+                color: Accent.of(context).primary.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+                border: Border.all(color: Accent.of(context).primary.withValues(alpha: 0.18)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -813,14 +820,14 @@ class _OwnerReviewsSectionState extends State<_OwnerReviewsSection> {
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      color: Accent.of(context).primary,
                     ),
                   ),
                   const SizedBox(width: 6),
                   AnimatedRotation(
                     turns: _showAll ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.primary),
+                    child: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Accent.of(context).primary),
                   ),
                 ],
               ),
@@ -907,7 +914,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
+                      gradient: Accent.of(context).gradient135,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
@@ -1090,7 +1097,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                 child: Row(
                   children: [
                     Expanded(child: Text('Analytics', style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w700))),
-                    IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded), color: AppColors.primary),
+                    IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded), color: Accent.of(context).primary),
                   ],
                 ),
               ),
@@ -1114,7 +1121,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                               margin: const EdgeInsets.only(right: 8),
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                gradient: _period == p ? AppColors.primaryGradient135 : null,
+                                gradient: _period == p ? Accent.of(context).gradient135 : null,
                                 color: _period == p ? null : AppColors.surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -1189,10 +1196,10 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                       mainAxisSpacing: 12,
                       childAspectRatio: 1.5,
                       children: [
-                        _MetricCard(label: 'Total Joined', value: '${_summary!.totalJoined}', icon: Icons.people_outline_rounded, color: AppColors.primary),
+                        _MetricCard(label: 'Total Joined', value: '${_summary!.totalJoined}', icon: Icons.people_outline_rounded, color: Accent.of(context).primary),
                         _MetricCard(label: 'Served', value: '${_summary!.totalServed}', icon: Icons.check_circle_outline_rounded, color: AppColors.tertiary),
                         _MetricCard(label: 'Cancel Rate', value: '${_summary!.cancelRatePct}%', icon: Icons.cancel_outlined, color: AppColors.error),
-                        _MetricCard(label: 'Skip Rate', value: '${_summary!.skipRatePct}%', icon: Icons.skip_next_rounded, color: AppColors.secondary),
+                        _MetricCard(label: 'Skip Rate', value: '${_summary!.skipRatePct}%', icon: Icons.skip_next_rounded, color: Accent.of(context).secondary),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -1202,14 +1209,14 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                           label: 'Avg Service',
                           value: _summary!.avgServiceMinutes != null ? '${_summary!.avgServiceMinutes!.toStringAsFixed(1)} min' : 'N/A',
                           icon: Icons.timer_outlined,
-                          color: AppColors.primary,
+                          color: Accent.of(context).primary,
                         )),
                         const SizedBox(width: 12),
                         Expanded(child: _MetricCard(
                           label: 'Peak Hour',
                           value: _summary!.peakHourText,
                           icon: Icons.schedule_rounded,
-                          color: AppColors.secondary,
+                          color: Accent.of(context).secondary,
                         )),
                       ],
                     ),
@@ -1234,7 +1241,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                           children: [
                             Container(
                               width: 40, height: 40,
-                              decoration: BoxDecoration(gradient: AppColors.primaryGradient135, shape: BoxShape.circle),
+                              decoration: BoxDecoration(gradient: Accent.of(context).gradient135, shape: BoxShape.circle),
                               child: Center(child: Text(
                                 (s['staff_name'] as String? ?? '?')[0].toUpperCase(),
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
@@ -1251,7 +1258,7 @@ class _AnalyticsTabState extends State<_AnalyticsTab> {
                               ),
                             ),
                             if (s['avg_service_minutes'] != null)
-                              Text('${(s['avg_service_minutes'] as num).toStringAsFixed(1)} min avg', style: GoogleFonts.inter(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                              Text('${(s['avg_service_minutes'] as num).toStringAsFixed(1)} min avg', style: GoogleFonts.inter(fontSize: 12, color: Accent.of(context).primary, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       )),
@@ -1285,9 +1292,9 @@ class _IncomeCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient135,
+            gradient: Accent.of(context).gradient135,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 6))],
+            boxShadow: [BoxShadow(color: Accent.of(context).primary.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 6))],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1426,7 +1433,7 @@ class _HourlyBarChart extends StatelessWidget {
                         heightFactor: frac.clamp(0.05, 1.0),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: frac > 0.7 ? AppColors.primary : AppColors.primary.withValues(alpha: 0.3 + frac * 0.5),
+                            color: frac > 0.7 ? Accent.of(context).primary : Accent.of(context).primary.withValues(alpha: 0.3 + frac * 0.5),
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
@@ -1475,7 +1482,7 @@ Future<void> _showOwnerDeleteAccountFlow(BuildContext context) async {
   final typed = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => StatefulBuilder(
+    builder: (accentContext) => AccentScope(colors: Accent.of(context), child: Builder(builder: (_) => StatefulBuilder(
       builder: (ctx, setS) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
@@ -1526,7 +1533,7 @@ Future<void> _showOwnerDeleteAccountFlow(BuildContext context) async {
           ),
         ],
       ),
-    ),
+    ))),
   );
   controller.dispose();
   if (typed != true || !context.mounted) return;
@@ -1534,7 +1541,7 @@ Future<void> _showOwnerDeleteAccountFlow(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
+    builder: (accentContext) => AccentScope(colors: Accent.of(context), child: Builder(builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(l.tr('deleteConfirmTitle'),
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18)),
@@ -1552,14 +1559,14 @@ Future<void> _showOwnerDeleteAccountFlow(BuildContext context) async {
               style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700)),
         ),
       ],
-    ),
+    ))),
   );
   if (confirmed != true || !context.mounted) return;
 
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const Center(child: CircularProgressIndicator()),
+    builder: (accentContext) => AccentScope(colors: Accent.of(context), child: Builder(builder: (_) => const Center(child: CircularProgressIndicator()))),
   );
 
   try {
@@ -1598,7 +1605,7 @@ class _OwnerProfileTab extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
+      builder: (accentContext) => AccentScope(colors: Accent.of(context), child: Builder(builder: (_) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           final current = LocaleService.instance.lang;
           return Container(
@@ -1632,7 +1639,7 @@ class _OwnerProfileTab extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
                       decoration: BoxDecoration(
-                        gradient: selected ? AppColors.primaryGradient135 : null,
+                        gradient: selected ? Accent.of(context).gradient135 : null,
                         color: selected ? null : AppColors.surfaceContainerLowest,
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: selected ? [] : [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 8, offset: const Offset(0, 2))],
@@ -1652,7 +1659,7 @@ class _OwnerProfileTab extends StatelessWidget {
             ),
           );
         },
-      ),
+      ))),
     );
   }
 
@@ -1681,20 +1688,20 @@ class _OwnerProfileTab extends StatelessWidget {
               child: Container(
                 width: 80,
                 height: 80,
-                decoration: BoxDecoration(gradient: AppColors.primaryGradient135, shape: BoxShape.circle),
+                decoration: BoxDecoration(gradient: Accent.of(context).gradient135, shape: BoxShape.circle),
                 child: Center(child: Text(_initial, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700))),
               ),
             ),
             const SizedBox(height: 10),
             Text(_name, style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-            Text(l.tr('shopOwner'), style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600)),
+            Text(l.tr('shopOwner'), style: GoogleFonts.inter(fontSize: 13, color: Accent.of(context).primary, fontWeight: FontWeight.w600)),
             const SizedBox(height: 24),
             const ProfileDetailsCard(),
             const SizedBox(height: 24),
             _tile(context, Icons.language_rounded, l.tr('changeLanguage'), () => _showLanguageSheet(context),
               trailing: Text(
                 l.lang == kLangEn ? l.tr('english') : l.lang == kLangHi ? l.tr('hindi') : l.tr('marathi'),
-                style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600),
+                style: GoogleFonts.inter(fontSize: 13, color: Accent.of(context).primary, fontWeight: FontWeight.w600),
               ),
             ),
             _tile(context, Icons.help_outline_rounded, l.tr('helpSupport'), () => Navigator.push(
@@ -1703,14 +1710,14 @@ class _OwnerProfileTab extends StatelessWidget {
             )),
             _tile(context, Icons.info_outline_rounded, l.tr('aboutNowait'), () => showDialog(
               context: context,
-              builder: (ctx) => AlertDialog(
+              builder: (accentContext) => AccentScope(colors: Accent.of(context), child: Builder(builder: (ctx) => AlertDialog(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 title: Text(l.tr('aboutNowait'), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
                 content: Text(l.tr('aboutNowaittText'), style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant, height: 1.5)),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700))),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: Text('OK', style: GoogleFonts.inter(color: Accent.of(context).primary, fontWeight: FontWeight.w700))),
                 ],
-              ),
+              ))),
             )),
             const SizedBox(height: 32),
             SizedBox(
@@ -1766,7 +1773,7 @@ class _OwnerProfileTab extends StatelessWidget {
         decoration: BoxDecoration(color: AppColors.surfaceContainerLowest, borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.primary, size: 22),
+            Icon(icon, color: Accent.of(context).primary, size: 22),
             const SizedBox(width: 14),
             Expanded(child: Text(label, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.onSurface))),
             if (trailing != null) ...[trailing, const SizedBox(width: 6)],
@@ -1834,12 +1841,12 @@ class _DashActionTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: (badgeColor ?? AppColors.primary).withValues(alpha: 0.1),
+                  color: (badgeColor ?? Accent.of(context).primary).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   badge!,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: badgeColor ?? AppColors.primary),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: badgeColor ?? Accent.of(context).primary),
                 ),
               ),
             ],
@@ -1868,7 +1875,7 @@ class _OnboardingStep extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient135,
+            gradient: Accent.of(context).gradient135,
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -1909,7 +1916,7 @@ class _DateField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.primary),
+            Icon(Icons.calendar_today_rounded, size: 16, color: Accent.of(context).primary),
             const SizedBox(width: 8),
             Expanded(
               child: Column(

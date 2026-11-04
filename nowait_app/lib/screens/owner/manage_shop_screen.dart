@@ -8,6 +8,7 @@ import '../../services/shop_service.dart';
 import '../../services/subscription_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import 'subscription_screen.dart';
@@ -25,6 +26,9 @@ class ManageShopScreen extends StatefulWidget {
 
 class _ManageShopScreenState extends State<ManageShopScreen>
     with WidgetsBindingObserver {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(_shop.category);
+
   late ShopModel _shop;
   bool _isCallingNext = false;
   bool _isTogglingOpen = false;
@@ -196,11 +200,11 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     final choice = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary, size: 22),
+            Icon(Icons.person_add_alt_1_rounded, color: _accent.primary, size: 22),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -223,14 +227,14 @@ class _ManageShopScreenState extends State<ManageShopScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'reset'),
-            child: Text(_l.tr('resetLimit'), style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text(_l.tr('resetLimit'), style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'close'),
             child: Text(_l.tr('closeAction'), style: GoogleFonts.inter(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
     _limitDialogOpen = false;
     if (!mounted) return;
@@ -257,7 +261,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => StatefulBuilder(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (sheetCtx) => StatefulBuilder(
         builder: (ctx, setSheet) {
           Future<void> save() async {
             final val = int.tryParse(ctrl.text.trim());
@@ -345,7 +349,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
             ),
           );
         },
-      ),
+      ))),
     ).whenComplete(ctrl.dispose);
   }
 
@@ -354,7 +358,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -417,7 +421,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
             ),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -451,7 +455,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
 
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: AppColors.surfaceContainerLowest,
         child: Padding(
@@ -465,7 +469,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
+                      gradient: _accent.gradient135,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 18),
@@ -499,7 +503,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       children: [
                         Container(
                           width: 6, height: 6,
-                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: _accent.primary, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -514,7 +518,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                         ),
                         Text(
                           '₹${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(1)}',
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary),
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: _accent.primary),
                         ),
                       ],
                     ),
@@ -529,7 +533,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     Text('Total', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                     Text(
                       '₹${total % 1 == 0 ? total.toInt() : total.toStringAsFixed(1)}',
-                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.primary),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: _accent.primary),
                     ),
                   ],
                 ),
@@ -547,7 +551,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
             ],
           ),
         ),
-      ),
+      ))),
     );
   }
 
@@ -596,13 +600,13 @@ class _ManageShopScreenState extends State<ManageShopScreen>
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
             color: isServing
-                ? AppColors.primary.withValues(alpha: 0.06)
+                ? _accent.primary.withValues(alpha: 0.06)
                 : isComing
                     ? AppColors.tertiary.withValues(alpha: 0.04)
                     : AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(12),
             border: isServing
-                ? Border.all(color: AppColors.primary.withValues(alpha: 0.25))
+                ? Border.all(color: _accent.primary.withValues(alpha: 0.25))
                 : isComing
                     ? Border.all(color: AppColors.tertiary.withValues(alpha: 0.25))
                     : null,
@@ -617,7 +621,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(
-                        gradient: isServing ? AppColors.primaryGradient135 : null,
+                        gradient: isServing ? _accent.gradient135 : null,
                         color: isServing ? null : AppColors.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -639,7 +643,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                           Text(name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
                           Text(
                             isServing ? 'Now serving' : 'Position $pos',
-                            style: GoogleFonts.inter(fontSize: 11, color: isServing ? AppColors.primary : AppColors.onSurfaceVariant),
+                            style: GoogleFonts.inter(fontSize: 11, color: isServing ? _accent.primary : AppColors.onSurfaceVariant),
                           ),
                           if (hasServices && !isServing) ...[
                             const SizedBox(height: 3),
@@ -658,7 +662,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                                 const SizedBox(width: 4),
                                 Text(
                                   '₹${serviceTotal % 1 == 0 ? serviceTotal.toInt() : serviceTotal.toStringAsFixed(1)}',
-                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: _accent.primary),
                                 ),
                               ],
                             ),
@@ -672,14 +676,14 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       margin: const EdgeInsets.only(right: 6),
                       decoration: BoxDecoration(
                         color: hasServices
-                            ? AppColors.primary.withValues(alpha: 0.1)
+                            ? _accent.primary.withValues(alpha: 0.1)
                             : AppColors.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(7),
                       ),
                       child: Icon(
                         Icons.receipt_long_rounded,
                         size: 14,
-                        color: hasServices ? AppColors.primary : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+                        color: hasServices ? _accent.primary : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                       ),
                     ),
                     if (isComing) ...[
@@ -724,14 +728,14 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isServing ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
+                          color: isServing ? _accent.primary.withValues(alpha: 0.1) : AppColors.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           isServing ? 'Serving' : 'Waiting',
                           style: GoogleFonts.inter(
                             fontSize: 11, fontWeight: FontWeight.w600,
-                            color: isServing ? AppColors.primary : AppColors.onSurfaceVariant,
+                            color: isServing ? _accent.primary : AppColors.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -744,9 +748,9 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                   margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.05),
+                    color: _accent.primary.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+                    border: Border.all(color: _accent.primary.withValues(alpha: 0.12)),
                   ),
                   child: Column(
                     children: [
@@ -758,7 +762,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Row(
                             children: [
-                              Container(width: 5, height: 5, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                              Container(width: 5, height: 5, decoration: BoxDecoration(color: _accent.primary, shape: BoxShape.circle)),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -768,7 +772,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                               ),
                               Text(
                                 '₹${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(1)}',
-                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: _accent.primary),
                               ),
                             ],
                           ),
@@ -782,7 +786,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                             Text('Total', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                             Text(
                               '₹${serviceTotal % 1 == 0 ? serviceTotal.toInt() : serviceTotal.toStringAsFixed(1)}',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.primary),
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: _accent.primary),
                             ),
                           ],
                         ),
@@ -899,7 +903,10 @@ class _ManageShopScreenState extends State<ManageShopScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     final hasSubscription = _shop.hasActiveSubscription;
     final showExpiryWarning = hasSubscription &&
         _subscriptionDaysLeft != null &&
@@ -940,7 +947,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                         color: AppColors.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.notifications_outlined, color: AppColors.primary, size: 22),
+                      child: Icon(Icons.notifications_outlined, color: _accent.primary, size: 22),
                     ),
                     if (_unreadCount > 0)
                       Positioned(
@@ -1054,7 +1061,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: hasSubscription
-                            ? [AppColors.primary.withValues(alpha: 0.85), AppColors.secondary.withValues(alpha: 0.85)]
+                            ? [_accent.primary.withValues(alpha: 0.85), _accent.secondary.withValues(alpha: 0.85)]
                             : [const Color(0xFF9099B3), const Color(0xFF7A82A0)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -1121,7 +1128,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                           icon: Icons.how_to_reg_outlined,
                           value: _shop.currentToken.toString().padLeft(2, '0'),
                           label: _l.tr('currentServing'),
-                          color: AppColors.primary,
+                          color: _accent.primary,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1130,7 +1137,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                           icon: Icons.group_outlined,
                           value: '${_shop.queueCount}',
                           label: _l.tr('waitingInQueue'),
-                          color: AppColors.secondary,
+                          color: _accent.secondary,
                         ),
                       ),
                     ],
@@ -1144,7 +1151,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     child: _isCallingNext
                         ? Container(
                             decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient135,
+                              gradient: _accent.gradient135,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Center(
@@ -1280,18 +1287,18 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.05),
+                      color: _accent.primary.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
+                        Icon(Icons.info_outline_rounded, size: 14, color: _accent.primary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'In queue: ${_shop.queueCount}  ·  Avg wait: ${_shop.avgWaitMinutes} min'
                             '${_servingName != null ? '  ·  Serving: $_servingName' : ''}',
-                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
+                            style: GoogleFonts.inter(fontSize: 11, color: _accent.primary, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../theme/accent.dart';
 import '../theme/app_theme.dart';
 
 /// Stops double taps on the app's main buttons: while an async onPressed is still running, further
@@ -76,7 +77,7 @@ class _GradientButtonState extends State<GradientButton> {
             height: widget.height,
             padding: widget.padding,
             decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient135,
+              gradient: Accent.of(context).gradient135, // category colours inside an Accent
               borderRadius: BorderRadius.circular(widget.borderRadius),
               boxShadow: [
                 BoxShadow(
@@ -157,8 +158,8 @@ class _GhostButtonState extends State<GhostButton> {
       child: TextButton(
         onPressed: () => _guard.run(widget.onPressed, _onBusy),
         style: TextButton.styleFrom(
-          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-          foregroundColor: AppColors.primary,
+          backgroundColor: Accent.of(context).primary.withValues(alpha: 0.1),
+          foregroundColor: Accent.of(context).primary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           minimumSize: const Size(double.infinity, 52),
         ),
@@ -166,10 +167,10 @@ class _GhostButtonState extends State<GhostButton> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (busy) ...[
-              const SizedBox(
+              SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                child: CircularProgressIndicator(strokeWidth: 2, color: Accent.of(context).primary),
               ),
               const SizedBox(width: 10),
             ] else if (widget.icon != null) ...[

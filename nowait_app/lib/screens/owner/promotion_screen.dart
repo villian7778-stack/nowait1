@@ -7,6 +7,7 @@ import '../../services/payment_service.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/no_refund_notice.dart';
@@ -25,6 +26,9 @@ class PromotionScreen extends StatefulWidget {
 }
 
 class _PromotionScreenState extends State<PromotionScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   int _selectedDays = 7;
   bool _isLoading = false;
   bool _isCancelling = false;
@@ -115,7 +119,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
         : DateTime.now().add(Duration(days: _selectedDays));
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(extending ? 'Extend Promotion' : 'Confirm Payment',
             style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
@@ -126,7 +130,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient135,
+                gradient: _accent.gradient135,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -159,10 +163,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
               Navigator.pop(context);
               _runPayment(extending: extending);
             },
-            child: Text('Pay ₹$_totalCost', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text('Pay ₹$_totalCost', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -269,7 +273,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
   void _showPaymentCapturedDialog(String message) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -282,10 +286,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('OK', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text('OK', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w700)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -294,7 +298,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
     if (promoId == null) return;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Cancel Promotion?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         content: Column(
@@ -312,7 +316,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Keep Active', style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            child: Text('Keep Active', style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w600)),
           ),
           TextButton(
             onPressed: () async {
@@ -340,7 +344,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
             child: Text('Cancel Promotion', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
@@ -395,7 +399,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -428,10 +435,10 @@ class _PromotionScreenState extends State<PromotionScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
+                      gradient: _accent.gradient135,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
-                        BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
+                        BoxShadow(color: _accent.primary.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
                       ],
                     ),
                     child: Column(
@@ -468,14 +475,14 @@ class _PromotionScreenState extends State<PromotionScreen> {
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                           decoration: BoxDecoration(
-                            gradient: selected ? AppColors.primaryGradient135 : null,
+                            gradient: selected ? _accent.gradient135 : null,
                             color: selected ? null : AppColors.surfaceContainerLowest,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: selected ? Colors.transparent : AppColors.outline.withValues(alpha: 0.3),
                             ),
                             boxShadow: selected
-                                ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4))]
+                                ? [BoxShadow(color: _accent.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4))]
                                 : [],
                           ),
                           child: Column(
@@ -517,7 +524,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
                             Text('Total Cost', style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
                             Text(
                               '₹$_totalCost',
-                              style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.primary),
+                              style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w700, color: _accent.primary),
                             ),
                           ],
                         ),
@@ -549,7 +556,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
                       ? Container(
                           height: 52,
                           decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient135,
+                            gradient: _accent.gradient135,
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: const Center(

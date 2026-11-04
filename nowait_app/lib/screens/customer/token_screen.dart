@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../services/queue_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/ping_dot.dart';
@@ -33,6 +34,9 @@ class TokenScreen extends StatefulWidget {
 }
 
 class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   late AnimationController _spinController;
   late AnimationController _entryController;
   late Animation<double> _entryAnim;
@@ -149,7 +153,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
   void _cancelQueue() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           _l.tr('leaveQueue'),
@@ -162,7 +166,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(_l.tr('stay'), style: GoogleFonts.inter(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            child: Text(_l.tr('stay'), style: GoogleFonts.inter(color: _accent.primary, fontWeight: FontWeight.w600)),
           ),
           TextButton(
             onPressed: () async {
@@ -183,12 +187,15 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
             child: Text(_l.tr('leave'), style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: SafeArea(
@@ -274,7 +281,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    gradient: AppColors.primaryGradient135,
+                                    gradient: _accent.gradient135,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -293,7 +300,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 52,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.primary,
+                                    color: _accent.primary,
                                     letterSpacing: -2,
                                   ),
                                 ),
@@ -326,18 +333,18 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.06),
+                          color: _accent.primary.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                          border: Border.all(color: _accent.primary.withValues(alpha: 0.15)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.timer_outlined, color: AppColors.primary, size: 16),
+                            Icon(Icons.timer_outlined, color: _accent.primary, size: 16),
                             const SizedBox(width: 8),
                             Text(
                               'Opening live tracker in $_countdown...',
-                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: _accent.primary),
                             ),
                           ],
                         ),
@@ -412,19 +419,19 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.06),
+                        color: _accent.primary.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                        border: Border.all(color: _accent.primary.withValues(alpha: 0.15)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
+                              color: _accent.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.notifications_active_outlined, color: AppColors.primary, size: 18),
+                            child: Icon(Icons.notifications_active_outlined, color: _accent.primary, size: 18),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -462,7 +469,7 @@ class _TokenScreenState extends State<TokenScreen> with TickerProviderStateMixin
                           : _isComing
                               ? Container(
                                   height: 52,
-                                  decoration: BoxDecoration(gradient: AppColors.primaryGradient135, borderRadius: BorderRadius.circular(16)),
+                                  decoration: BoxDecoration(gradient: _accent.gradient135, borderRadius: BorderRadius.circular(16)),
                                   child: const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))),
                                 )
                               : GradientButton(
@@ -513,9 +520,9 @@ class _StatCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: highlight ? AppColors.primary.withValues(alpha: 0.06) : AppColors.surfaceContainerLowest,
+        color: highlight ? Accent.of(context).primary.withValues(alpha: 0.06) : AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        border: highlight ? Border.all(color: AppColors.primary.withValues(alpha: 0.2)) : null,
+        border: highlight ? Border.all(color: Accent.of(context).primary.withValues(alpha: 0.2)) : null,
         boxShadow: [
           BoxShadow(color: AppColors.shadowPrimary, blurRadius: 12, offset: const Offset(0, 3)),
         ],
@@ -523,7 +530,7 @@ class _StatCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppColors.primary, size: 18),
+          Icon(icon, color: Accent.of(context).primary, size: 18),
           const SizedBox(height: 8),
           RichText(
             text: TextSpan(

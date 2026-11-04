@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../services/shop_service.dart';
 import '../../services/api_client.dart';
 import '../../services/locale_service.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../services/location_service.dart';
 import '../../widgets/gradient_button.dart';
@@ -25,6 +26,9 @@ class EditShopScreen extends StatefulWidget {
 }
 
 class _EditShopScreenState extends State<EditShopScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(_selectedCategory);
+
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
   late final TextEditingController _avgWaitController;
@@ -300,7 +304,10 @@ class _EditShopScreenState extends State<EditShopScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: Stack(
@@ -435,14 +442,14 @@ class _EditShopScreenState extends State<EditShopScreen> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  color: _accent.primary.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.add_rounded, size: 16, color: AppColors.primary),
+                                    Icon(Icons.add_rounded, size: 16, color: _accent.primary),
                                     const SizedBox(width: 4),
-                                    Text('Add', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                                    Text('Add', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _accent.primary)),
                                   ],
                                 ),
                               ),
@@ -579,12 +586,12 @@ class _EditShopScreenState extends State<EditShopScreen> {
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Row(
                                 children: [
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 16, height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: _accent.primary),
                                   ),
                                   const SizedBox(width: 8),
-                                  Text('Saving images…', style: GoogleFonts.inter(fontSize: 12, color: AppColors.primary)),
+                                  Text('Saving images…', style: GoogleFonts.inter(fontSize: 12, color: _accent.primary)),
                                 ],
                               ),
                             ),
@@ -609,12 +616,12 @@ class _EditShopScreenState extends State<EditShopScreen> {
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(color: AppColors.outline.withValues(alpha: 0.3)),
                                     ),
-                                    child: const Column(
+                                    child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.add_photo_alternate_outlined, color: AppColors.primary, size: 26),
+                                        Icon(Icons.add_photo_alternate_outlined, color: _accent.primary, size: 26),
                                         SizedBox(height: 4),
-                                        Text('Add', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                                        Text('Add', style: TextStyle(fontSize: 11, color: _accent.primary, fontWeight: FontWeight.w600)),
                                       ],
                                     ),
                                   ),
@@ -691,7 +698,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(alpha: 0.85),
+                                        color: _accent.primary.withValues(alpha: 0.85),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: const Text('New', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
@@ -740,7 +747,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
                   ? Container(
                       height: 52,
                       decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient135,
+                        gradient: _accent.gradient135,
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: const Center(
@@ -771,7 +778,7 @@ class _EditShopScreenState extends State<EditShopScreen> {
           width: 3,
           height: 18,
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient135,
+            gradient: _accent.gradient135,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -844,9 +851,9 @@ class _EditShopScreenState extends State<EditShopScreen> {
                 borderSide: BorderSide(
                     color: AppColors.outline.withValues(alpha: 0.4),
                     width: 0.8)),
-            focusedBorder: const UnderlineInputBorder(
+            focusedBorder: UnderlineInputBorder(
                 borderSide:
-                    BorderSide(color: AppColors.primary, width: 1.5)),
+                    BorderSide(color: _accent.primary, width: 1.5)),
             errorBorder: const UnderlineInputBorder(
                 borderSide:
                     BorderSide(color: AppColors.error, width: 1.5)),
@@ -889,9 +896,9 @@ class _EditShopScreenState extends State<EditShopScreen> {
                 borderSide: BorderSide(
                     color: AppColors.outline.withValues(alpha: 0.4),
                     width: 0.8)),
-            focusedBorder: const UnderlineInputBorder(
+            focusedBorder: UnderlineInputBorder(
                 borderSide:
-                    BorderSide(color: AppColors.primary, width: 1.5)),
+                    BorderSide(color: _accent.primary, width: 1.5)),
             contentPadding: const EdgeInsets.only(bottom: 6),
           ),
           style:

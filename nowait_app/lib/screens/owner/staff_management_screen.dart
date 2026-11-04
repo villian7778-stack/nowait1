@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
 import '../../services/staff_service.dart';
 import '../../services/api_client.dart';
+import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 
@@ -15,6 +16,9 @@ class StaffManagementScreen extends StatefulWidget {
 }
 
 class _StaffManagementScreenState extends State<StaffManagementScreen> {
+  /// This screen's colours: those of the shop's category (see [Accent]); widgets below follow them.
+  AccentColors get _accent => AccentColors.forCategory(widget.shop.category);
+
   List<StaffMember> _staff = [];
   bool _isLoading = true;
   bool _ownerIsStaff = false;
@@ -80,7 +84,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   Future<void> _removeStaff(StaffMember s) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Remove ${s.displayName}?', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         content: const Text('They will no longer be listed as a team member on your shop page.'),
@@ -91,7 +95,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             child: Text('Remove', style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
-      ),
+      ))),
     );
     if (confirmed != true) return;
     try {
@@ -135,7 +139,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
+      builder: (accentContext) => AccentScope(colors: _accent, child: Builder(builder: (_) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
           decoration: const BoxDecoration(
@@ -177,7 +181,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    borderSide: BorderSide(color: _accent.primary, width: 2),
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
                 ),
@@ -194,12 +198,15 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             ],
           ),
         ),
-      ),
+      ))),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      AccentScope(colors: _accent, child: Builder(builder: _buildScreen));
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -220,8 +227,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             onPressed: _showAddStaffSheet,
             icon: const Icon(Icons.person_add_outlined),
             style: IconButton.styleFrom(
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-              foregroundColor: AppColors.primary,
+              backgroundColor: _accent.primary.withValues(alpha: 0.1),
+              foregroundColor: _accent.primary,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
@@ -245,7 +252,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient135,
+                                gradient: _accent.gradient135,
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Row(
@@ -338,7 +345,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddStaffSheet,
-        backgroundColor: AppColors.primary,
+        backgroundColor: _accent.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add_rounded),
         label: Text('Add Staff', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
@@ -367,7 +374,7 @@ class _StaffCard extends StatelessWidget {
         children: [
           Container(
             width: 44, height: 44,
-            decoration: BoxDecoration(gradient: AppColors.primaryGradient135, shape: BoxShape.circle),
+            decoration: BoxDecoration(gradient: Accent.of(context).gradient135, shape: BoxShape.circle),
             child: Center(
               child: Text(
                 staff.displayName.isNotEmpty ? staff.displayName[0].toUpperCase() : '?',
@@ -384,7 +391,7 @@ class _StaffCard extends StatelessWidget {
                 Text(staff.phone, style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
                 if (staff.avgServiceMinutes != null) ...[
                   const SizedBox(height: 2),
-                  Text('Avg: ${staff.avgServiceMinutes!.toStringAsFixed(1)} min/customer', style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary)),
+                  Text('Avg: ${staff.avgServiceMinutes!.toStringAsFixed(1)} min/customer', style: GoogleFonts.inter(fontSize: 11, color: Accent.of(context).primary)),
                 ],
               ],
             ),
