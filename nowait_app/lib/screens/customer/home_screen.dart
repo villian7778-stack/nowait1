@@ -10,16 +10,13 @@ import '../../services/shop_service.dart';
 import '../../services/queue_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/queue_monitor_service.dart';
-import '../../widgets/queue_paused_note.dart';
 import '../../widgets/profile_details_card.dart';
-import '../../widgets/shop_card.dart' show DirectionsChip, ShopRatingRow;
 import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
 import 'history_screen.dart';
 import 'featured_section.dart';
 import 'notifications_screen.dart';
-import 'shop_details_screen.dart';
 import 'queue_status_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -182,28 +179,12 @@ class _HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<_HomeTab> {
+  // Shown top to bottom in this order.
   static const _categories = [
-    _CategoryInfo(
-      name: 'Salon',
-      color: Color(0xFF2563EB),
-      icon: Icons.content_cut,
-    ),
-    _CategoryInfo(
-      name: 'Beauty Parlour',
-      color: Color(0xFFDB2777),
-      icon: Icons.face_retouching_natural,
-    ),
-    _CategoryInfo(
-      name: 'Hospital/Clinics',
-      color: Color(0xFF059669),
-      icon: Icons.local_hospital,
-      categoryKey: 'Hospital/Clinic',
-    ),
-    _CategoryInfo(
-      name: 'Garage',
-      color: Color(0xFFD97706),
-      icon: Icons.car_repair,
-    ),
+    _CategoryInfo(name: 'Salon'),
+    _CategoryInfo(name: 'Beauty Parlour'),
+    _CategoryInfo(name: 'Hospital/Clinics', categoryKey: 'Hospital/Clinic'),
+    _CategoryInfo(name: 'Garage'),
   ];
 
   List<ShopModel> _allShops = [];
@@ -216,17 +197,15 @@ class _HomeTabState extends State<_HomeTab> {
   int _unreadCount = 0;
   static const _cityPrefKey = 'selected_city';
 
-  // Measured section heights, used to size the Explore cards so that Featured + Explore (or,
-  // without Featured, Explore + Open Now) fit on one screen.
+  // Measured section heights, used to size the Explore cards so that Featured + Explore fit on
+  // one screen (without Featured, the four Explore cards are all the home screen shows).
   final _heroKey = GlobalKey();
   final _featuredKey = GlobalKey();
   final _exploreHeaderKey = GlobalKey();
-  final _openNowKey = GlobalKey();
   double _viewportHeight = 0;
   double _heroHeight = 0;
   double _featuredHeight = 0;
   double _exploreHeaderHeight = 0;
-  double _openNowHeight = 0;
 
   @override
   void initState() {
@@ -254,15 +233,13 @@ class _HomeTabState extends State<_HomeTab> {
     final hero = _heightOf(_heroKey);
     final featured = _heightOf(_featuredKey);
     final header = _heightOf(_exploreHeaderKey);
-    final openNow = _heightOf(_openNowKey);
     bool changed(double a, double b) => (a - b).abs() > 0.5;
     if (changed(hero, _heroHeight) || changed(featured, _featuredHeight) ||
-        changed(header, _exploreHeaderHeight) || changed(openNow, _openNowHeight)) {
+        changed(header, _exploreHeaderHeight)) {
       setState(() {
         _heroHeight = hero;
         _featuredHeight = featured;
         _exploreHeaderHeight = header;
-        _openNowHeight = openNow;
       });
     }
   }
@@ -360,7 +337,10 @@ class _HomeTabState extends State<_HomeTab> {
 
   Widget _buildScroll(BuildContext context) {
     return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
+      // Home is sized to fit one screen (Explore cards shrink when Featured is shown), so with
+      // clamping physics it doesn't move at all. If it ever can't fit (tiny phone, very large
+      // system font) it still scrolls, so nothing is cut off.
+      physics: const ClampingScrollPhysics(),
       slivers: [
         SliverToBoxAdapter(child: KeyedSubtree(key: _heroKey, child: _buildHero(context))),
         if (_loadError != null)
@@ -396,13 +376,12 @@ class _HomeTabState extends State<_HomeTab> {
           SliverToBoxAdapter(
             child: Padding(
               key: _featuredKey,
-              padding: const EdgeInsets.only(top: 22),
+              padding: const EdgeInsets.only(top: 16),
               child: FeaturedShopsSection(shops: _featured),
             ),
           ),
         SliverToBoxAdapter(child: _buildCategoryGrid(context)),
-        SliverToBoxAdapter(child: KeyedSubtree(key: _openNowKey, child: _buildOpenNow(context))),
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        const SliverToBoxAdapter(child: SizedBox(height: 8)), // = the 'breathing' room in _categoryCardHeight
       ],
     );
   }
@@ -588,105 +567,69 @@ class _HomeTabState extends State<_HomeTab> {
 
   // ── 2×2 Category grid ───────────────────────────────────────────────────────
 
-  /// Height of each Explore card: square when there is room, otherwise shorter so that the block
-  /// that must share the first screen with Explore (Featured above it, or Open Now below it when
-  /// there is no Featured) still fits without scrolling.
-  double _categoryCardHeight(double cardWidth, double topPad, double gap) {
+  static const _cardGap = 12.0;
+
+  /// Height of each Explore card. Square when there is room; with Featured above, the two rows
+  /// share what is left of the first screen (down to [_CategoryCard.minHeight]).
+  double _categoryCardHeight(double cardWidth, double topPad) {
     if (_viewportHeight <= 0 || _heroHeight <= 0 || _exploreHeaderHeight <= 0) return cardWidth;
-    final partner = _showFeatured ? _featuredHeight : _openNowHeight;
-    const spacing = 16.0, breathing = 8.0;
-    final room = _viewportHeight - _heroHeight - partner - topPad - _exploreHeaderHeight - spacing - gap - breathing;
-    return (room / 2).clamp(_CategoryGridCard.minHeight, cardWidth);
+    final featured = _showFeatured ? _featuredHeight : 0.0;
+    const spacing = 14.0, breathing = 8.0;
+    final room = _viewportHeight - _heroHeight - featured - topPad - _exploreHeaderHeight - spacing - breathing;
+    final max = cardWidth > _CategoryCard.minHeight ? cardWidth : _CategoryCard.minHeight;
+    return ((room - _cardGap) / 2).clamp(_CategoryCard.minHeight, max);
   }
 
   Widget _buildCategoryGrid(BuildContext context) {
-    final topPad = _showFeatured ? 14.0 : 28.0;
+    final topPad = _showFeatured ? 14.0 : 24.0;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, topPad, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Column(
             key: _exploreHeaderKey,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      LocaleService.instance.tr('explore'),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      LocaleService.instance.tr('findYourSpot'),
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+              Text(
+                LocaleService.instance.tr('explore'),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
                 ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                LocaleService.instance.tr('findYourSpot'),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          // 2 x 2: Salon | Beauty Parlour, Hospital/Clinics | Garage
           LayoutBuilder(
             builder: (context, constraints) {
-              final gap = 12.0;
-              final cardSize = (constraints.maxWidth - gap) / 2;
-              final cardHeight = _categoryCardHeight(cardSize, topPad, gap);
+              final width = (constraints.maxWidth - _cardGap) / 2;
+              final height = _categoryCardHeight(width, topPad);
+              Widget card(int i) => _CategoryCard(
+                    info: _categories[i],
+                    width: width,
+                    height: height,
+                    allShops: _allShops,
+                    isLoading: _isLoading,
+                    selectedCity: _selectedCity,
+                  );
               return Column(
                 children: [
-                  Row(
-                    children: [
-                      _CategoryGridCard(
-                        info: _categories[0],
-                        cardSize: cardSize,
-                        cardHeight: cardHeight,
-                        allShops: _allShops,
-                        isLoading: _isLoading,
-                        selectedCity: _selectedCity,
-                      ),
-                      SizedBox(width: gap),
-                      _CategoryGridCard(
-                        info: _categories[1],
-                        cardSize: cardSize,
-                        cardHeight: cardHeight,
-                        allShops: _allShops,
-                        isLoading: _isLoading,
-                        selectedCity: _selectedCity,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: gap),
-                  Row(
-                    children: [
-                      _CategoryGridCard(
-                        info: _categories[2],
-                        cardSize: cardSize,
-                        cardHeight: cardHeight,
-                        allShops: _allShops,
-                        isLoading: _isLoading,
-                        selectedCity: _selectedCity,
-                      ),
-                      SizedBox(width: gap),
-                      _CategoryGridCard(
-                        info: _categories[3],
-                        cardSize: cardSize,
-                        cardHeight: cardHeight,
-                        allShops: _allShops,
-                        isLoading: _isLoading,
-                        selectedCity: _selectedCity,
-                      ),
-                    ],
-                  ),
+                  Row(children: [card(0), const SizedBox(width: _cardGap), card(1)]),
+                  const SizedBox(height: _cardGap),
+                  Row(children: [card(2), const SizedBox(width: _cardGap), card(3)]),
                 ],
               );
             },
@@ -696,178 +639,61 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
-  // ── Open Now horizontal scroll ───────────────────────────────────────────────
-
-  Widget _buildOpenNow(BuildContext context) {
-    if (_isLoading) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _sectionHeader(LocaleService.instance.tr('openNow'), isLive: true, context: context),
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 176,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 3,
-                separatorBuilder: (context, index) => const SizedBox(width: 12),
-                itemBuilder: (context, index) => _ShimmerCard(width: 158),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final openShops = _allShops
-        .where((s) => s.isOpen && s.hasActiveSubscription)
-        .take(6)
-        .toList();
-
-    if (openShops.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _sectionHeader(LocaleService.instance.tr('openNow'), isLive: true, context: context),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 196,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              itemCount: openShops.length,
-              itemBuilder: (_, i) => _CompactShopCard(
-                shop: openShops[i],
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ShopDetailsScreen(shop: openShops[i]),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionHeader(String title,
-      {bool isLive = false, required BuildContext context}) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-        ),
-        if (isLive) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.tertiary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _PulsingDot(),
-                const SizedBox(width: 5),
-                Text(
-                  LocaleService.instance.tr('live'),
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.tertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const Spacer(),
-      ],
-    );
-  }
 }
 
 // ─── Category data model ─────────────────────────────────────────────────────
 
 class _CategoryInfo {
   final String name;
-  final Color color;
-  final IconData icon;
+  /// The category stored on shops, when it differs from the name shown ('Hospital/Clinic').
   final String? categoryKey;
 
-  const _CategoryInfo({
-    required this.name,
-    required this.color,
-    required this.icon,
-    this.categoryKey,
-  });
+  const _CategoryInfo({required this.name, this.categoryKey});
 
   String get filterKey => categoryKey ?? name;
+  Color get color => CategoryTheme.color(filterKey);
+  List<Color> get gradient => CategoryTheme.gradient(filterKey);
+  IconData get icon => CategoryTheme.icon(filterKey);
 }
 
-// ─── Category grid card (square, white, single-colour icon) ──────────────────
+// ─── Explore category card (2 x 2 grid tile) ─────────────────────────────────
 
-class _CategoryGridCard extends StatefulWidget {
+class _CategoryCard extends StatefulWidget {
   final _CategoryInfo info;
-  /// Card width (and the base for its proportions).
-  final double cardSize;
-  /// Card height: [cardSize] (square) when the screen has room, less on short screens.
-  final double cardHeight;
+  final double width;
+  final double height;
   final List<ShopModel> allShops;
   final bool isLoading;
   final String? selectedCity;
 
-  /// Below [compactBelow] the card switches to a one-row layout (icon · name / info · arrow).
-  static const minHeight = 56.0;
-  static const compactBelow = 140.0;
+  /// Below [compactBelow] the tile puts the icon beside the text instead of above it; at
+  /// [minHeight] it still shows the icon, the whole name and the open / shops line.
+  static const minHeight = 60.0;
+  static const compactBelow = 104.0;
+  static const _maxTextScale = 1.15;
 
-  const _CategoryGridCard({
+  const _CategoryCard({
     required this.info,
-    required this.cardSize,
-    required this.cardHeight,
+    required this.width,
+    required this.height,
     required this.allShops,
     required this.isLoading,
     this.selectedCity,
   });
 
   @override
-  State<_CategoryGridCard> createState() => _CategoryGridCardState();
+  State<_CategoryCard> createState() => _CategoryCardState();
 }
 
-class _CategoryGridCardState extends State<_CategoryGridCard>
-    with SingleTickerProviderStateMixin {
+class _CategoryCardState extends State<_CategoryCard> with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 120),
-    );
-    _scale = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
-    );
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 120));
+    _scale = Tween<double>(begin: 1.0, end: 0.96).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
   }
 
   @override
@@ -876,449 +702,189 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
     super.dispose();
   }
 
+  void _open() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryScreen(
+          category: widget.info.filterKey,
+          title: widget.info.name,
+          initialCity: widget.selectedCity,
+        ),
+      ),
+    );
+  }
+
+  /// Rounded square in a light tint of the category colour, with the icon in that colour.
+  Widget _iconTile(double size) {
+    final c = widget.info.color;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(size * 0.3),
+      ),
+      child: Icon(widget.info.icon, color: c, size: size * 0.54),
+    );
+  }
+
+  /// Name, then a dot + "3 open · 4 shops". [twoLineName]: on a tall tile a long name may wrap
+  /// ("Hospital/ Clinics"); otherwise it stays on one line and shrinks a little - never "...".
+  Widget _texts({
+    required double nameSize,
+    required double infoSize,
+    required int openCount,
+    required int shopCount,
+    required bool twoLineName,
+  }) {
+    final status = widget.isLoading ? 'Loading…' : '$openCount open · $shopCount shops';
+    final nameStyle = GoogleFonts.plusJakartaSans(
+      fontSize: nameSize,
+      fontWeight: FontWeight.w700,
+      color: AppColors.onSurface,
+      height: 1.2,
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (twoLineName)
+          Text(widget.info.name, maxLines: 2, style: nameStyle)
+        else
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(widget.info.name, maxLines: 1, style: nameStyle),
+          ),
+        SizedBox(height: twoLineName ? 6 : 3),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: openCount > 0 ? AppColors.tertiary : AppColors.onSurfaceVariant,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                status,
+                maxLines: 1,
+                style: GoogleFonts.inter(fontSize: infoSize, fontWeight: FontWeight.w500, color: AppColors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = widget.info.color;
-    final s = widget.cardSize;
-    final shopCount =
-        widget.allShops.where((e) => e.category == widget.info.filterKey).length;
-    final openCount = widget.allShops
-        .where((e) =>
-            e.category == widget.info.filterKey &&
-            e.isOpen &&
-            e.hasActiveSubscription)
-        .length;
-
-    // Proportional sizes — all derived from card width so nothing overflows
-    final pad = (s * 0.105).clamp(12.0, 18.0);
-    final iconBoxSize = (s * 0.30).clamp(36.0, 52.0);
-    final iconSize = iconBoxSize * 0.54;
-    final nameFontSize = (s * 0.105).clamp(12.0, 16.0);
-    final infoFontSize = (s * 0.062).clamp(8.5, 11.0);
-    final ghostSize = s * 0.62;
-    final arrowBox = (s * 0.175).clamp(24.0, 30.0);
+    final info = widget.info;
+    final c = info.color;
+    final w = widget.width;
+    final h = widget.height;
+    final compact = h < _CategoryCard.compactBelow;
+    final shops = widget.allShops.where((e) => e.category == info.filterKey);
+    final shopCount = shops.length;
+    final openCount = shops.where((e) => e.isOpen && e.hasActiveSubscription).length;
+    // Upper limits that follow the tile height, never below the lower limit (clamp would throw).
+    final padMax = h * 0.12 > 12.0 ? h * 0.12 : 12.0;
+    final tileMax = h * 0.32 > 34.0 ? h * 0.32 : 34.0;
+    final pad = compact ? 10.0 : (w * 0.105).clamp(12.0, 18.0).clamp(12.0, padMax);
+    final tile = compact ? (h - 2 * pad).clamp(30.0, 40.0) : (w * 0.30).clamp(34.0, 52.0).clamp(34.0, tileMax);
+    final nameSize = compact ? 14.0 : (w * 0.105).clamp(14.0, 17.0);
+    // A long name may use two lines only when the tile is close to square (as tall as the design).
+    final twoLineName = !compact && h >= w * 0.98;
 
     return GestureDetector(
       onTapDown: (_) => _ctrl.forward(),
       onTapUp: (_) {
         _ctrl.reverse();
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => CategoryScreen(
-                    category: widget.info.filterKey,
-                    title: widget.info.name,
-                    initialCity: widget.selectedCity,
-                  )),
-        );
+        _open();
       },
       onTapCancel: () => _ctrl.reverse(),
       child: ScaleTransition(
         scale: _scale,
-        child: Container(
-          width: s,
-          height: widget.cardHeight,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: c.withValues(alpha: 0.14),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
+        child: MediaQuery.withClampedTextScaling(
+          maxScaleFactor: _CategoryCard._maxTextScale,
+          child: Container(
+            width: w,
+            height: h,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(color: c.withValues(alpha: 0.14), blurRadius: 18, offset: const Offset(0, 6)),
+                BoxShadow(color: AppColors.shadowPrimary, blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
             child: Stack(
               children: [
-                // Ghost icon — decorative background, clipped by ClipRRect
+                // Large faded icon in the bottom-right corner - decoration only
                 Positioned(
-                  right: -ghostSize * 0.18,
-                  bottom: -ghostSize * 0.18,
-                  child: Icon(
-                    widget.info.icon,
-                    size: ghostSize,
-                    color: c.withValues(alpha: 0.055),
-                  ),
+                  right: -w * 0.11,
+                  bottom: -w * 0.11,
+                  child: Icon(info.icon, size: compact ? h * 1.05 : w * 0.62, color: c.withValues(alpha: 0.06)),
                 ),
-                // Short screens: everything on one row
-                if (widget.cardHeight < _CategoryGridCard.compactBelow)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: c.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(widget.info.icon, color: c, size: 19),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.info.name,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: nameFontSize.clamp(12.0, 14.0),
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.onSurface,
-                                  height: 1.15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                widget.isLoading ? 'Loading…' : '$openCount open · $shopCount shops',
-                                style: GoogleFonts.inter(
-                                  fontSize: infoFontSize,
-                                  fontWeight: FontWeight.w500,
-                                  color: openCount > 0 ? AppColors.tertiary : AppColors.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(Icons.arrow_forward_rounded, color: c, size: 16),
-                      ],
-                    ),
-                  )
-                else
-                // Content column
                 Padding(
                   padding: EdgeInsets.all(pad),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Top row: icon box + arrow
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: iconBoxSize,
-                            height: iconBoxSize,
-                            decoration: BoxDecoration(
-                              color: c.withValues(alpha: 0.10),
-                              borderRadius:
-                                  BorderRadius.circular(iconBoxSize * 0.30),
-                            ),
-                            child: Icon(widget.info.icon,
-                                color: c, size: iconSize),
-                          ),
-                          const Spacer(),
-                          Container(
-                            width: arrowBox,
-                            height: arrowBox,
-                            decoration: BoxDecoration(
-                              color: c.withValues(alpha: 0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.arrow_forward_rounded,
-                                color: c, size: arrowBox * 0.50),
-                          ),
-                        ],
-                      ),
-                      // Flexible gap — absorbs extra space, never causes overflow
-                      const Expanded(child: SizedBox()),
-                      // Name
-                      Text(
-                        widget.info.name,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: nameFontSize,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
-                          height: 1.2,
-                        ),
-                        maxLines: widget.cardHeight >= s * 0.95 ? 2 : 1, // shortened card: one line
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: (s * 0.045).clamp(5, 9)),
-                      // Info — single line with coloured dot, no overflow possible
-                      Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: openCount > 0
-                                  ? AppColors.tertiary
-                                  : AppColors.onSurfaceVariant,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          SizedBox(width: (s * 0.03).clamp(3, 6)),
-                          Flexible(
-                            child: Text(
-                              widget.isLoading
-                                  ? 'Loading…'
-                                  : '$openCount open · $shopCount shops',
-                              style: GoogleFonts.inter(
-                                fontSize: infoFontSize,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.onSurfaceVariant,
+                  child: compact
+                      // Short tile: icon beside the text
+                      ? Row(
+                          children: [
+                            _iconTile(tile),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: _texts(
+                                nameSize: nameSize,
+                                infoSize: 10.5,
+                                openCount: openCount,
+                                shopCount: shopCount,
+                                twoLineName: false,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                          ],
+                        )
+                      // Full tile: icon + arrow on top, name and status at the bottom
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _iconTile(tile),
+                                const Spacer(),
+                                Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(color: c.withValues(alpha: 0.10), shape: BoxShape.circle),
+                                  child: Icon(Icons.arrow_forward_rounded, color: c, size: 16),
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            _texts(
+                              nameSize: nameSize,
+                              infoSize: 11.5,
+                              openCount: openCount,
+                              shopCount: shopCount,
+                              twoLineName: twoLineName,
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-}
-
-// ─── Compact shop card (horizontal scroll) ────────────────────────────────────
-
-class _CompactShopCard extends StatelessWidget {
-  final ShopModel shop;
-  final VoidCallback onTap;
-
-  const _CompactShopCard({required this.shop, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 158,
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(20),
-          border: shop.isPromoted
-              ? Border.all(color: AppColors.primary.withValues(alpha: 0.15))
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.shadowPrimary,
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icon + promoted badge row
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(13),
-                  child: shop.images.isNotEmpty
-                      ? Image.network(
-                          shop.images.first,
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _iconBox(),
-                        )
-                      : _iconBox(),
-                ),
-                const Spacer(),
-                if (shop.isPromoted)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient135,
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: const Icon(Icons.star_rounded, size: 10, color: Colors.white),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              shop.name,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            ShopRatingRow(shop: shop, starSize: 11),
-            const Expanded(child: SizedBox()),
-            // Status row
-            Row(
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: AppColors.tertiary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  LocaleService.instance.tr('open'),
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.tertiary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            if (shop.isQueuePausedByOwner)
-              const QueuePausedNote(fontSize: 10, fit: true)
-            else
-              Text(
-                '${shop.queueCount} in queue · ~${shop.queueCount * shop.avgWaitMinutes}m',
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  color: AppColors.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            // Directions chip — only when shop has saved coordinates
-            if (shop.latitude != null && shop.longitude != null) ...[
-              const SizedBox(height: 6),
-              DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _iconBox() {
-    final color = CategoryTheme.color(shop.category);
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(13),
-      ),
-      child: Icon(CategoryTheme.icon(shop.category), color: color, size: 22),
-    );
-  }
-
-}
-
-// ─── Shimmer placeholder card ─────────────────────────────────────────────────
-
-class _ShimmerCard extends StatefulWidget {
-  final double width;
-  const _ShimmerCard({required this.width});
-
-  @override
-  State<_ShimmerCard> createState() => _ShimmerCardState();
-}
-
-class _ShimmerCardState extends State<_ShimmerCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Container(
-        width: widget.width,
-        height: 158,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Pulsing dot for "Live" badge ─────────────────────────────────────────────
-
-class _PulsingDot extends StatefulWidget {
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Container(
-        width: 7,
-        height: 7,
-        decoration: const BoxDecoration(
-          color: AppColors.tertiary,
-          shape: BoxShape.circle,
         ),
       ),
     );

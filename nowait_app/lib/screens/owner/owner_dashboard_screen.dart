@@ -405,7 +405,7 @@ class _ShopsTabState extends State<_ShopsTab> {
                     iconBg: AppColors.primary.withValues(alpha: 0.1),
                     title: LocaleService.instance.tr('promoteShop'),
                     subtitle: LocaleService.instance.tr('promoteSubtitle'),
-                    badge: _shop!.isPromoted ? 'Active' : '₹20/day',
+                    badge: _shop!.isPromoted ? 'Active' : '₹${PromotionScreen.pricePerDay}/day',
                     badgeColor: _shop!.isPromoted ? AppColors.tertiary : AppColors.primary,
                     onTap: () => Navigator.push(
                       context,

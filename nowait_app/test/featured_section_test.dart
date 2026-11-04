@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -37,7 +38,7 @@ final _byCity = <String, List<Map<String, dynamic>>>{
     _shop('p5', 'City Clinic', 'Hospital/Clinic', 'Pune'),
   ],
   'Nagpur': [
-    _shop('n1', 'Orange Salon', 'Salon', 'Nagpur'),
+    _shop('n1', 'Orange Salon', 'Salon', 'Nagpur', scheme: true),
     _shop('n2', 'Nagpur Garage', 'Garage', 'Nagpur'),
   ],
 };
@@ -128,10 +129,10 @@ void main() {
       expect(find.text('Hospital & Clinic'), findsNothing);
 
       // Garage tab shows only the garage.
-      await tester.tap(find.descendant(of: find.byType(FeaturedShopsSection), matching: find.text('Garage')));
+      await tester.tap(find.descendant(of: find.byType(FeaturedShopsSection), matching: find.text('Garage')).first); // the tab (cards also show the category)
       await tester.pump(const Duration(milliseconds: 300));
       expect(await _featuredNames(tester), ['Fix Garage']);
-      await tester.tap(find.descendant(of: find.byType(FeaturedShopsSection), matching: find.text('Salon')));
+      await tester.tap(find.descendant(of: find.byType(FeaturedShopsSection), matching: find.text('Salon')).first);
       await tester.pump(const Duration(milliseconds: 300));
       expect((await _featuredNames(tester)).toSet(), {'Pune Cuts', 'Style Hub'});
       await tester.tap(find.text('All'));
@@ -158,17 +159,22 @@ void main() {
 
     await pumpCard(_shop('p1', 'Pune Cuts', 'Salon', 'Pune', promoted: true, scheme: true, rating: 4.6, reviews: 12));
     expect(find.text('Pune Cuts'), findsOneWidget);
-    expect(find.text('Salon · Pune Cuts Road'), findsOneWidget);
+    expect(find.text('Salon'), findsOneWidget); // category
+    expect(find.text('Pune Cuts Road'), findsOneWidget); // address
     expect(find.text('Open'), findsOneWidget);
     expect(find.text('4.6'), findsOneWidget);
     expect(find.text('(12)'), findsOneWidget);
     expect(find.text('2 · ~20 min'), findsOneWidget);
     expect(find.text('Offer'), findsOneWidget);
     expect(find.textContaining('10% off'), findsNothing, reason: 'the offer itself shows on the shop page');
+    // "Offer" sits on the rating line, to the right of the rating.
+    expect(tester.getCenter(find.text('Offer')).dy, moreOrLessEquals(tester.getCenter(find.text('4.6')).dy, epsilon: 1));
+    expect(tester.getTopLeft(find.text('Offer')).dx, greaterThan(tester.getTopRight(find.text('(12)')).dx));
 
     await pumpCard(_shop('p2', 'Style Hub', 'Hospital/Clinic', 'Pune', promoted: true, open: false));
     expect(find.text('Closed'), findsOneWidget);
-    expect(find.text('Hospital & Clinic · Style Hub Road'), findsOneWidget);
+    expect(find.text('Hospital & Clinic'), findsOneWidget);
+    expect(find.text('Style Hub Road'), findsOneWidget);
     expect(find.text('New'), findsOneWidget); // no reviews yet
     expect(find.text('Offer'), findsNothing);
   });
@@ -191,29 +197,135 @@ void main() {
       expect(find.text('Featured'), findsNothing);
       expect(find.byType(FeaturedShopCard), findsNothing);
       expect(find.text('Explore'), findsOneWidget);
-      expect(find.text('Open Now'), findsOneWidget);
+      expect(find.text('Open Now'), findsNothing); // section removed
     }, () => MockClient(_api));
   });
 
-  for (final size in const [Size(360, 740), Size(393, 852), Size(412, 915), Size(430, 932)]) {
+  testWidgets('Explore cards show the full category name and the open / shops line', (tester) async {
+    await http.runWithClient(() async {
+      for (final size in const [Size(360, 780), Size(393, 852)]) {
+        await _pumpHome(tester, city: 'Pune', size: size);
+        for (final name in ['Salon', 'Beauty Parlour', 'Hospital/Clinics', 'Garage']) {
+          final text = find.text(name).last; // the Explore card (Featured tabs come first)
+          expect(tester.renderObject<RenderParagraph>(text).didExceedMaxLines, isFalse, reason: name);
+          final card = find.ancestor(of: text, matching: find.byType(Container)).first;
+          final cardRect = tester.getRect(card);
+          expect(cardRect.contains(tester.getTopLeft(text)) && tester.getBottomRight(text).dx <= cardRect.right,
+              isTrue, reason: '$name must be drawn inside its card');
+        }
+        for (final info in ['2 open · 2 shops', '0 open · 1 shops']) {
+          for (final e in find.text(info).evaluate()) {
+            expect((e.renderObject! as RenderParagraph).didExceedMaxLines, isFalse);
+          }
+        }
+        await tester.pumpWidget(const SizedBox());
+      }
+    }, () => MockClient(_api));
+  });
+
+  testWidgets('Explore: 2 x 2 grid - Salon | Beauty Parlour over Hospital/Clinics | Garage', (tester) async {
+    await http.runWithClient(() async {
+      for (final city in ['Pune', 'Nagpur']) { // with and without Featured above
+        await _pumpHome(tester, city: city);
+        Rect cardOf(String name) =>
+            tester.getRect(find.ancestor(of: find.text(name).last, matching: find.byType(Container)).last);
+        final salon = cardOf('Salon'), beauty = cardOf('Beauty Parlour');
+        final hospital = cardOf('Hospital/Clinics'), garage = cardOf('Garage');
+        const half = (393 - 40 - 12) / 2;
+        for (final r in [salon, beauty, hospital, garage]) {
+          expect(r.width, moreOrLessEquals(half, epsilon: 1));
+          expect(r.height, moreOrLessEquals(salon.height, epsilon: 0.5));
+        }
+        expect(salon.top, moreOrLessEquals(beauty.top, epsilon: 0.5), reason: 'same row ($city)');
+        expect(hospital.top, moreOrLessEquals(garage.top, epsilon: 0.5));
+        expect(hospital.top, greaterThan(salon.bottom));
+        expect(salon.left, moreOrLessEquals(20, epsilon: 1));
+        expect(beauty.left, greaterThan(salon.right));
+        await tester.pumpWidget(const SizedBox());
+      }
+    }, () => MockClient(_api));
+  });
+
+  for (final size in const [Size(360, 780), Size(393, 852), Size(412, 915)]) {
+    testWidgets('home does not scroll, two Featured cards side by side '
+        '(${size.width.toInt()}x${size.height.toInt()})', (tester) async {
+      await http.runWithClient(() async {
+        for (final city in ['Pune', 'Nagpur']) { // with and without Featured
+          await _pumpHome(tester, city: city, size: size);
+          final home = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+          expect(home.axis, Axis.vertical);
+          expect(home.maxScrollExtent, 0, reason: 'everything fits on one screen ($city)');
+          if (city == 'Pune') {
+            final cards = find.byType(FeaturedShopCard);
+            final a = tester.getRect(cards.at(0)), b = tester.getRect(cards.at(1));
+            expect(a.left, moreOrLessEquals(20, epsilon: 1));
+            expect(b.right, lessThanOrEqualTo(size.width - 20 + 1), reason: 'second card fully visible');
+            expect(a.height, b.height);
+          }
+          await tester.pumpWidget(const SizedBox());
+        }
+      }, () => MockClient(_api));
+    });
+  }
+
+  testWidgets('large system font (130%): Explore and Featured cards lay out without overflow', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await http.runWithClient(() async {
+      for (final size in const [Size(360, 780), Size(393, 852)]) {
+        for (final city in ['Pune', 'Nagpur']) {
+          await _pumpHome(tester, city: city, size: size);
+          expect(find.text('Explore'), findsOneWidget); // any overflow above fails the test
+          await tester.pumpWidget(const SizedBox());
+        }
+      }
+    }, () => MockClient(_api));
+  });
+
+  testWidgets('Featured row scrolls on its own and pauses while touched', (tester) async {
+    await http.runWithClient(() async {
+      await _pumpHome(tester, city: 'Pune');
+      final row = find.descendant(of: find.byType(FeaturedShopsSection), matching: find.byType(Scrollable)).last;
+      double offset() => tester.state<ScrollableState>(row).position.pixels;
+      expect(offset(), 0);
+
+      await tester.pump(const Duration(milliseconds: 4100)); // first move starts
+      await tester.pump(const Duration(milliseconds: 1500)); // and finishes
+      final moved = offset();
+      expect(moved, greaterThan(0), reason: 'moved by itself');
+
+      // A touch pauses it: nothing moves for the next few seconds.
+      // Press and hold on the row (no tap, so no shop page opens), then let go.
+      final gesture = await tester.startGesture(tester.getCenter(row));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.cancel();
+      await tester.pump(const Duration(milliseconds: 4100));
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(offset(), moved);
+      await tester.pumpWidget(const SizedBox());
+    }, () => MockClient(_api));
+  });
+
+  // Smallest: 360x780 (most current small Androids). The test font is much wider and taller
+  // than the app's real fonts, so a size that only just fits for real can fail here.
+  for (final size in const [Size(360, 780), Size(393, 852), Size(412, 915), Size(430, 932)]) {
     testWidgets('fits on one screen at ${size.width.toInt()}x${size.height.toInt()}', (tester) async {
       await http.runWithClient(() async {
-        // With Featured: Featured + Explore on the first screen, Open Now below.
+        // With Featured: Featured + Explore on the first screen.
         await _pumpHome(tester, city: 'Pune', size: size);
         final exploreBottom = tester.getBottomLeft(find.text('Garage').last).dy; // last Explore card text
         expect(tester.getTopLeft(find.text('Featured')).dy, greaterThan(0));
         expect(exploreBottom, lessThanOrEqualTo(_visibleBottom(tester)),
             reason: 'Explore must be fully visible together with Featured');
 
-        // Without Featured: Explore + Open Now on the first screen.
+        // Without Featured: only the four Explore cards, all on the first screen.
         await tester.pumpWidget(const SizedBox());
         await _pumpHome(tester, city: 'Nagpur', size: size);
         expect(find.text('Featured'), findsNothing);
-        final openNowCard = find.text('Orange Salon');
-        expect(openNowCard, findsWidgets);
-        final openNowBottom = tester.getBottomLeft(find.text('Open Now')).dy + 196;
-        expect(openNowBottom, lessThanOrEqualTo(_visibleBottom(tester) + 1),
-            reason: 'Explore and Open Now must both fit');
+        expect(find.text('Open Now'), findsNothing);
+        for (final name in ['Salon', 'Beauty Parlour', 'Hospital/Clinics', 'Garage']) {
+          expect(tester.getBottomLeft(find.text(name)).dy, lessThanOrEqualTo(_visibleBottom(tester)), reason: name);
+        }
         await tester.pumpWidget(const SizedBox());
       }, () => MockClient(_api));
     });

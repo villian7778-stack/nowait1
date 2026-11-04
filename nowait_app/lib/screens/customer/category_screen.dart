@@ -6,9 +6,11 @@ import '../../services/shop_service.dart';
 import '../../services/locale_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
+import '../../widgets/auto_scroll.dart';
 import '../../widgets/locked_shop_card.dart';
 import '../../widgets/queue_paused_note.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip, ShopRatingRow;
+import 'featured_section.dart' show shuffledFeaturedShops;
 import 'shop_details_screen.dart';
 
 IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
@@ -34,6 +36,7 @@ class CategoryScreen extends StatefulWidget {
 class _CategoryScreenState extends State<CategoryScreen> {
   static const _cityPrefKey = 'selected_city';
   final _searchController = TextEditingController();
+  final _promoScroll = ScrollController();
   String _filterType = 'Name';
   String _filterQuery = '';
   _ShopSort? _sort; // null = default order (promoted shops first)
@@ -75,7 +78,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
     try {
       final shops = await ShopService.instance
           .listShops(category: widget.category, city: _selectedCity);
-      if (mounted) setState(() { _allShops = shops; _isLoading = false; });
+      if (mounted) {
+        setState(() {
+          _allShops = shops;
+          _promotedShops = shuffledFeaturedShops(shops);
+          _isLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -109,11 +118,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void dispose() {
     _l.removeListener(_onLocale);
     _searchController.dispose();
+    _promoScroll.dispose();
     super.dispose();
   }
 
-  List<ShopModel> get _promotedShops =>
-      _allShops.where((s) => s.isPromoted && s.hasActiveSubscription).toList();
+  /// Promoted shops of this category, in a new random order on every load (like the home
+  /// screen's Featured row), so each one gets its turn at the front.
+  List<ShopModel> _promotedShops = [];
 
   List<ShopModel> get _filteredShops {
     var shops = [..._allShops];
@@ -150,6 +161,53 @@ class _CategoryScreenState extends State<CategoryScreen> {
     });
     return shops;
   }
+
+  static const _chipHeight = 32.0;
+
+  bool get _hasActiveFilter => _filterQuery.trim().isNotEmpty || _sort != null || _filterType != 'Name';
+
+  void _clearFilters() {
+    _searchController.clear();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _filterQuery = '';
+      _filterType = 'Name';
+      _sort = null;
+    });
+  }
+
+  Widget _filterChip({required String label, required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        height: _chipHeight,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          gradient: selected ? LinearGradient(colors: _categoryGradient) : null,
+          color: selected ? null : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Promotions row: two cards side by side within the 20 px page margins and a 12 px gap.
+  static double _promoCardWidth(BuildContext context) =>
+      ((MediaQuery.sizeOf(context).width - 40 - 12) / 2).clamp(140.0, 260.0);
 
   /// Shops without any service (no price) go after the ones that have prices.
   static int _comparePrice(double? a, double? b, {required bool ascending}) {
@@ -204,7 +262,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
           .toList(),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        height: _chipHeight,
+        padding: const EdgeInsets.only(left: 10, right: 6),
         decoration: BoxDecoration(
           gradient: active ? LinearGradient(colors: _categoryGradient) : null,
           color: active ? null : AppColors.surfaceContainerLow,
@@ -213,19 +272,30 @@ class _CategoryScreenState extends State<CategoryScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.sort_rounded, size: 15, color: active ? Colors.white : AppColors.onSurfaceVariant),
-            const SizedBox(width: 5),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 130),
-              child: Text(
-                active ? _sortLabel(_sort!) : _l.tr('sortBy'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: active ? Colors.white : AppColors.onSurfaceVariant,
-                ),
+            Icon(
+              switch (_sort) {
+                _ShopSort.priceLowHigh => Icons.arrow_upward_rounded,
+                _ShopSort.priceHighLow => Icons.arrow_downward_rounded,
+                _ShopSort.bestRating => Icons.star_rounded,
+                null => Icons.sort_rounded,
+              },
+              size: 15,
+              color: active ? Colors.white : AppColors.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              // Short label on the button (the menu has the full one) so it fits beside the chips
+              switch (_sort) {
+                _ShopSort.priceLowHigh || _ShopSort.priceHighLow => _l.tr('sortShortPrice'),
+                _ShopSort.bestRating => _l.tr('sortShortRating'),
+                null => _l.tr('sortBy'),
+              },
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.onSurfaceVariant,
               ),
             ),
             Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: active ? Colors.white : AppColors.onSurfaceVariant),
@@ -333,49 +403,74 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'FILTER SHOPS',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // Filter type chips, with the sort drop-down beside them
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ...['Name', 'Address'].map((type) {
-                          final selected = _filterType == type;
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              _filterType = type;
-                              _filterQuery = _searchController.text;
-                            }),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: selected
-                                    ? LinearGradient(colors: _categoryGradient)
-                                    : null,
-                                color: selected ? null : AppColors.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
+                      // Title, with "Clear" once anything is filtered or sorted
+                      SizedBox(
+                        height: 24,
+                        child: Row(
+                          children: [
+                            Expanded(
                               child: Text(
-                                'By $type',
+                                _l.tr('filterShops').toUpperCase(),
                                 style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: selected ? Colors.white : AppColors.onSurfaceVariant,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                  color: AppColors.onSurfaceVariant,
                                 ),
                               ),
                             ),
-                          );
-                          }),
+                            if (_hasActiveFilter)
+                              GestureDetector(
+                                onTap: _clearFilters,
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.close_rounded, size: 14, color: _categoryColor),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        _l.tr('clearFilters'),
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: _categoryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // By Name / By Address on the left, Sort by on the right - one row, same height.
+                      // Sort by always gets its full width; the two chips share the rest (their
+                      // text shrinks a little on very narrow phones instead of overflowing).
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                for (final type in const ['Name', 'Address']) ...[
+                                  if (type != 'Name') const SizedBox(width: 8),
+                                  Flexible(
+                                    child: _filterChip(
+                                      label: _l.tr(type == 'Name' ? 'byName' : 'byAddress'),
+                                      selected: _filterType == type,
+                                      onTap: () => setState(() {
+                                        _filterType = type;
+                                        _filterQuery = _searchController.text;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           _buildSortButton(),
                         ],
                       ),
@@ -385,7 +480,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         controller: _searchController,
                         onChanged: (v) => setState(() => _filterQuery = v),
                         decoration: InputDecoration(
-                          hintText: 'Search by ${_filterType.toLowerCase()}...',
+                          hintText: _l.tr(_filterType == 'Name' ? 'searchByName' : 'searchByAddress'),
                           prefixIcon: Icon(
                             Icons.search_rounded,
                             color: _categoryColor,
@@ -466,7 +561,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   ),
                   const SizedBox(height: 12),
                   // Height follows the tallest card so there is no blank space below it
-                  SingleChildScrollView(
+                  AutoScroll(
+                    controller: _promoScroll,
+                    step: _promoCardWidth(context) + 12,
+                    child: SingleChildScrollView(
+                    controller: _promoScroll,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: IntrinsicHeight(
@@ -476,6 +575,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                           for (var i = 0; i < _promotedShops.length; i++) ...[
                             if (i > 0) const SizedBox(width: 12),
                             _PromotedShopCard(
+                              width: _promoCardWidth(context),
                               shop: _promotedShops[i],
                               gradient: _categoryGradient,
                               onTap: () => Navigator.push(
@@ -489,6 +589,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ],
 
@@ -572,14 +673,17 @@ class _PromotedShopCard extends StatelessWidget {
   final List<Color> gradient;
   final VoidCallback onTap;
 
-  const _PromotedShopCard({required this.shop, required this.gradient, required this.onTap});
+  /// Two cards fit side by side on the screen (see _promoCardWidth).
+  final double width;
+
+  const _PromotedShopCard({required this.shop, required this.gradient, required this.onTap, required this.width});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 230,
+        width: width,
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(18),
@@ -647,30 +751,7 @@ class _PromotedShopCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: shop.isOpen
-                            ? const Color(0xFF006b2d)
-                            : const Color(0xFFba1a1a),
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        shop.isOpen ? LocaleService.instance.tr('open') : LocaleService.instance.tr('closed'),
-                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                    ),
-                  ),
+                  // Open / closed is shown once, in the card body (_StatusPill) below.
                 ],
               ),
             ),

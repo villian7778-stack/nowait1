@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nowait_app/models/models.dart';
 import 'package:nowait_app/screens/customer/category_screen.dart';
 import 'package:nowait_app/screens/customer/home_screen.dart';
+import 'package:nowait_app/screens/owner/promotion_screen.dart';
 
 Map<String, dynamic> _shop(String id, String name, {double? min, double? max, double rating = 0, int reviews = 0}) => {
       'id': id, 'name': name, 'category': 'Salon', 'address': 'Main road', 'city': 'Pune',
@@ -90,8 +91,53 @@ void main() {
 
         // Price range shown on the card.
         expect(find.text('10–30'), findsOneWidget);
+
+        // "Sort by" sits on the same line as By Name / By Address, same height.
+        final chip = tester.getRect(find.ancestor(of: find.text('By Name'), matching: find.byType(AnimatedContainer)).first);
+        final sort = tester.getRect(find.ancestor(of: find.text('Sort by'), matching: find.byType(AnimatedContainer)).first);
+        expect(sort.center.dy, moreOrLessEquals(chip.center.dy, epsilon: 0.5));
+        expect(sort.height, chip.height);
+
+        // "Clear" appears once something is filtered or sorted, and resets all of it.
+        expect(find.text('Clear'), findsNothing);
+        await pick(tester, 'Price: High to Low');
+        await tester.tap(find.text('By Address'));
+        await tester.enterText(find.byType(TextField), 'Main');
+        await tester.pump();
+        expect(find.text('Clear'), findsOneWidget);
+        await tester.tap(find.text('Clear'));
+        await tester.pumpAndSettle();
+        expect(find.text('Clear'), findsNothing);
+        expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+        expect(find.text('Sort by'), findsOneWidget);
+        expect(order(tester), ['Shop A', 'Shop B', 'Shop C', 'Shop D']);
       }, () => MockClient(_api));
     });
+  });
+
+  testWidgets('a promoted shop in a category shows Open once (not on the photo too)', (tester) async {
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final promoted = {..._shop('p', 'Promo Salon', min: 10, max: 20), 'is_promoted': true, 'active_promotions': [
+      {'id': 'f', 'title': 'Featured Promotion', 'description': '', 'is_active': true,
+       'valid_until': DateTime.now().add(const Duration(days: 3)).toUtc().toIso8601String()}]};
+    await http.runWithClient(() async {
+      await tester.pumpWidget(const MaterialApp(home: CategoryScreen(category: 'Salon', initialCity: 'Pune')));
+      await tester.pumpAndSettle();
+      final card = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_PromotedShopCard');
+      expect(card, findsOneWidget);
+      // Narrow enough that two fit side by side on a phone: (900 - 40 - 12) / 2, capped at 260.
+      expect(tester.getSize(card).width, 260);
+      expect(find.descendant(of: card, matching: find.text('Open')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    }, () => MockClient((req) async => req.url.path == '/shops'
+        ? http.Response(jsonEncode({'shops': [promoted], 'total': 1}), 200)
+        : _api(req)));
+  });
+
+  test('Featured Promotion is ₹10/day everywhere the owner sees it', () {
+    expect(PromotionScreen.pricePerDay, 10);
   });
 
   group('Bottom tabs', () {

@@ -16,6 +16,10 @@ class PromotionScreen extends StatefulWidget {
 
   const PromotionScreen({super.key, required this.shop});
 
+  /// Featured Promotion price, rupees per day. Must match the server
+  /// (promotion_service.PROMOTION_PRICE_PER_DAY), which is what is actually charged.
+  static const pricePerDay = 10;
+
   @override
   State<PromotionScreen> createState() => _PromotionScreenState();
 }
@@ -74,7 +78,7 @@ class _PromotionScreenState extends State<PromotionScreen> {
     }
   }
 
-  static const _pricePerDay = 10;
+  static const _pricePerDay = PromotionScreen.pricePerDay;
   int get _totalCost => _selectedDays * _pricePerDay;
 
   static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
