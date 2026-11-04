@@ -17,6 +17,7 @@ import '../auth/login_screen.dart';
 import '../help_support_screen.dart';
 import 'category_screen.dart';
 import 'history_screen.dart';
+import 'featured_section.dart';
 import 'notifications_screen.dart';
 import 'shop_details_screen.dart';
 import 'queue_status_screen.dart';
@@ -48,37 +49,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onLocale() => setState(() {});
 
-  Future<void> _onNavTap(int i) async {
-    if (i == 1) {
-      // My Queue: go directly to QueueStatusScreen only when actively in queue
-      try {
-        final entries = await QueueService.instance.getMyStatus();
-        if (!mounted) return;
-        final active = entries.where((e) =>
-          e.status == QueueStatus.waiting ||
-          e.status == QueueStatus.almostThere ||
-          e.status == QueueStatus.yourTurn,
-        ).toList();
-        if (active.isNotEmpty) {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => QueueStatusScreen(entry: active[0])),
-          );
-          return;
-        }
-      } catch (_) {}
-      if (mounted) setState(() => _currentIndex = 1);
-      return;
-    }
-    setState(() => _currentIndex = i);
+  /// Bumped each time a tab is opened, so My Queue and History reload instead of showing what
+  /// they loaded when the app started (IndexedStack keeps every tab alive).
+  int _openCount = 0;
+
+  /// Switches tab straight away; the tab itself loads its data (no waiting on the network first).
+  void _onNavTap(int i) {
+    setState(() {
+      _currentIndex = i;
+      _openCount++;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const _HomeTab(),
-      _QueueTab(onGoHome: () => setState(() => _currentIndex = 0)),
-      _HistoryTab(onGoHome: () => setState(() => _currentIndex = 0)),
+      _HomeTab(refreshSignal: _currentIndex == 0 ? _openCount : null),
+      _QueueTab(
+        refreshSignal: _currentIndex == 1 ? _openCount : null,
+        onGoHome: () => _onNavTap(0),
+      ),
+      _HistoryTab(
+        refreshSignal: _currentIndex == 2 ? _openCount : null,
+        onGoHome: () => _onNavTap(0),
+      ),
       const _ProfileTab(),
     ];
 
@@ -107,7 +101,7 @@ class _BottomNav extends StatelessWidget {
     final items = [
       (Icons.home_rounded, Icons.home_outlined, l.tr('home')),
       (Icons.confirmation_number_rounded, Icons.confirmation_number_outlined, l.tr('myQueue')),
-      (Icons.history_rounded, Icons.history_outlined, 'History'),
+      (Icons.history_rounded, Icons.history_outlined, l.tr('historyTab')),
       (Icons.person_rounded, Icons.person_outline_rounded, l.tr('profile')),
     ];
 
@@ -179,7 +173,9 @@ class _BottomNav extends StatelessWidget {
 // ─── Home tab ─────────────────────────────────────────────────────────────────
 
 class _HomeTab extends StatefulWidget {
-  const _HomeTab();
+  /// Changes each time the Home tab is opened again (null while hidden): reload and reshuffle.
+  final int? refreshSignal;
+  const _HomeTab({this.refreshSignal});
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -189,32 +185,30 @@ class _HomeTabState extends State<_HomeTab> {
   static const _categories = [
     _CategoryInfo(
       name: 'Salon',
-      subtitle: 'Haircut · Beard · Styling',
       color: Color(0xFF2563EB),
       icon: Icons.content_cut,
     ),
     _CategoryInfo(
       name: 'Beauty Parlour',
-      subtitle: 'Facial · Waxing · Bridal',
       color: Color(0xFFDB2777),
       icon: Icons.face_retouching_natural,
     ),
     _CategoryInfo(
       name: 'Hospital/Clinics',
-      subtitle: 'OPD · Dentist · Lab Tests',
       color: Color(0xFF059669),
       icon: Icons.local_hospital,
       categoryKey: 'Hospital/Clinic',
     ),
     _CategoryInfo(
       name: 'Garage',
-      subtitle: 'Oil · Tyres · AC Repair',
       color: Color(0xFFD97706),
       icon: Icons.car_repair,
     ),
   ];
 
   List<ShopModel> _allShops = [];
+  /// Promoted shops of the selected city, shuffled on every load (see [shuffledFeaturedShops]).
+  List<ShopModel> _featured = [];
   bool _isLoading = true;
   String? _loadError;
   String? _selectedCity;
@@ -222,11 +216,55 @@ class _HomeTabState extends State<_HomeTab> {
   int _unreadCount = 0;
   static const _cityPrefKey = 'selected_city';
 
+  // Measured section heights, used to size the Explore cards so that Featured + Explore (or,
+  // without Featured, Explore + Open Now) fit on one screen.
+  final _heroKey = GlobalKey();
+  final _featuredKey = GlobalKey();
+  final _exploreHeaderKey = GlobalKey();
+  final _openNowKey = GlobalKey();
+  double _viewportHeight = 0;
+  double _heroHeight = 0;
+  double _featuredHeight = 0;
+  double _exploreHeaderHeight = 0;
+  double _openNowHeight = 0;
+
   @override
   void initState() {
     super.initState();
     _initCity();
     _loadUnreadCount();
+  }
+
+  @override
+  void didUpdateWidget(_HomeTab old) {
+    super.didUpdateWidget(old);
+    if (widget.refreshSignal != null && widget.refreshSignal != old.refreshSignal) {
+      _loadShops(quiet: true);
+      _loadUnreadCount();
+    }
+  }
+
+  double _heightOf(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject();
+    return box is RenderBox && box.hasSize ? box.size.height : 0;
+  }
+
+  void _measure() {
+    if (!mounted) return;
+    final hero = _heightOf(_heroKey);
+    final featured = _heightOf(_featuredKey);
+    final header = _heightOf(_exploreHeaderKey);
+    final openNow = _heightOf(_openNowKey);
+    bool changed(double a, double b) => (a - b).abs() > 0.5;
+    if (changed(hero, _heroHeight) || changed(featured, _featuredHeight) ||
+        changed(header, _exploreHeaderHeight) || changed(openNow, _openNowHeight)) {
+      setState(() {
+        _heroHeight = hero;
+        _featuredHeight = featured;
+        _exploreHeaderHeight = header;
+        _openNowHeight = openNow;
+      });
+    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -259,13 +297,22 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (_) {}
   }
 
-  Future<void> _loadShops() async {
+  /// [quiet]: refresh in the background (coming back to the Home tab) without the loading state.
+  Future<void> _loadShops({bool quiet = false}) async {
     try {
-      setState(() { _isLoading = true; _loadError = null; });
-      final shops = await ShopService.instance.listShops(city: _selectedCity);
-      if (mounted) setState(() { _allShops = shops; _isLoading = false; });
+      if (!quiet) setState(() { _isLoading = true; _loadError = null; });
+      final city = _selectedCity;
+      final shops = await ShopService.instance.listShops(city: city);
+      // A slower answer for a city the user has since switched away from is dropped.
+      if (!mounted || city != _selectedCity) return;
+      setState(() {
+        _allShops = shops;
+        _featured = shuffledFeaturedShops(shops);
+        _isLoading = false;
+        _loadError = null;
+      });
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _loadError = e.toString(); });
+      if (mounted && !quiet) setState(() { _isLoading = false; _loadError = e.toString(); });
     }
   }
 
@@ -300,12 +347,22 @@ class _HomeTabState extends State<_HomeTab> {
     return name.split(' ').first;
   }
 
+  bool get _showFeatured => !_isLoading && _featured.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    return LayoutBuilder(builder: (context, box) {
+      _viewportHeight = box.maxHeight;
+      return _buildScroll(context);
+    });
+  }
+
+  Widget _buildScroll(BuildContext context) {
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(child: _buildHero(context)),
+        SliverToBoxAdapter(child: KeyedSubtree(key: _heroKey, child: _buildHero(context))),
         if (_loadError != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -335,8 +392,16 @@ class _HomeTabState extends State<_HomeTab> {
               ),
             ),
           ),
+        if (_showFeatured)
+          SliverToBoxAdapter(
+            child: Padding(
+              key: _featuredKey,
+              padding: const EdgeInsets.only(top: 22),
+              child: FeaturedShopsSection(shops: _featured),
+            ),
+          ),
         SliverToBoxAdapter(child: _buildCategoryGrid(context)),
-        SliverToBoxAdapter(child: _buildOpenNow(context)),
+        SliverToBoxAdapter(child: KeyedSubtree(key: _openNowKey, child: _buildOpenNow(context))),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
@@ -422,6 +487,8 @@ class _HomeTabState extends State<_HomeTab> {
                                 color: Colors.white,
                                 height: 1.1,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 5),
                             Text(
@@ -431,6 +498,8 @@ class _HomeTabState extends State<_HomeTab> {
                                 color: Colors.white.withValues(alpha: 0.78),
                                 letterSpacing: 0.1,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -519,13 +588,26 @@ class _HomeTabState extends State<_HomeTab> {
 
   // ── 2×2 Category grid ───────────────────────────────────────────────────────
 
+  /// Height of each Explore card: square when there is room, otherwise shorter so that the block
+  /// that must share the first screen with Explore (Featured above it, or Open Now below it when
+  /// there is no Featured) still fits without scrolling.
+  double _categoryCardHeight(double cardWidth, double topPad, double gap) {
+    if (_viewportHeight <= 0 || _heroHeight <= 0 || _exploreHeaderHeight <= 0) return cardWidth;
+    final partner = _showFeatured ? _featuredHeight : _openNowHeight;
+    const spacing = 16.0, breathing = 8.0;
+    final room = _viewportHeight - _heroHeight - partner - topPad - _exploreHeaderHeight - spacing - gap - breathing;
+    return (room / 2).clamp(_CategoryGridCard.minHeight, cardWidth);
+  }
+
   Widget _buildCategoryGrid(BuildContext context) {
+    final topPad = _showFeatured ? 14.0 : 28.0;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+      padding: EdgeInsets.fromLTRB(20, topPad, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            key: _exploreHeaderKey,
             children: [
               Expanded(
                 child: Column(
@@ -546,6 +628,8 @@ class _HomeTabState extends State<_HomeTab> {
                         fontSize: 12,
                         color: AppColors.onSurfaceVariant,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -557,6 +641,7 @@ class _HomeTabState extends State<_HomeTab> {
             builder: (context, constraints) {
               final gap = 12.0;
               final cardSize = (constraints.maxWidth - gap) / 2;
+              final cardHeight = _categoryCardHeight(cardSize, topPad, gap);
               return Column(
                 children: [
                   Row(
@@ -564,6 +649,7 @@ class _HomeTabState extends State<_HomeTab> {
                       _CategoryGridCard(
                         info: _categories[0],
                         cardSize: cardSize,
+                        cardHeight: cardHeight,
                         allShops: _allShops,
                         isLoading: _isLoading,
                         selectedCity: _selectedCity,
@@ -572,6 +658,7 @@ class _HomeTabState extends State<_HomeTab> {
                       _CategoryGridCard(
                         info: _categories[1],
                         cardSize: cardSize,
+                        cardHeight: cardHeight,
                         allShops: _allShops,
                         isLoading: _isLoading,
                         selectedCity: _selectedCity,
@@ -584,6 +671,7 @@ class _HomeTabState extends State<_HomeTab> {
                       _CategoryGridCard(
                         info: _categories[2],
                         cardSize: cardSize,
+                        cardHeight: cardHeight,
                         allShops: _allShops,
                         isLoading: _isLoading,
                         selectedCity: _selectedCity,
@@ -592,6 +680,7 @@ class _HomeTabState extends State<_HomeTab> {
                       _CategoryGridCard(
                         info: _categories[3],
                         cardSize: cardSize,
+                        cardHeight: cardHeight,
                         allShops: _allShops,
                         isLoading: _isLoading,
                         selectedCity: _selectedCity,
@@ -721,14 +810,12 @@ class _HomeTabState extends State<_HomeTab> {
 
 class _CategoryInfo {
   final String name;
-  final String subtitle;
   final Color color;
   final IconData icon;
   final String? categoryKey;
 
   const _CategoryInfo({
     required this.name,
-    required this.subtitle,
     required this.color,
     required this.icon,
     this.categoryKey,
@@ -741,14 +828,22 @@ class _CategoryInfo {
 
 class _CategoryGridCard extends StatefulWidget {
   final _CategoryInfo info;
+  /// Card width (and the base for its proportions).
   final double cardSize;
+  /// Card height: [cardSize] (square) when the screen has room, less on short screens.
+  final double cardHeight;
   final List<ShopModel> allShops;
   final bool isLoading;
   final String? selectedCity;
 
+  /// Below [compactBelow] the card switches to a one-row layout (icon · name / info · arrow).
+  static const minHeight = 56.0;
+  static const compactBelow = 140.0;
+
   const _CategoryGridCard({
     required this.info,
     required this.cardSize,
+    required this.cardHeight,
     required this.allShops,
     required this.isLoading,
     this.selectedCity,
@@ -799,7 +894,6 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
     final iconBoxSize = (s * 0.30).clamp(36.0, 52.0);
     final iconSize = iconBoxSize * 0.54;
     final nameFontSize = (s * 0.105).clamp(12.0, 16.0);
-    final subFontSize = (s * 0.068).clamp(9.0, 12.0);
     final infoFontSize = (s * 0.062).clamp(8.5, 11.0);
     final ghostSize = s * 0.62;
     final arrowBox = (s * 0.175).clamp(24.0, 30.0);
@@ -823,7 +917,7 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
         scale: _scale,
         child: Container(
           width: s,
-          height: s,
+          height: widget.cardHeight,
           decoration: BoxDecoration(
             color: AppColors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(22),
@@ -854,6 +948,57 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
                     color: c.withValues(alpha: 0.055),
                   ),
                 ),
+                // Short screens: everything on one row
+                if (widget.cardHeight < _CategoryGridCard.compactBelow)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: c.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(widget.info.icon, color: c, size: 19),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.info.name,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: nameFontSize.clamp(12.0, 14.0),
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.onSurface,
+                                  height: 1.15,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                widget.isLoading ? 'Loading…' : '$openCount open · $shopCount shops',
+                                style: GoogleFonts.inter(
+                                  fontSize: infoFontSize,
+                                  fontWeight: FontWeight.w500,
+                                  color: openCount > 0 ? AppColors.tertiary : AppColors.onSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_rounded, color: c, size: 16),
+                      ],
+                    ),
+                  )
+                else
                 // Content column
                 Padding(
                   padding: EdgeInsets.all(pad),
@@ -899,18 +1044,7 @@ class _CategoryGridCardState extends State<_CategoryGridCard>
                           color: AppColors.onSurface,
                           height: 1.2,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: (s * 0.02).clamp(2, 4)),
-                      // Subtitle
-                      Text(
-                        widget.info.subtitle,
-                        style: GoogleFonts.inter(
-                          fontSize: subFontSize,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
+                        maxLines: widget.cardHeight >= s * 0.95 ? 2 : 1, // shortened card: one line
                         overflow: TextOverflow.ellipsis,
                       ),
                       SizedBox(height: (s * 0.045).clamp(5, 9)),
@@ -1197,7 +1331,9 @@ class _PulsingDotState extends State<_PulsingDot>
 
 class _QueueTab extends StatefulWidget {
   final VoidCallback? onGoHome;
-  const _QueueTab({this.onGoHome});
+  /// Changes each time the tab is opened (null while another tab is showing): reload then.
+  final int? refreshSignal;
+  const _QueueTab({this.onGoHome, this.refreshSignal});
 
   @override
   State<_QueueTab> createState() => _QueueTabState();
@@ -1206,26 +1342,54 @@ class _QueueTab extends StatefulWidget {
 class _QueueTabState extends State<_QueueTab> {
   List<QueueEntry> _entries = [];
   bool _isLoading = true;
+  bool _failed = false;
+  bool _loadingNow = false;
 
   @override
   void initState() {
     super.initState();
+    LocaleService.instance.addListener(_onLocale);
     _loadQueue();
   }
 
+  @override
+  void didUpdateWidget(_QueueTab old) {
+    super.didUpdateWidget(old);
+    if (widget.refreshSignal != null && widget.refreshSignal != old.refreshSignal) {
+      _loadQueue();
+    }
+  }
+
+  @override
+  void dispose() {
+    LocaleService.instance.removeListener(_onLocale);
+    super.dispose();
+  }
+
+  void _onLocale() => setState(() {});
+
+  /// Keeps what is already on screen while refreshing; a full-screen spinner only on first load.
   Future<void> _loadQueue() async {
+    if (_loadingNow) return;
+    _loadingNow = true;
     try {
-      setState(() => _isLoading = true);
       final entries = await QueueService.instance.getMyStatus();
       final active = entries.where((e) =>
         e.status == QueueStatus.waiting ||
         e.status == QueueStatus.almostThere ||
         e.status == QueueStatus.yourTurn,
       ).toList();
-      if (mounted) setState(() { _entries = active; _isLoading = false; });
+      if (mounted) setState(() { _entries = active; _isLoading = false; _failed = false; });
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _isLoading = false; _failed = true; });
+    } finally {
+      _loadingNow = false;
     }
+  }
+
+  Future<void> _retry() async {
+    setState(() { _isLoading = true; _failed = false; });
+    await _loadQueue();
   }
 
   @override
@@ -1241,28 +1405,64 @@ class _QueueTabState extends State<_QueueTab> {
         ),
         actions: [
           IconButton(
-            onPressed: _loadQueue,
+            onPressed: _retry,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _entries.isEmpty
-              ? _buildEmptyState(context)
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _entries.length,
-                  itemBuilder: (_, i) => _QueueEntryCard(
-                    entry: _entries[i],
-                    onTrack: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => QueueStatusScreen(entry: _entries[i]),
+          : RefreshIndicator(
+              onRefresh: _loadQueue,
+              child: _entries.isEmpty
+                  // Scrollable so pull-to-refresh also works on the empty / error state
+                  ? LayoutBuilder(
+                      builder: (context, box) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: box.maxHeight),
+                          child: _failed ? _buildErrorState() : _buildEmptyState(context),
+                        ),
                       ),
-                    ).then((_) => _loadQueue()),
-                  ),
-                ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _entries.length,
+                      itemBuilder: (_, i) => _QueueEntryCard(
+                        entry: _entries[i],
+                        onTrack: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => QueueStatusScreen(entry: _entries[i]),
+                          ),
+                        ).then((_) => _loadQueue()),
+                      ),
+                    ),
+            ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    final l = LocaleService.instance;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.error.withValues(alpha: 0.5)),
+            const SizedBox(height: 12),
+            Text(
+              l.tr('couldNotLoadQueue'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextButton(onPressed: _retry, child: Text(l.tr('retry'))),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1424,11 +1624,12 @@ class _QueueEntryCard extends StatelessWidget {
 
 class _HistoryTab extends StatelessWidget {
   final VoidCallback? onGoHome;
-  const _HistoryTab({this.onGoHome});
+  final int? refreshSignal;
+  const _HistoryTab({this.onGoHome, this.refreshSignal});
 
   @override
   Widget build(BuildContext context) {
-    return HistoryScreen(onGoHome: onGoHome);
+    return HistoryScreen(onGoHome: onGoHome, refreshSignal: refreshSignal);
   }
 }
 

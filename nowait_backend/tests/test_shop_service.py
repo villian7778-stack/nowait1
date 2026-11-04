@@ -6,11 +6,12 @@ from tests.conftest import make_shop, make_chain, ok, ok_list
 
 
 def _make_list_chain(results: list):
-    """Return a chain whose execute() calls cycle through results."""
+    """Return a chain whose execute() calls go through results in order; calls past the end
+    (e.g. the service-price query, when a test doesn't care about it) return no rows."""
     idx = [0]
 
     def _exec():
-        r = results[idx[0]]
+        r = results[idx[0]] if idx[0] < len(results) else ok_list([])
         idx[0] += 1
         return r
 
@@ -29,20 +30,38 @@ class TestListShops:
             result = shop_service.list_shops(city="Pune")
         assert result == {"shops": [], "total": 0}
 
-    def test_uses_exactly_four_db_queries(self):
-        """list_shops should fire exactly 4 queries: shops + subs + promos + queue."""
+    def test_uses_exactly_five_db_queries(self):
+        """list_shops should fire exactly 5 queries however many shops there are:
+        shops + subs + promos + queue + service prices (reviews go through review_service)."""
         from app.services import shop_service
         shop = make_shop()
 
-        results = [ok_list([shop]), ok_list([]), ok_list([]), ok_list([])]
+        results = [ok_list([shop]), ok_list([]), ok_list([]), ok_list([]), ok_list([])]
         chain = _make_list_chain(results)
 
-        with patch("app.services.shop_service.supabase") as mock_sup:
+        with patch("app.services.shop_service.supabase") as mock_sup, \
+                patch.object(shop_service.review_service, "get_batch_review_summaries", return_value={}):
             mock_sup.table = chain.table
             shop_service.list_shops(city="Pune")
 
-        # All 4 results consumed → exactly 4 execute() calls
-        assert chain.execute.call_count == 4
+        assert chain.execute.call_count == 5
+
+    def test_service_price_range_per_shop(self):
+        """Cheapest and dearest service per shop, for the app's "Sort by price"; None without services."""
+        from app.services import shop_service
+        a = {**make_shop(), "id": "a"}
+        b = {**make_shop(), "id": "b"}
+        prices = [{"shop_id": "a", "price": 20}, {"shop_id": "a", "price": 10},
+                  {"shop_id": "a", "price": 30.5}]
+        chain = _make_list_chain([ok_list([a, b]), ok_list([]), ok_list([]), ok_list([]), ok_list(prices)])
+
+        with patch("app.services.shop_service.supabase") as mock_sup, \
+                patch.object(shop_service.review_service, "get_batch_review_summaries", return_value={}):
+            mock_sup.table = chain.table
+            out = {s["id"]: s for s in shop_service.list_shops()["shops"]}
+
+        assert (out["a"]["min_service_price"], out["a"]["max_service_price"]) == (10.0, 30.5)
+        assert out["b"]["min_service_price"] is None and out["b"]["max_service_price"] is None
 
     def test_can_accept_queue_false_when_paused(self):
         from app.services import shop_service
@@ -191,6 +210,7 @@ class TestUnsubscribedShopsLookClosed:
             "subscriptions": ok_list([{"shop_id": i} for i in subscribed_ids]),
             "promotions": ok_list([]),
             "queue_entries": ok_list([]),
+            "services": ok_list([]),
         }
         with patch.object(shop_service, "supabase") as sb, \
                 patch.object(shop_service.review_service, "get_batch_review_summaries", return_value={}):

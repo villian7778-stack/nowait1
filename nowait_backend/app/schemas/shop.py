@@ -82,6 +82,9 @@ class ShopSummary(BaseModel):
     review_count: int = 0
     queue_paused: bool = False
     max_queue_size: Optional[int] = None
+    # Cheapest / dearest service, for the category list's "Sort by price". None = no services.
+    min_service_price: Optional[float] = None
+    max_service_price: Optional[float] = None
 
 
 class ShopDetail(ShopSummary):

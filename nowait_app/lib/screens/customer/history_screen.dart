@@ -8,7 +8,10 @@ import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 class HistoryScreen extends StatefulWidget {
   final VoidCallback? onGoHome;
-  const HistoryScreen({super.key, this.onGoHome});
+  /// Changes each time the History tab is opened (null while hidden): reload then, so a visit
+  /// that just finished shows up.
+  final int? refreshSignal;
+  const HistoryScreen({super.key, this.onGoHome, this.refreshSignal});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -32,10 +35,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(HistoryScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.refreshSignal != null && widget.refreshSignal != old.refreshSignal) {
+      _load(quiet: _error == null);
+    }
+  }
+
   void _onLocale() => setState(() {});
 
-  Future<void> _load() async {
-    setState(() { _isLoading = true; _error = null; });
+  bool _loadingNow = false;
+
+  /// [quiet]: keep the current list on screen while refreshing instead of showing a spinner.
+  Future<void> _load({bool quiet = false}) async {
+    if (_loadingNow) return;
+    _loadingNow = true;
+    if (!quiet) setState(() { _isLoading = true; _error = null; });
     try {
       final data = await QueueService.instance.getHistory();
       if (mounted) setState(() { _history = data; _isLoading = false; });
@@ -43,6 +59,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (mounted) setState(() { _error = e.message; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() { _error = LocaleService.instance.tr('somethingWrong'); _isLoading = false; });
+    } finally {
+      _loadingNow = false;
     }
   }
 

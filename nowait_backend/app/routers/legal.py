@@ -2,7 +2,8 @@
 
 Google Play needs a public Privacy Policy URL and an account-deletion URL; Razorpay needs
 Terms, Privacy, Refund/Cancellation and Contact pages before it activates live payments.
-Business details come from settings (LEGAL_* / SUPPORT_* in .env) and prices from the code
+Business details come from settings (LEGAL_* / SUPPORT_PHONE in .env; the support email is
+fixed below, not configurable) and prices from the code
 that actually charges them, so these pages can't drift from what the app does.
 
 These are sensible starting texts written from what the app really does - have them reviewed
@@ -20,6 +21,9 @@ router = APIRouter(prefix="/legal", tags=["Legal"])
 
 LAST_UPDATED = "16 October 2026"
 
+# Fixed on purpose (same address as the app's Help & Support screen); not read from .env.
+SUPPORT_EMAIL = "support@nowaitt.in"
+
 
 def _e(value) -> str:
     return escape(str(value or ""))
@@ -30,7 +34,7 @@ def _business() -> str:
 
 
 def _contact_block() -> str:
-    lines = [f"<li>Email: <a href=\"mailto:{_e(settings.SUPPORT_EMAIL)}\">{_e(settings.SUPPORT_EMAIL)}</a></li>"]
+    lines = [f"<li>Email: <a href=\"mailto:{_e(SUPPORT_EMAIL)}\">{_e(SUPPORT_EMAIL)}</a></li>"]
     if settings.SUPPORT_PHONE:
         lines.append(f"<li>Phone: {_e(settings.SUPPORT_PHONE)}</li>")
     if settings.LEGAL_ADDRESS:
@@ -234,7 +238,7 @@ def contact():
 @router.get("/delete-account", response_class=HTMLResponse, include_in_schema=False)
 def delete_account():
     b = _business()
-    email = _e(settings.SUPPORT_EMAIL)
+    email = _e(SUPPORT_EMAIL)
     body = f"""
 <h2>Delete it in the app (fastest)</h2>
 <ol><li>Open the {b} app and sign in.</li><li>Go to <b>Profile</b>.</li><li>Tap <b>Delete Account</b> and confirm.</li></ol>

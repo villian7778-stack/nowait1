@@ -46,6 +46,8 @@ def world():
          patch.object(payments, "logger") as log:
         from app.services import razorpay_service as real
         rzp.verify_webhook_signature.side_effect = real.verify_webhook_signature
+        rzp.is_other_mode_webhook.side_effect = real.is_other_mode_webhook
+        rzp.credentials.side_effect = real.credentials
         pts.get_order.return_value = dict(TXN)
         pts.claim_paid.return_value = True
         rzp.captured_payment_for_order.return_value = {"id": "pay_1", "amount": 4900, "currency": "INR"}

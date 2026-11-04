@@ -52,6 +52,9 @@ class ShopModel {
   final double? longitude;
   final double avgReviewRating;
   final int reviewCount;
+  /// Cheapest / dearest service price (null = no services). Used by "Sort by price".
+  final double? minServicePrice;
+  final double? maxServicePrice;
 
   ShopModel({
     required this.id,
@@ -79,6 +82,8 @@ class ShopModel {
     this.longitude,
     this.avgReviewRating = 0.0,
     this.reviewCount = 0,
+    this.minServicePrice,
+    this.maxServicePrice,
   });
 
   bool get canAcceptQueue => isOpen && hasActiveSubscription && !queuePaused;
@@ -102,6 +107,7 @@ class ShopModel {
     final services = servicesList != null
         ? servicesList.map((s) => ServiceModel.fromJson(s as Map<String, dynamic>)).toList()
         : <ServiceModel>[];
+    final prices = services.map((s) => s.price).toList();
 
     return ShopModel(
       id: json['id'] ?? '',
@@ -129,6 +135,11 @@ class ShopModel {
       longitude: (json['longitude'] as num?)?.toDouble(),
       avgReviewRating: (json['avg_review_rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      // The list response sends the range; a detail response sends the services themselves.
+      minServicePrice: (json['min_service_price'] as num?)?.toDouble() ??
+          (prices.isEmpty ? null : prices.reduce((a, b) => a < b ? a : b)),
+      maxServicePrice: (json['max_service_price'] as num?)?.toDouble() ??
+          (prices.isEmpty ? null : prices.reduce((a, b) => a > b ? a : b)),
     );
   }
 }

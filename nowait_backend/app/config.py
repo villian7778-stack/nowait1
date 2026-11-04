@@ -17,13 +17,22 @@ class Settings(BaseSettings):
     # automatically, so a Render deploy counts as production without any extra config.
     ENVIRONMENT: str = ""
     GOOGLE_MAP_KEY: str = ""
+    # Razorpay: keep BOTH key sets here and flip RAZORPAY_LIVE to switch (false = test mode,
+    # fake money; true = live, real money). Each webhook secret is the one typed into that
+    # mode's webhook form in the Razorpay dashboard (Settings -> Webhooks), NOT the API secret.
+    # See razorpay_service.credentials().
+    RAZORPAY_LIVE: bool = False
+    RAZORPAY_TEST_KEY_ID: str = ""
+    RAZORPAY_TEST_KEY_SECRET: str = ""
+    RAZORPAY_TEST_WEBHOOK_SECRET: str = ""
+    RAZORPAY_LIVE_KEY_ID: str = ""
+    RAZORPAY_LIVE_KEY_SECRET: str = ""
+    RAZORPAY_LIVE_WEBHOOK_SECRET: str = ""
+    # Older single-set setup, still honoured when the chosen mode's keys above are empty: a
+    # rzp_live_ key is refused unless RAZORPAY_ALLOW_LIVE (or RAZORPAY_LIVE) is true.
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
-    # Payments are TEST MODE ONLY. With live (rzp_live_) keys real money would move, so the
-    # backend refuses to talk to Razorpay unless this is explicitly set to true.
     RAZORPAY_ALLOW_LIVE: bool = False
-    # Secret you choose when adding the webhook in the Razorpay dashboard (Settings -> Webhooks).
-    # It is NOT the API key secret. Without it POST /payments/webhook answers 503.
     RAZORPAY_WEBHOOK_SECRET: str = ""
     # Deep link the app registers (AndroidManifest intent-filter) to catch the
     # password-recovery callback. Supabase embeds this in the reset email link.
@@ -38,7 +47,6 @@ class Settings(BaseSettings):
     # Shown on the public policy pages (/legal/...), which Google Play and Razorpay require.
     # Razorpay will ask for your registered business name and address - set them before launch.
     LEGAL_BUSINESS_NAME: str = "NOWAITT"
-    SUPPORT_EMAIL: str = "nowaitt778@gmail.com"
     SUPPORT_PHONE: str = ""
     LEGAL_ADDRESS: str = ""
     LEGAL_JURISDICTION: str = ""  # e.g. "Akola, Maharashtra" - defaults to "India"

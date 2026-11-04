@@ -101,13 +101,18 @@ class _GradientButtonState extends State<GradientButton> {
                   Icon(widget.icon, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  widget.label,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                // Long (e.g. translated) labels end in "…" instead of overflowing the button
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

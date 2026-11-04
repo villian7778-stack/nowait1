@@ -364,7 +364,11 @@ class _ShopRatingRowState extends State<ShopRatingRow> {
         builder: (_) => ReviewsScreen(shop: widget.shop),
       )),
       behavior: HitTestBehavior.opaque,
-      child: Row(
+      // Narrow cards (e.g. Open Now on the home screen) shrink the row instead of overflowing.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -399,6 +403,7 @@ class _ShopRatingRowState extends State<ShopRatingRow> {
           ),
           Icon(Icons.chevron_right_rounded, size: sz - 1, color: AppColors.primary),
         ],
+        ),
       ),
     );
   }

@@ -149,7 +149,7 @@ def test_list_shops_rating_is_the_review_average_not_the_stale_column():
     shop_row = {"id": "s1", "name": "A", "category": "Salon", "address": "x", "city": "Akola", "is_open": True,
                 "rating": 0, "images": [], "description": "", "avg_wait_minutes": 10}
     tables = {"shops": Chain(rows=[shop_row]), "subscriptions": Chain(rows=[{"shop_id": "s1"}]),
-              "promotions": Chain(rows=[]), "queue_entries": Chain(rows=[])}
+              "promotions": Chain(rows=[]), "queue_entries": Chain(rows=[]), "services": Chain(rows=[])}
     with patch.object(shop_service, "supabase", MagicMock(table=lambda n: tables[n])), \
          patch.object(shop_service.review_service, "get_batch_review_summaries",
                       return_value={"s1": {"avg_review_rating": 4.2, "review_count": 5}}):
@@ -164,7 +164,17 @@ def test_list_shops_rating_is_the_review_average_not_the_stale_column():
 def test_policy_pages_are_public_html(client, path):
     r = client.get(path)
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
-    assert "nowaitt778@gmail.com" in r.text
+    assert "support@nowaitt.in" in r.text
+
+
+def test_support_email_is_fixed_not_configurable(client, monkeypatch):
+    """The support email is written in the code; an env value (old .env / Render) can't change it."""
+    from app.config import Settings
+    monkeypatch.setenv("SUPPORT_EMAIL", "someone-else@example.com")
+    assert not hasattr(Settings(), "SUPPORT_EMAIL")
+    for path in ("/legal/contact", "/legal/delete-account"):
+        text = client.get(path).text
+        assert "support@nowaitt.in" in text and "someone-else@example.com" not in text
 
 
 def test_policy_prices_come_from_the_code_that_charges_them(client):

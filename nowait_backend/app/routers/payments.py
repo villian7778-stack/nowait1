@@ -38,14 +38,14 @@ def _create_or_reuse_order(shop_id: str, owner_id: str, purpose: str, amount_pai
     the same thing from the last few minutes (double tap, retry after a timeout, a second phone),
     that order is handed out again instead of a new one: Razorpay accepts only one payment per
     order, so the owner can't be charged twice for one purchase."""
-    metadata = {**metadata, "key_id": settings.RAZORPAY_KEY_ID}  # never reuse a test order with live keys
+    metadata = {**metadata, "key_id": razorpay_service.active_key_id()}  # never reuse a test order with live keys
     with lock_for(f"order:{owner_id}:{purpose}"):
         existing = payment_transaction_service.find_open_order(shop_id, owner_id, purpose, amount_paise, metadata)
         if existing:
             logger.info("Reusing open Razorpay order %s for owner=%s purpose=%s",
                         existing["razorpay_order_id"], owner_id, purpose)
             return {"order_id": existing["razorpay_order_id"], "amount": existing["amount_paise"],
-                    "currency": "INR", "key_id": settings.RAZORPAY_KEY_ID}
+                    "currency": "INR", "key_id": razorpay_service.active_key_id()}
         order = razorpay_service.create_order(amount_paise, _receipt(receipt_prefix, shop_id))
         payment_transaction_service.record_order(
             shop_id, owner_id, purpose, order["order_id"], order["amount"], metadata,
@@ -79,7 +79,7 @@ def _check_signature_and_claim(body) -> None:
         logger.error(
             "SIGNATURE MISMATCH order=%s payment=%s mode=%s secret_set=%s sig_len=%d",
             body.razorpay_order_id, body.razorpay_payment_id, razorpay_service.key_mode(),
-            bool(settings.RAZORPAY_KEY_SECRET), len(body.razorpay_signature or ""),
+            bool(razorpay_service.credentials().key_secret), len(body.razorpay_signature or ""),
         )
         payment_transaction_service.mark_failed(
             body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
@@ -368,15 +368,20 @@ def _handle_webhook_event(event: dict) -> dict:
 async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = Header(default=None)):
     """Called by Razorpay itself (no login), so the signature is the only authentication.
     Add it in the Razorpay dashboard: Settings -> Webhooks, URL `<server>/payments/webhook`, a secret
-    of your choice (= `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `order.paid`,
-    `payment.failed`. A valid request always gets 200 so Razorpay does not keep retrying."""
-    if not settings.RAZORPAY_WEBHOOK_SECRET:
-        logger.error("Webhook received but RAZORPAY_WEBHOOK_SECRET is not set")
+    of your choice (= `RAZORPAY_TEST_WEBHOOK_SECRET` / `RAZORPAY_LIVE_WEBHOOK_SECRET`), events
+    `payment.captured`, `order.paid`, `payment.failed`. A valid request always gets 200 so Razorpay
+    does not keep retrying; one from the mode not in use is answered 200 and ignored."""
+    creds = razorpay_service.credentials()
+    if not creds.webhook_secret:
+        logger.error("Webhook received but the %s-mode webhook secret is not set", creds.mode)
         raise HTTPException(status_code=503, detail="Webhook is not configured.")
     raw = await request.body()
     if len(raw) > _MAX_WEBHOOK_BYTES:
         raise HTTPException(status_code=413, detail="Payload too large.")
     if not razorpay_service.verify_webhook_signature(raw, x_razorpay_signature):
+        if razorpay_service.is_other_mode_webhook(raw, x_razorpay_signature):
+            logger.info("WEBHOOK from the other Razorpay mode ignored (server is in %s mode)", creds.mode)
+            return {"received": True, "ignored": "other mode"}
         logger.warning("WEBHOOK rejected: bad or missing signature (%d bytes)", len(raw))
         raise HTTPException(status_code=400, detail="Invalid signature.")
     try:

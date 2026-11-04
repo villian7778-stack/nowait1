@@ -75,6 +75,14 @@ def _enrich_shop(shop: dict) -> dict:
     }
 
 
+def _price_range(prices: list) -> dict:
+    """Cheapest and dearest service price; None for a shop without services."""
+    return {
+        "min_service_price": min(prices) if prices else None,
+        "max_service_price": max(prices) if prices else None,
+    }
+
+
 def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_only: bool = False) -> dict:
     query = supabase.table("shops").select("*")
     if city:
@@ -136,6 +144,18 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
         logging.getLogger(__name__).error("get_batch_review_summaries failed: %s", e)
         review_summaries = {}
 
+    # Batch query 5: service prices, so the app can sort shops by their cheapest / dearest service
+    price_result = (
+        supabase.table("services")
+        .select("shop_id, price")
+        .in_("shop_id", shop_ids)
+        .execute()
+    )
+    prices_by_shop: dict = {}
+    for s in (price_result.data or []):
+        if s.get("price") is not None:
+            prices_by_shop.setdefault(s["shop_id"], []).append(float(s["price"]))
+
     shops = []
     for shop in raw_shops:
         sid = shop["id"]
@@ -161,6 +181,7 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
             # "rating" is what older app builds show and what the list sorts by: keep it equal
             # to the real review average (the shops.rating column is never updated).
             "rating": rev["avg_review_rating"],
+            **_price_range(prices_by_shop.get(sid, [])),
         })
 
     return {"shops": shops, "total": len(shops)}
@@ -175,6 +196,7 @@ def get_shop(shop_id: str) -> dict:
     # Get services
     svc_result = supabase.table("services").select("*").eq("shop_id", shop_id).execute()
     shop["services"] = svc_result.data or []
+    shop.update(_price_range([float(s["price"]) for s in shop["services"] if s.get("price") is not None]))
 
     # Include review summary
     rev = review_service.get_review_summary(shop_id)

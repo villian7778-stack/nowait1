@@ -13,6 +13,10 @@ import 'shop_details_screen.dart';
 
 IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
 
+/// "Sort by" choices on the shop list. Price sorts use the shop's cheapest service (low to high)
+/// or its dearest service (high to low).
+enum _ShopSort { priceLowHigh, priceHighLow, bestRating }
+
 
 class CategoryScreen extends StatefulWidget {
   final String category;
@@ -32,6 +36,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _searchController = TextEditingController();
   String _filterType = 'Name';
   String _filterQuery = '';
+  _ShopSort? _sort; // null = default order (promoted shops first)
   List<ShopModel> _allShops = [];
   bool _isLoading = true;
   String? _selectedCity;
@@ -125,14 +130,109 @@ class _CategoryScreenState extends State<CategoryScreen> {
         }
       }).toList();
     }
-    // Unsubscribed (locked) shops go last; promoted shops float to top
+    // Unsubscribed (locked) shops always go last. Then the chosen sort, or by default promoted
+    // shops float to the top.
     shops.sort((a, b) {
       if (a.hasActiveSubscription != b.hasActiveSubscription) return a.hasActiveSubscription ? -1 : 1;
-      if (a.isPromoted && !b.isPromoted) return -1;
-      if (!a.isPromoted && b.isPromoted) return 1;
-      return 0;
+      switch (_sort) {
+        case _ShopSort.priceLowHigh:
+          return _comparePrice(a.minServicePrice, b.minServicePrice, ascending: true);
+        case _ShopSort.priceHighLow:
+          return _comparePrice(a.maxServicePrice, b.maxServicePrice, ascending: false);
+        case _ShopSort.bestRating:
+          final byRating = b.avgReviewRating.compareTo(a.avgReviewRating);
+          return byRating != 0 ? byRating : b.reviewCount.compareTo(a.reviewCount);
+        case null:
+          if (a.isPromoted && !b.isPromoted) return -1;
+          if (!a.isPromoted && b.isPromoted) return 1;
+          return 0;
+      }
     });
     return shops;
+  }
+
+  /// Shops without any service (no price) go after the ones that have prices.
+  static int _comparePrice(double? a, double? b, {required bool ascending}) {
+    if (a == null || b == null) return a == null ? (b == null ? 0 : 1) : -1;
+    return ascending ? a.compareTo(b) : b.compareTo(a);
+  }
+
+  String _sortLabel(_ShopSort sort) => switch (sort) {
+        _ShopSort.priceLowHigh => _l.tr('sortPriceLowHigh'),
+        _ShopSort.priceHighLow => _l.tr('sortPriceHighLow'),
+        _ShopSort.bestRating => _l.tr('sortBestRating'),
+      };
+
+  Widget _buildSortButton() {
+    final active = _sort != null;
+    return PopupMenuButton<_ShopSort>(
+      tooltip: _l.tr('sortBy'),
+      position: PopupMenuPosition.under,
+      color: AppColors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      // Picking the sort that is already on switches it off again (back to the default order).
+      onSelected: (v) => setState(() => _sort = _sort == v ? null : v),
+      itemBuilder: (_) => _ShopSort.values
+          .map((v) => PopupMenuItem<_ShopSort>(
+                value: v,
+                child: Row(
+                  children: [
+                    Icon(
+                      switch (v) {
+                        _ShopSort.priceLowHigh => Icons.arrow_upward_rounded,
+                        _ShopSort.priceHighLow => Icons.arrow_downward_rounded,
+                        _ShopSort.bestRating => Icons.star_rounded,
+                      },
+                      size: 18,
+                      color: _sort == v ? _categoryColor : AppColors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _sortLabel(v),
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: _sort == v ? FontWeight.w700 : FontWeight.w500,
+                          color: _sort == v ? _categoryColor : AppColors.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (_sort == v) Icon(Icons.check_rounded, size: 18, color: _categoryColor),
+                  ],
+                ),
+              ))
+          .toList(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: active ? LinearGradient(colors: _categoryGradient) : null,
+          color: active ? null : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sort_rounded, size: 15, color: active ? Colors.white : AppColors.onSurfaceVariant),
+            const SizedBox(width: 5),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 130),
+              child: Text(
+                active ? _sortLabel(_sort!) : _l.tr('sortBy'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: active ? Colors.white : AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
   }
 
   IconData get _categoryIcon => CategoryTheme.icon(widget.category);
@@ -243,11 +343,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      // Filter type chips
+                      // Filter type chips, with the sort drop-down beside them
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: ['Name', 'Address'].map((type) {
+                        children: [
+                          ...['Name', 'Address'].map((type) {
                           final selected = _filterType == type;
                           return GestureDetector(
                             onTap: () => setState(() {
@@ -274,7 +375,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                               ),
                             ),
                           );
-                        }).toList(),
+                          }),
+                          _buildSortButton(),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       // Search input
@@ -815,6 +918,8 @@ class _ShopListCard extends StatelessWidget {
                         _infoBadge(Icons.group_outlined, '${shop.queueCount}'),
                         _infoBadge(Icons.schedule_outlined, '~${shop.queueCount * shop.avgWaitMinutes}m'),
                       ],
+                      if (shop.minServicePrice != null && shop.maxServicePrice != null)
+                        _infoBadge(Icons.currency_rupee_rounded, _priceRange(shop.minServicePrice!, shop.maxServicePrice!)),
                       if (shop.latitude != null && shop.longitude != null)
                         DirectionsChip(lat: shop.latitude!, lng: shop.longitude!),
                     ],
@@ -888,6 +993,11 @@ class _ShopListCard extends StatelessWidget {
       ),
     );
   }
+
+  static String _rupees(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(2);
+
+  static String _priceRange(double min, double max) =>
+      min == max ? _rupees(min) : '${_rupees(min)}–${_rupees(max)}';
 
   Widget _iconThumbnail(Color color) {
     return Container(

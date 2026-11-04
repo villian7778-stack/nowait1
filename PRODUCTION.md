@@ -89,11 +89,11 @@ Add your domain (e.g. `api.nowaitt.in`) under *Custom Domains* — HTTPS is auto
 | `ENVIRONMENT` | `production` (hides `/docs`) |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | choose a long random password |
 | `GOOGLE_MAP_KEY` | your restricted Maps key (section 6) |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | **live** keys (section 5) |
-| `RAZORPAY_ALLOW_LIVE` | `true` (only on the server that takes real payments) |
-| `RAZORPAY_WEBHOOK_SECRET` | the secret you type in Razorpay's **live** webhook |
+| `RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`, `RAZORPAY_TEST_WEBHOOK_SECRET` | test keys + the secret typed in Razorpay's **test** webhook |
+| `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_LIVE_WEBHOOK_SECRET` | **live** keys (section 5) + the secret typed in the **live** webhook |
+| `RAZORPAY_LIVE` | the switch: `false` = test mode (fake money), `true` = real payments. Nothing else changes; save → Render redeploys |
 | `TRIAL_HASH_KEY` | new long random value; save it forever, never change it |
-| `LEGAL_BUSINESS_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `LEGAL_ADDRESS`, `LEGAL_JURISDICTION` | shown on the policy pages; Razorpay checks name + address |
+| `LEGAL_BUSINESS_NAME`, `SUPPORT_PHONE`, `LEGAL_ADDRESS`, `LEGAL_JURISDICTION` | shown on the policy pages; Razorpay checks name + address. The support email (`support@nowaitt.in`) is fixed in `app/routers/legal.py`, not set here |
 | `CLOUDFLARE_ORIGIN_SECRET` | only once Cloudflare is set up (section 4b) — **secret** |
 | `APP_MIN_BUILD_ANDROID`, `APP_MIN_BUILD_IOS` | `0` (off) — raise only to force an update (section 10) |
 | `APP_STORE_URL_IOS` | your App Store link, once the iPhone app is published |
@@ -146,10 +146,13 @@ it is just slow). A paid Render instance removes this.
    domain or the Play listing. Policy links to give them:
    `https://api.nowaitt.in/legal/terms`, `/legal/privacy`, `/legal/refund-policy`, `/legal/contact`.
 2. Switch the dashboard to **Live mode** → *Account & Settings → API Keys* → **Generate Live Key**.
-   Copy the secret immediately (shown once) → put both on the server, and set `RAZORPAY_ALLOW_LIVE=true`.
+   Copy the secret immediately (shown once) → put them in `RAZORPAY_LIVE_KEY_ID` / `RAZORPAY_LIVE_KEY_SECRET`
+   on the server (keep the test ones in `RAZORPAY_TEST_*`), and set `RAZORPAY_LIVE=true` when you go live.
+   To test again later, set `RAZORPAY_LIVE=false` (and back to `true` afterwards) — no keys need retyping.
 3. Live mode → *Settings → Webhooks* → **Add New Webhook**
    - URL: `https://api.nowaitt.in/payments/webhook`
-   - Secret: a new random value → also set as `RAZORPAY_WEBHOOK_SECRET` on the server
+   - Secret: a new random value → also set as `RAZORPAY_LIVE_WEBHOOK_SECRET` on the server (the test-mode
+     webhook's secret goes in `RAZORPAY_TEST_WEBHOOK_SECRET`; both webhooks can use the same URL)
    - Events: `payment.captured`, `order.paid`, `payment.failed`
 4. Enable the payment methods you want (UPI, cards, netbanking).
 5. **Test with real money once**: pay ₹49 for a 1-month plan from a test shop, check it activates, then
@@ -241,7 +244,7 @@ is personal) → Production. Read the *Pre-launch report* Play generates for cra
 - [ ] Section 0 decision made and implemented
 - [ ] **Rotate every secret** that was ever shared in chat or email (Supabase service key + JWT secret,
       Razorpay keys, Google Maps key, webhook secret) — create new ones for production
-- [ ] Production `.env` / server variables set from section 4; `RAZORPAY_ALLOW_LIVE=true` only there
+- [ ] Production `.env` / server variables set from section 4; `RAZORPAY_LIVE=true` only there
 - [ ] Policy pages show your real business name, address and phone
 - [ ] Supabase: SQL run, Google provider + redirect URL set, SMTP connected, bucket public
 - [ ] Release build made with `build_release.ps1` and tried on a real phone:
