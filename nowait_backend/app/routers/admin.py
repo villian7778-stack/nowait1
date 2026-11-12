@@ -204,7 +204,7 @@ def api_queues(admin_session: str | None = Cookie(default=None), page: int = 1, 
         sm = {s["id"]: s for s in (sr.data or [])}
         for e in entries:
             u = pm.get(e.get("user_id", ""), {})
-            e["customer_name"] = u.get("name", "Unknown")
+            e["customer_name"] = "Walk-in customer" if not e.get("user_id") else u.get("name", "Unknown")
             e["customer_phone"] = u.get("phone", "")
             sh = sm.get(e.get("shop_id", ""), {})
             e["shop_name"] = sh.get("name", "Unknown")

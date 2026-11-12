@@ -400,6 +400,64 @@ def notify_coming(entry_id: str, user_id: str) -> dict:
 
 # ── owner queue view ──────────────────────────────────────────────────────────
 
+WALK_IN_NAME = "Walk-in customer"
+
+
+def add_walk_in(shop_id: str, owner_id: str, service_ids: list) -> dict:
+    """The owner adds a customer standing at the counter. They get the next token from the same
+    sequence as online customers (add_walk_in_v1 takes the same shop lock as join_queue_v2) and show
+    as "Walk-in" in every queue list. No account, so no notifications. Allowed while the queue is
+    paused and past the queue limit (both only restrict online joins); the shop must be open."""
+    if not _is_owner(shop_id, owner_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    unique_ids = list(dict.fromkeys(sid for sid in (service_ids or []) if sid))
+    offers_services = bool(
+        (supabase.table("services").select("id").eq("shop_id", shop_id).limit(1).execute()).data
+    )
+    if offers_services and not unique_ids:
+        raise HTTPException(status_code=400, detail="Choose at least one service for the walk-in customer.")
+    _require_shop_services(shop_id, unique_ids)
+
+    avg_wait = (execute_one(supabase.table("shops").select("avg_wait_minutes").eq("id", shop_id)).data or {}) \
+        .get("avg_wait_minutes", 10)
+    total_duration = _calculate_total_duration(unique_ids, avg_wait) if unique_ids else None
+
+    try:
+        result = supabase.rpc("add_walk_in_v1", {
+            "p_shop_id": shop_id,
+            "p_service_ids": unique_ids,
+            "p_total_duration_minutes": total_duration,
+        }).execute()
+    except Exception as e:
+        msg = str(e)
+        if "SHOP_NOT_FOUND" in msg:
+            raise HTTPException(status_code=404, detail="Shop not found")
+        if "SHOP_CLOSED" in msg:
+            raise HTTPException(status_code=400, detail="Open your shop to add walk-in customers.")
+        if "NO_SUBSCRIPTION" in msg:
+            raise HTTPException(status_code=403, detail="An active subscription is required to add customers.")
+        if "add_walk_in_v1" in msg or "PGRST202" in msg:
+            logger.error("add_walk_in_v1 is missing - run sql/migrate_walk_in.sql in Supabase: %s", e)
+            raise HTTPException(status_code=503, detail="Walk-in customers aren't set up on the server yet.")
+        logger.error("add_walk_in RPC unexpected error (shop=%s): %s", shop_id, e)
+        raise HTTPException(status_code=400, detail="Could not add the walk-in customer. Please try again.")
+
+    entry = result.data if isinstance(result.data, dict) else (result.data or [None])[0]
+    if not entry:
+        raise HTTPException(status_code=500, detail="Could not add the walk-in customer.")
+    services = _fetch_services_by_ids(unique_ids) if unique_ids else []
+    by_id = {s["id"]: s for s in services}
+    return {
+        "id": entry["id"],
+        "token_number": entry["token_number"],
+        "status": entry["status"],
+        "is_walk_in": True,
+        "service_names": [by_id[sid]["name"] for sid in unique_ids if sid in by_id],
+        "total_duration_minutes": entry.get("total_duration_minutes"),
+    }
+
+
 def get_shop_queue(shop_id: str, owner_id: str) -> dict:
     if not _is_owner(shop_id, owner_id):
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -432,13 +490,18 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
         services_map = {s["id"]: s for s in svcs}
 
     # Batch-fetch all customer profiles in one query (avoids N+1)
-    user_ids = list({entry["user_id"] for entry in entries})
-    profiles_result = supabase.table("profiles").select("id, name, phone").in_("id", user_ids).execute()
-    profiles_map = {p["id"]: p for p in (profiles_result.data or [])}
+    user_ids = list({entry["user_id"] for entry in entries if entry.get("user_id")})
+    profiles_map = {}
+    if user_ids:
+        profiles_result = supabase.table("profiles").select("id, name, phone").in_("id", user_ids).execute()
+        profiles_map = {p["id"]: p for p in (profiles_result.data or [])}
 
     queue_items = []
     for i, entry in enumerate(entries, 1):
-        customer = profiles_map.get(entry["user_id"], {"name": "Unknown", "phone": ""})
+        if entry.get("is_walk_in"):
+            customer = {"name": WALK_IN_NAME, "phone": ""}  # added at the counter, no account
+        else:
+            customer = profiles_map.get(entry.get("user_id"), {"name": "Unknown", "phone": ""})
 
         ids = list(entry.get("service_ids") or [])
         if not ids and entry.get("service_id"):
@@ -451,6 +514,7 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
 
         queue_items.append({
             **entry,
+            "is_walk_in": bool(entry.get("is_walk_in")),
             "customer_name": customer["name"],
             "customer_phone": customer["phone"],
             "position": i,
@@ -494,7 +558,7 @@ def get_public_shop_queue(shop_id: str) -> dict:
 
     result = (
         supabase.table("queue_entries")
-        .select("token_number, status, service_ids, service_id, total_duration_minutes")
+        .select("*")
         .eq("shop_id", shop_id)
         .in_("status", ["waiting", "serving"])
         .order("token_number")
@@ -531,6 +595,7 @@ def get_public_shop_queue(shop_id: str) -> dict:
             "service_names": service_names,
             "total_duration_minutes": total_dur or avg_wait,
             "position": i,
+            "is_walk_in": bool(entry.get("is_walk_in")),
         })
 
     serving = next((e["token_number"] for e in entries if e["status"] == "serving"), None)
@@ -649,6 +714,8 @@ def _notify_upcoming_customers(shop_id: str, shop_name: str):
     )
 
     for i, entry in enumerate(upcoming.data or [], 2):
+        if not entry.get("user_id"):  # walk-in: nobody to notify
+            continue
         create_notification(
             user_id=entry["user_id"],
             type="almost_there",
@@ -685,6 +752,8 @@ def skip_customer(entry_id: str, owner_id: str) -> dict:
     shop_r = execute_one(supabase.table("shops").select("name").eq("id", skipped["shop_id"]))
     shop_name = shop_r.data["name"] if shop_r.data else "Shop"
 
+    if not skipped.get("user_id"):  # walk-in: nobody to notify
+        return skipped
     create_notification(
         user_id=skipped["user_id"],
         type="skipped",

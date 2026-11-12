@@ -1,3 +1,11 @@
+/// A time from the server (stored in UTC) as the phone's local time, so it is shown the way the
+/// customer lives it (e.g. 10:55 PM in India, not 5:25 PM). A value without a timezone is UTC too.
+DateTime serverTime(String value) {
+  final v = value.trim();
+  final hasZone = RegExp(r'(Z|[+-]\d{2}:?\d{2})$').hasMatch(v);
+  return DateTime.parse(hasZone ? v : '${v}Z').toLocal();
+}
+
 class UserModel {
   final String id;
   final String name;
@@ -176,7 +184,7 @@ class ReviewModel {
       rating: (json['rating'] as num?)?.toInt() ?? 0,
       review: json['review'] as String?,
       userName: json['user_name'] ?? 'Customer',
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: serverTime(json['created_at']),
     );
   }
 }
@@ -234,7 +242,7 @@ class SchemeModel {
       id: json['id'] ?? '',
       title: json['title'] ?? '',
       description: json['description'] ?? '',
-      validUntil: DateTime.parse(json['valid_until']),
+      validUntil: serverTime(json['valid_until']),
     );
   }
 }
@@ -350,6 +358,8 @@ class PublicQueueItem {
   final List<String> serviceNames;
   final int totalDurationMinutes;
   final int position;
+  /// Added by the owner at the counter (no app account) - shown with a "Walk-in" tag.
+  final bool isWalkIn;
 
   const PublicQueueItem({
     required this.tokenNumber,
@@ -357,6 +367,7 @@ class PublicQueueItem {
     required this.serviceNames,
     required this.totalDurationMinutes,
     required this.position,
+    this.isWalkIn = false,
   });
 
   factory PublicQueueItem.fromJson(Map<String, dynamic> json) {
@@ -366,6 +377,7 @@ class PublicQueueItem {
       serviceNames: List<String>.from(json['service_names'] ?? []),
       totalDurationMinutes: json['total_duration_minutes'] ?? 0,
       position: json['position'] ?? 0,
+      isWalkIn: json['is_walk_in'] == true,
     );
   }
 }
@@ -416,7 +428,7 @@ class NotificationModel {
       title: json['title'] ?? '',
       body: json['body'] ?? '',
       shopName: json['shop_name'] ?? '',
-      time: DateTime.parse(json['created_at']),
+      time: serverTime(json['created_at']),
       isRead: json['is_read'] ?? false,
     );
   }
@@ -573,8 +585,8 @@ class VisitHistory {
       tokenNumber: json['token_number'] ?? 0,
       status: json['status'] ?? '',
       serviceName: json['service_name'] as String?,
-      joinedAt: DateTime.parse(json['joined_at']),
-      servedAt: json['served_at'] != null ? DateTime.parse(json['served_at']) : null,
+      joinedAt: serverTime(json['joined_at']),
+      servedAt: json['served_at'] != null ? serverTime(json['served_at']) : null,
       actualServiceMinutes: json['actual_service_minutes'] as int?,
     );
   }

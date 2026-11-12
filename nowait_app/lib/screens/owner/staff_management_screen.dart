@@ -213,14 +213,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.surfaceContainerLow,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
+        // A tab of the owner dashboard (bottom bar), not a pushed page: no back arrow.
+        automaticallyImplyLeading: false,
+        titleSpacing: 20,
         title: Text('Staff Management', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700)),
         actions: [
           IconButton(

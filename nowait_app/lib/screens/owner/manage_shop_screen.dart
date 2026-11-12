@@ -11,6 +11,7 @@ import '../../services/locale_service.dart';
 import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
+import '../../widgets/walk_in_tag.dart';
 import 'subscription_screen.dart';
 import '../../services/notification_service.dart';
 import '../customer/notifications_screen.dart';
@@ -253,6 +254,158 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     }
   }
 
+  /// Add a customer standing at the counter: pick their services, they get the next token and
+  /// show as "Walk-in" in the queue (the server checks the shop is open, subscribed, and that the
+  /// services are this shop's).
+  void _showWalkInSheet() {
+    final services = _shop.services;
+    final selected = <String>{};
+    String? error;
+    bool saving = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (accentContext) => AccentScope(colors: _accent, child: StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final chosen = services.where((s) => selected.contains(s.id)).toList();
+          final total = chosen.fold<double>(0, (sum, s) => sum + s.price);
+          final minutes = chosen.fold<int>(0, (sum, s) => sum + s.durationMinutes);
+
+          Future<void> add() async {
+            if (services.isNotEmpty && selected.isEmpty) {
+              setSheet(() => error = _l.tr('walkInChooseService'));
+              return;
+            }
+            setSheet(() { error = null; saving = true; });
+            try {
+              final res = await QueueService.instance.addWalkIn(
+                _shop.id,
+                services.where((s) => selected.contains(s.id)).map((s) => s.id).toList(),
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (!mounted) return;
+              _toast(_l.tr('walkInAdded', params: {'token': '${res['token_number']}'}));
+              _loadQueue();
+            } on ApiException catch (e) {
+              setSheet(() { error = e.message; saving = false; });
+            } catch (_) {
+              setSheet(() { error = _l.tr('somethingWrong'); saving = false; });
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+              decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Icon(Icons.directions_walk_rounded, color: _accent.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_l.tr('addWalkIn'), style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    services.isEmpty ? _l.tr('walkInNoServices') : _l.tr('walkInSheetHint'),
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 14),
+                  if (services.isNotEmpty)
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: services.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final s = services[i];
+                          final on = selected.contains(s.id);
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: saving
+                                ? null
+                                : () => setSheet(() {
+                                      on ? selected.remove(s.id) : selected.add(s.id);
+                                      error = null;
+                                    }),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: on ? _accent.primary.withValues(alpha: 0.08) : AppColors.surfaceContainerLowest,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    on ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                    color: on ? _accent.primary : AppColors.onSurfaceVariant,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                                        Text('${s.durationMinutes} min',
+                                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant)),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${s.price % 1 == 0 ? s.price.toInt() : s.price.toStringAsFixed(1)}',
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: _accent.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  if (chosen.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _l.tr('walkInSummary', params: {
+                        'count': '${chosen.length}',
+                        'total': total % 1 == 0 ? '${total.toInt()}' : total.toStringAsFixed(1),
+                        'minutes': '$minutes',
+                      }),
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface),
+                    ),
+                  ],
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(error!, style: GoogleFonts.inter(fontSize: 12, color: AppColors.error)),
+                  ],
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: saving
+                        ? const SizedBox(height: 52, child: Center(child: CircularProgressIndicator()))
+                        : GradientButton(label: _l.tr('addToQueue'), icon: Icons.add_rounded, onPressed: add),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      )),
+    );
+  }
+
   void _showMaxSizeSheet() {
     final ctrl = TextEditingController(text: _limit?.toString() ?? '');
     String? error;
@@ -338,9 +491,18 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     SizedBox(
                       width: double.infinity,
                       child: GhostButton(
-                        label: '${_l.tr('resetLimit')}  ·  ${_l.tr('resetLimitHint')}',
+                        label: _l.tr('resetLimit'),
                         onPressed: reset,
-                        icon: Icons.restart_alt_rounded,
+                        icon: Icons.all_inclusive_rounded, // "no limit"
+                      ),
+                    ),
+                    // What "Reset" means, under the button (too long to fit on it)
+                    const SizedBox(height: 6),
+                    Center(
+                      child: Text(
+                        _l.tr('resetLimitHint'),
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
                       ),
                     ),
                   ],
@@ -580,6 +742,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
       final status = entry['status'] as String? ?? 'waiting';
       final entryId = entry['id'] as String? ?? '';
       final pos = entry['position'] as int? ?? 0;
+      final isWalkIn = entry['is_walk_in'] == true;
       final isServing = status == 'serving';
       final isComing = entry['coming_at'] != null;
 
@@ -640,7 +803,22 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(name, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  isWalkIn ? _l.tr('walkInCustomer') : name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurface),
+                                ),
+                              ),
+                              if (isWalkIn) ...[
+                                const SizedBox(width: 6),
+                                const WalkInTag(),
+                              ],
+                            ],
+                          ),
                           Text(
                             isServing ? 'Now serving' : 'Position $pos',
                             style: GoogleFonts.inter(fontSize: 11, color: isServing ? _accent.primary : AppColors.onSurfaceVariant),
@@ -1265,6 +1443,17 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                     ),
                   ],
 
+                  // ── Add a walk-in customer ────────────────────────────────
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: GhostButton(
+                      label: _l.tr('addWalkIn'),
+                      icon: Icons.person_add_alt_1_rounded,
+                      onPressed: _showWalkInSheet,
+                    ),
+                  ),
+
                   // ── Live queue ────────────────────────────────────────────
                   const SizedBox(height: 24),
                   Row(
@@ -1296,7 +1485,9 @@ class _ManageShopScreenState extends State<ManageShopScreen>
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'In queue: ${_shop.queueCount}  ·  Avg wait: ${_shop.avgWaitMinutes} min'
+                            // (No "Avg wait" here: it is the shop's fixed setting, 10 min unless changed in
+                            // Edit Shop, not a measured average.)
+                            'In queue: ${_shop.queueCount}'
                             '${_servingName != null ? '  ·  Serving: $_servingName' : ''}',
                             style: GoogleFonts.inter(fontSize: 11, color: _accent.primary, fontWeight: FontWeight.w600),
                           ),

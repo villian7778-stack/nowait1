@@ -12,6 +12,7 @@ import '../../theme/accent.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/ping_dot.dart';
+import '../../widgets/walk_in_tag.dart';
 import '../../widgets/dashed_circle_painter.dart';
 import '../../widgets/rating_review_sheet.dart';
 import 'shop_details_screen.dart';
@@ -629,7 +630,8 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                               color: AppColors.tertiary, size: 20),
                         ),
                         const SizedBox(width: 12),
-                        Column(
+                        Expanded(
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(_l.tr('nowServing'),
@@ -647,16 +649,22 @@ class _QueueStatusScreenState extends State<QueueStatusScreen>
                                   color: AppColors.onSurface),
                             ),
                           ],
+                          ),
                         ),
-                        const Spacer(),
-                        Text(
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
                           _displayStatusLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: _entry.status == QueueStatus.yourTurn
                                 ? AppColors.tertiary
                                 : AppColors.onSurfaceVariant,
+                          ),
                           ),
                         ),
                       ],
@@ -1047,7 +1055,9 @@ class _QueueListRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1068,6 +1078,7 @@ class _QueueListRow extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (item.isWalkIn) const WalkInTag(),
                           ],
                         ),
                       ],

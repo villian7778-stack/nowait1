@@ -70,6 +70,13 @@ class QueueService {
     await ApiClient.instance.post('/queues/shop/$shopId/limit-request', body: {'action': action});
   }
 
+  /// Owner adds a customer standing at the counter (no app account). They get the next token
+  /// like everyone else; returns the new entry (`token_number`, `service_names`, ...).
+  Future<Map<String, dynamic>> addWalkIn(String shopId, List<String> serviceIds) async {
+    final res = await ApiClient.instance.post('/queues/shop/$shopId/walk-in', body: {'service_ids': serviceIds});
+    return Map<String, dynamic>.from(res as Map);
+  }
+
   Future<void> setMaxSize(String shopId, int? maxSize) async {
     await ApiClient.instance.put('/queues/shop/$shopId/max-size', body: {'max_size': maxSize});
   }

@@ -35,7 +35,8 @@ class QueueEntryResponse(BaseModel):
 
 class QueueListItem(BaseModel):
     id: str
-    user_id: str
+    user_id: Optional[str] = None  # None for a walk-in (no account)
+    is_walk_in: bool = False
     customer_name: str
     customer_phone: str
     token_number: int
@@ -98,6 +99,20 @@ class PublicQueueItem(BaseModel):
     service_names: List[str] = []
     total_duration_minutes: Optional[int] = None
     position: int
+    is_walk_in: bool = False
+
+
+class WalkInRequest(BaseModel):
+    service_ids: List[str] = Field(default=[], max_length=20)
+
+
+class WalkInResponse(BaseModel):
+    id: str
+    token_number: int
+    status: str
+    is_walk_in: bool = True
+    service_names: List[str] = []
+    total_duration_minutes: Optional[int] = None
 
 
 class PublicQueueResponse(BaseModel):

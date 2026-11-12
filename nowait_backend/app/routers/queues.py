@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_current_owner, get_current_user
+from app.rate_limit import per_owner_limit
 from app.schemas.queue import (
     AdvanceQueueResponse,
     CancelQueueResponse,
@@ -12,6 +13,8 @@ from app.schemas.queue import (
     PublicQueueResponse,
     QueueEntryResponse,
     ShopQueueResponse,
+    WalkInRequest,
+    WalkInResponse,
 )
 from app.services import queue_service
 
@@ -54,6 +57,19 @@ def get_public_queue(shop_id: str):
 @router.get("/shop/{shop_id}", response_model=ShopQueueResponse, summary="Get shop queue (owner only)")
 def get_shop_queue(shop_id: str, current_user: dict = Depends(get_current_owner)):
     return queue_service.get_shop_queue(shop_id, current_user["id"])
+
+
+@router.post(
+    "/shop/{shop_id}/walk-in",
+    response_model=WalkInResponse,
+    status_code=201,
+    summary="Add a walk-in customer to the queue (owner only)",
+    dependencies=[Depends(per_owner_limit("walk-in", 30))],
+)
+def add_walk_in(shop_id: str, body: WalkInRequest, current_user: dict = Depends(get_current_owner)):
+    """A customer at the counter, without the app: gets the next token like everyone else and
+    shows as "Walk-in" in the queue."""
+    return queue_service.add_walk_in(shop_id, current_user["id"], body.service_ids)
 
 
 @router.post("/shop/{shop_id}/next", response_model=AdvanceQueueResponse, summary="Serve next customer (owner only)")
