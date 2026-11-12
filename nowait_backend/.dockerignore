@@ -1,0 +1,11 @@
+# Never bake secrets into the image: the container gets them at start-up (docker run --env-file .env)
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+.git/
