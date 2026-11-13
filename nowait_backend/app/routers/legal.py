@@ -101,6 +101,7 @@ owners manage their queue. This policy explains what information we collect, why
 <li><b>Queue activity:</b> the queues you join, your token number, the services you choose, visit times and status, and notifications we send you.</li>
 <li><b>Reviews:</b> star ratings and comments you write about a visit, and reports you make about reviews.</li>
 <li><b>Location:</b> only when you choose to use a location feature (for example picking your shop on the map or finding nearby shops). We do not track your location in the background.</li>
+<li><b>Notifications:</b> if you allow notifications, we keep a code that lets us send alerts to your phone - for example when your turn is near or has come, or (for shop owners) when a customer is on the way. Google delivers these alerts to your phone for us. When you log out, we delete this code and your phone stops getting alerts. You can also turn notifications off at any time in your phone's settings.</li>
 <li><b>Payments (shop owners):</b> payments are processed by Razorpay. We share your name, email and mobile number with Razorpay so its payment screen doesn't have to ask for them, and we receive the payment reference, amount and status. We never see or store your card, UPI or bank details.</li>
 </ul>
 
@@ -115,7 +116,7 @@ owners manage their queue. This policy explains what information we collect, why
 <ul>
 <li><b>The shop you queue at</b> sees your name and mobile number, so it can call you when it is your turn.</li>
 <li><b>Other users</b> see a shop's public details and the first name shown with a review.</li>
-<li><b>Service providers</b> that run parts of the service for us: our hosting and database provider, Razorpay (payments) and Google (sign-in and maps). They may use your information only to provide their service to us.</li>
+<li><b>Service providers</b> that run parts of the service for us: our hosting and database provider, Razorpay (payments) and Google (sign-in, maps and notifications). They may use your information only to provide their service to us.</li>
 <li>We share information with authorities only when the law requires it.</li>
 </ul>
 <p>We do not sell your personal information.</p>

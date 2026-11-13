@@ -195,6 +195,37 @@ void main() {
     }
   });
 
+  testWidgets('Best Rating: every card shows its own rating after the list re-sorts', (tester) async {
+    tester.view.physicalSize = const Size(900, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    // A (no reviews) is first by default; after "Best Rating" B and C move to the top
+    final shops = [
+      _shop('a', 'Shop A'),
+      _shop('b', 'Shop B', rating: 4.5, reviews: 8),
+      _shop('c', 'Shop C', rating: 4.0, reviews: 3),
+    ];
+    await http.runWithClient(() async {
+      await tester.pumpWidget(const MaterialApp(home: CategoryScreen(category: 'Salon', initialCity: 'Pune')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Sort by'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Best Rating').last);
+      await tester.pumpAndSettle();
+
+      Finder card(String name) => find.ancestor(
+          of: find.text(name), matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_ShopListCard'));
+      // Top card is B, and it shows B's rating (it used to show nothing - A's empty rating)
+      expect(tester.getTopLeft(card('Shop B')).dy, lessThan(tester.getTopLeft(card('Shop C')).dy));
+      expect(find.descendant(of: card('Shop B'), matching: find.text('4.5')), findsOneWidget);
+      expect(find.descendant(of: card('Shop B'), matching: find.text('(8)')), findsOneWidget);
+      expect(find.descendant(of: card('Shop C'), matching: find.text('4')), findsOneWidget); // 4.0 is shown as "4"
+      await tester.pumpWidget(const SizedBox());
+    }, () => MockClient((req) async => req.url.path == '/shops'
+        ? http.Response(jsonEncode({'shops': shops, 'total': shops.length}), 200)
+        : _api(req)));
+  });
+
   test('Featured Promotion is ₹10/day everywhere the owner sees it', () {
     expect(PromotionScreen.pricePerDay, 10);
   });

@@ -644,6 +644,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     child: Column(
                       children: filtered
                           .map((shop) => _ShopListCard(
+                                // One card per shop: re-sorting moves cards, it doesn't
+                                // reuse a card (and its rating) for another shop
+                                key: ValueKey(shop.id),
                                 shop: shop,
                                 categoryColor: _categoryColor,
                                 onTap: () => Navigator.push(
@@ -903,6 +906,7 @@ class _ShopListCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ShopListCard({
+    super.key,
     required this.shop,
     required this.categoryColor,
     required this.onTap,

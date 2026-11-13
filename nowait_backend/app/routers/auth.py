@@ -122,5 +122,16 @@ def save_fcm_token(body: dict, current_user: dict = Depends(get_current_user)):
     if not token:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="fcm_token is required")
+    # One phone = one account: if someone else logged in on this phone before, they stop getting
+    # this phone's notifications.
+    supabase.table("profiles").update({"fcm_token": None}).eq("fcm_token", token).neq("id", current_user["id"]).execute()
     supabase.table("profiles").update({"fcm_token": token}).eq("id", current_user["id"]).execute()
     return {"message": "FCM token saved"}
+
+
+@router.delete("/fcm-token", summary="Stop push notifications to this user's phone (logout)")
+def clear_fcm_token(current_user: dict = Depends(get_current_user)):
+    """Called by the app at logout, so the next person on the phone doesn't get this user's alerts."""
+    from app.database import supabase
+    supabase.table("profiles").update({"fcm_token": None}).eq("id", current_user["id"]).execute()
+    return {"message": "FCM token cleared"}

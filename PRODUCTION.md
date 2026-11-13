@@ -101,6 +101,20 @@ Add your domain (e.g. `api.nowaitt.in`) under *Custom Domains* — HTTPS is auto
 **After deploying, open:** `/health` (should say healthy), `/legal/privacy` (should show your
 business name), and `/docs` (should be *Not Found* in production).
 
+### 4a. Push notifications (Firebase)
+
+1. Firebase console → project **nowaitt-37bc5** → ⚙️ Project settings → **Service accounts** → **Generate new private key**.
+   This JSON is a **secret**: never commit it, never paste it in chat.
+2. Copy it to the server (e.g. with WinSCP / `scp`) as `~/firebase-key.json`, then:
+   ```bash
+   cd ~/app/nowait_backend
+   echo "FIREBASE_CREDENTIALS_BASE64=$(base64 -w0 ~/firebase-key.json)" >> .env
+   chmod 600 .env && rm ~/firebase-key.json
+   docker rm -f nowait-backend && docker run -d --name nowait-backend --restart unless-stopped      --env-file .env -p 127.0.0.1:8000:8000 nowait-backend
+   ```
+3. Without it everything still works; queue alerts just stay in-app.
+4. Play Console → **Data safety**: add *Device or other IDs* (the push token) — collected, not shared, purpose *App functionality*, deletable (removed at logout). The privacy policy page already mentions it.
+
 ### 4b. Cloudflare in front of the server (free plan)
 
 Cloudflare blocks floods and bad traffic before they reach the server. Needs your own domain

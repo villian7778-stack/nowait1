@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "47764291117",
+    "project_id": "nowaitt-37bc5",
+    "storage_bucket": "nowaitt-37bc5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:47764291117:android:c046aa793cd438292842a4",
+        "android_client_info": {
+          "package_name": "com.nowaitt.nowaitt_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-xhL95voJVlI1FX_QoANCqx9VpjmnTv4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.database import execute_one, supabase
+from app.services import push_service
 
 
 def create_notification(
@@ -22,6 +23,8 @@ def create_notification(
         "shop_id": shop_id,
     }
     result = supabase.table("notifications").insert(data).execute()
+    # Also to the phone, for the queue alerts (background, never fails this call)
+    push_service.notify_user(user_id, type, title, body, {"shop_id": shop_id})
     return result.data[0] if result.data else {}
 
 

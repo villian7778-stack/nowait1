@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/models.dart';
+import '../../services/new_customer_bell.dart';
 import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_service.dart';
@@ -46,6 +47,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   @override
   void dispose() {
     LocaleService.instance.removeListener(_onLocale);
+    NewCustomerBell.instance.stop();
     super.dispose();
   }
 
@@ -63,7 +65,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         children: [
           _ShopsTab(
             onRefresh: () => setState(() {}),
-            onShopLoaded: (shop) => setState(() => _cachedShop = shop),
+            onShopLoaded: (shop) {
+              setState(() => _cachedShop = shop);
+              // Bell when a customer joins online (sound only; muted from the Profile tab)
+              if (shop != null) NewCustomerBell.instance.start(shop.id);
+            },
           ),
           _AnalyticsTab(shop: _cachedShop),
           _StaffTab(shop: _cachedShop),
@@ -100,18 +106,19 @@ class _OwnerNav extends StatelessWidget {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
               final (active, inactive, label) = items[i];
               final isActive = index == i;
-              return GestureDetector(
+              // Flexible: on a narrow phone the active tab shrinks instead of pushing the others off
+              return Flexible(child: GestureDetector(
                 onTap: () => onTap(i),
                 behavior: HitTestBehavior.opaque,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: EdgeInsets.symmetric(horizontal: isActive ? 24 : 16, vertical: 8),
+                  padding: EdgeInsets.symmetric(horizontal: isActive ? 18 : 14, vertical: 8),
                   decoration: BoxDecoration(
                     gradient: isActive ? Accent.of(context).gradient135 : null,
                     borderRadius: BorderRadius.circular(20),
@@ -122,12 +129,17 @@ class _OwnerNav extends StatelessWidget {
                       Icon(isActive ? active : inactive, color: isActive ? Colors.white : AppColors.onSurfaceVariant, size: 22),
                       if (isActive) ...[
                         const SizedBox(width: 6),
-                        Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                        Flexible(
+                          child: Text(label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                        ),
                       ],
                     ],
                   ),
                 ),
-              );
+              ));
             }),
           ),
         ),
@@ -713,12 +725,16 @@ class _OwnerReviewsSectionState extends State<_OwnerReviewsSection> {
           children: [
             const Icon(Icons.star_rounded, size: 20, color: Color(0xFFF59E0B)),
             const SizedBox(width: 6),
-            Text(
-              'Reviews & Ratings',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
+            Flexible(
+              child: Text(
+                'Reviews & Ratings',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
               ),
             ),
             if (widget.totalReviews > 0) ...[
@@ -1748,6 +1764,34 @@ class _OwnerProfileTab extends StatelessWidget {
               trailing: Text(
                 l.lang == kLangEn ? l.tr('english') : l.lang == kLangHi ? l.tr('hindi') : l.tr('marathi'),
                 style: GoogleFonts.inter(fontSize: 13, color: Accent.of(context).primary, fontWeight: FontWeight.w600),
+              ),
+            ),
+            // New-customer bell on / off (remembered on this phone)
+            ValueListenableBuilder<bool>(
+              valueListenable: NewCustomerBell.instance.enabled,
+              builder: (context, on, _) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+                decoration: BoxDecoration(color: AppColors.surfaceContainerLowest, borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  children: [
+                    Icon(on ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
+                        color: Accent.of(context).primary, size: 22),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l.tr('newCustomerSound'),
+                              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.onSurface)),
+                          Text(l.tr('newCustomerSoundHint'),
+                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    Switch(value: on, onChanged: NewCustomerBell.instance.setEnabled),
+                  ],
+                ),
               ),
             ),
             _tile(context, Icons.help_outline_rounded, l.tr('helpSupport'), () => Navigator.push(

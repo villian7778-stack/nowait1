@@ -1,3 +1,5 @@
+import 'new_customer_bell.dart';
+import 'push_service.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -67,6 +69,9 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // While still logged in: stop this phone getting this user's alerts, and the owner's bell.
+    NewCustomerBell.instance.stop();
+    await PushService.instance.unregister();
     accessToken = null;
     refreshToken = null;
     profile = null;

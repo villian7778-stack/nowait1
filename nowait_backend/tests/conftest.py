@@ -136,5 +136,7 @@ def _razorpay_keys_from_tests_only():
     test mode, so tests that set the older single RAZORPAY_KEY_ID set keep exercising it."""
     from app.config import settings
     blank = {f"RAZORPAY_{m}_{k}": "" for m in ("TEST", "LIVE") for k in ("KEY_ID", "KEY_SECRET", "WEBHOOK_SECRET")}
-    with patch.multiple(settings, RAZORPAY_LIVE=False, **blank):
+    # ...and never send a real push notification from a test
+    with patch.multiple(settings, RAZORPAY_LIVE=False, FIREBASE_CREDENTIALS_BASE64="",
+                        FIREBASE_CREDENTIALS_FILE="", **blank):
         yield

@@ -1,5 +1,8 @@
 # Never bake secrets into the image: the container gets them at start-up (docker run --env-file .env)
 .env
+firebase-key*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
 .env.*
 !.env.example
 venv/

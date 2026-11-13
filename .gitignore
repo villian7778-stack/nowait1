@@ -53,3 +53,8 @@ tmp_*.json
 
 # Production build settings (see nowait_app/release.env.example)
 nowait_app/release.env
+
+# Firebase service-account key (server secret) - never commit
+firebase-key*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json

@@ -337,6 +337,23 @@ class _ShopRatingRowState extends State<ShopRatingRow> {
   @override
   void initState() {
     super.initState();
+    _readFromShop();
+  }
+
+  /// A list that re-sorts (e.g. "Best Rating") can hand this row a different shop: always show
+  /// that shop's rating, never the one it was first created for.
+  @override
+  void didUpdateWidget(ShopRatingRow old) {
+    super.didUpdateWidget(old);
+    if (old.shop.id != widget.shop.id ||
+        old.shop.avgReviewRating != widget.shop.avgReviewRating ||
+        old.shop.reviewCount != widget.shop.reviewCount) {
+      _fetched = false;
+      _readFromShop();
+    }
+  }
+
+  void _readFromShop() {
     _avg = widget.shop.avgReviewRating;
     _count = widget.shop.reviewCount;
     if (_avg == 0.0 && _count == 0) _fetchSummary();
@@ -345,9 +362,11 @@ class _ShopRatingRowState extends State<ShopRatingRow> {
   Future<void> _fetchSummary() async {
     if (_fetched) return;
     _fetched = true;
+    final shopId = widget.shop.id;
     try {
-      final s = await ReviewService.instance.getReviewSummary(widget.shop.id);
-      if (mounted) {
+      final s = await ReviewService.instance.getReviewSummary(shopId);
+      // The row may show another shop by now (list re-sorted): drop this late answer.
+      if (mounted && widget.shop.id == shopId) {
         setState(() {
           _avg = (s['average_rating'] as num?)?.toDouble() ?? 0.0;
           _count = (s['total_reviews'] as num?)?.toInt() ?? 0;

@@ -8,6 +8,8 @@ import 'theme/app_theme.dart';
 import 'services/app_update_service.dart';
 import 'services/auth_service.dart';
 import 'services/locale_service.dart';
+import 'services/new_customer_bell.dart';
+import 'services/push_service.dart';
 import 'services/queue_monitor_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/create_account_screen.dart';
@@ -28,6 +30,7 @@ void main() async {
     AuthService.instance.loadFromStorage(),
     LocaleService.instance.loadFromStorage(),
     AppUpdateService.instance.init(),
+    NewCustomerBell.instance.loadPreference(),
   ]);
   // Only used for Google sign-in + password-recovery deep links — email/password
   // login/register go through the FastAPI backend regardless of this.
@@ -46,6 +49,8 @@ void main() async {
   // Not awaited: a slow or sleeping server must not hold up start-up. If this build is too old
   // the "Update required" screen replaces the app as soon as the answer arrives.
   AppUpdateService.instance.check();
+  // Push notifications: also not awaited - the app works without them.
+  PushService.instance.init();
 }
 
 class NoWaitApp extends StatefulWidget {

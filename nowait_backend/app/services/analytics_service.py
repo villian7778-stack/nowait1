@@ -6,23 +6,28 @@ from fastapi import HTTPException
 from app.database import supabase
 from app.services.staff_service import _is_owner
 
+# Analytics are in India time (the shops are in India; IST has no daylight saving). Times are
+# stored in UTC, so "today", custom days and the peak / hourly hours are all converted here -
+# otherwise "today" starts at 5:30 AM and a 7 PM rush shows as 1 PM.
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
+
+
+def _ist_hour(joined_at: str) -> int:
+    return datetime.fromisoformat(joined_at.replace("Z", "+00:00")).astimezone(IST).hour
+
 
 def _period_start(period: str) -> str:
-    now = datetime.now(timezone.utc)
-    if period == "today":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "week":
-        start = now - timedelta(days=7)
-    elif period == "month":
-        start = now - timedelta(days=30)
-    else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start.isoformat()
+    """Start of the period in India time: today = since midnight, week / month = the last 7 / 30
+    calendar days including today."""
+    midnight = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+    days_back = {"week": 6, "month": 29}.get(period, 0)
+    return (midnight - timedelta(days=days_back)).isoformat()
 
 
 def _parse_day(value: str, end: bool = False) -> datetime:
+    """A YYYY-MM-DD from the app is an India calendar day."""
     try:
-        d = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        d = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=IST)
     except ValueError:
         raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
     return d + timedelta(days=1) if end else d
@@ -32,7 +37,7 @@ def _range_bounds(from_date: Optional[str], to_date: Optional[str]):
     """Returns (start_iso, end_iso_exclusive_or_None) for an inclusive from/to day range."""
     if not from_date and not to_date:
         return None
-    start = _parse_day(from_date) if from_date else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    start = _parse_day(from_date) if from_date else datetime(1970, 1, 1, tzinfo=IST)
     end = _parse_day(to_date, end=True) if to_date else None
     if end and end <= start:
         raise HTTPException(status_code=400, detail="'to_date' must not be before 'from_date'")
@@ -93,11 +98,11 @@ def get_summary(
     cancel_rate = round(total_cancelled / total_joined * 100, 1) if total_joined else 0
     skip_rate = round(total_skipped / total_joined * 100, 1) if total_joined else 0
 
-    # Peak hour: hour with most joins
+    # Peak hour: the India-time hour with most joins
     hour_counts: dict[int, int] = {}
     for e in entries:
         try:
-            hour = datetime.fromisoformat(e["joined_at"].replace("Z", "+00:00")).hour
+            hour = _ist_hour(e["joined_at"])
             hour_counts[hour] = hour_counts.get(hour, 0) + 1
         except Exception:
             pass
@@ -135,14 +140,15 @@ def get_hourly_stats(
         if bounds[1]:
             query = query.lt("joined_at", bounds[1])
     else:
-        query = query.gte("joined_at", (datetime.now(timezone.utc) - timedelta(days=days)).isoformat())
+        midnight = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.gte("joined_at", (midnight - timedelta(days=max(days, 1) - 1)).isoformat())
     result = query.execute()
 
-    # Build hour → count dict (0-23)
+    # India-time hour -> count (0-23)
     hourly: dict[int, int] = {h: 0 for h in range(24)}
     for e in result.data or []:
         try:
-            hour = datetime.fromisoformat(e["joined_at"].replace("Z", "+00:00")).hour
+            hour = _ist_hour(e["joined_at"])
             hourly[hour] = hourly.get(hour, 0) + 1
         except Exception:
             pass

@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # mode's webhook form in the Razorpay dashboard (Settings -> Webhooks), NOT the API secret.
     # See razorpay_service.credentials().
     RAZORPAY_LIVE: bool = False
+    # Push notifications (Firebase Cloud Messaging). The service-account key file, either
+    # base64-encoded on one line (base64 -w0 key.json) or as a path. Empty = push off.
+    FIREBASE_CREDENTIALS_BASE64: str = ""
+    FIREBASE_CREDENTIALS_FILE: str = ""
     RAZORPAY_TEST_KEY_ID: str = ""
     RAZORPAY_TEST_KEY_SECRET: str = ""
     RAZORPAY_TEST_WEBHOOK_SECRET: str = ""
