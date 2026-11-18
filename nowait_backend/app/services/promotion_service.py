@@ -1,5 +1,6 @@
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -7,8 +8,7 @@ from fastapi import HTTPException
 from app.database import execute_one, supabase
 from app.locks import lock_for
 from app.schemas.promotion import PromotionCreate, PromotionUpdate
-from app.services import subscription_service
-from app.services.notification_service import create_notification
+from app.services import push_service, subscription_service
 
 logger = logging.getLogger(__name__)
 
@@ -153,41 +153,68 @@ def create_promotion(shop_id: str, owner_id: str, data: PromotionCreate, paid: b
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create promotion")
 
-    promotion = result.data[0]
-    is_scheme = data.title != "Featured Promotion"
+    # No notification here: schemes never notify, and a paid Featured Promotion is announced
+    # once by announce_elite_promotion() after the payment is activated (payments.py).
+    return result.data[0]
 
-    # Notify ALL customers in the same city as the shop.
-    # scheme type for customer-facing offers; promotion type for featured boosts.
+
+# ── "Elite Promotion" announcement: once per paid promotion ──────────────────
+
+OFFER_ACTIVE_PREFIX = "🎁 Offer active: "  # the app shows an "Offer active" tag for this
+ANNOUNCE_CALL_TO_ACTION = "Open NoWaitt to explore the shop and get your service."
+_ANNOUNCE_BATCH = 500
+_announce_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="elite-announce")
+
+
+def announce_elite_promotion(shop_id: str) -> None:
+    """After a Featured Promotion payment is activated - a new one or an extension, whatever the
+    days (3 / 7 / 15) - tell the customers in the shop's city, once for that payment (in-app +
+    phone). payments._activate runs once per paid order, so a payment is never announced twice. Runs in the background so the owner's payment screen isn't held up,
+    and never raises - the payment is already done."""
+    _announce_pool.submit(_announce_now, shop_id)
+
+
+def _announce_now(shop_id: str) -> int:
+    """Sends the announcement; returns how many customers got it (0 = skipped)."""
     try:
-        city_users_res = (
-            supabase.table("profiles")
-            .select("id")
-            .eq("city", shop_city)
-            .eq("role", "customer")
-            .neq("id", owner_id)
+        shop = execute_one(supabase.table("shops").select("id, name, city, owner_id").eq("id", shop_id)).data
+        if not shop or not (shop.get("city") or "").strip():
+            return 0
+        now = datetime.now(timezone.utc)
+        name = shop.get("name") or "A shop"
+        city = shop["city"].strip()
+        scheme = (
+            supabase.table("promotions").select("title")
+            .eq("shop_id", shop_id).eq("is_active", True).neq("title", FEATURED_TITLE)
+            .gt("valid_until", now.isoformat())
+            .order("created_at", desc=True).limit(1).execute()
+        ).data
+        title = f"⭐ Elite Promotion · {name}"[:100]
+        if scheme:
+            body = f"{OFFER_ACTIVE_PREFIX}{scheme[0]['title']}. {ANNOUNCE_CALL_TO_ACTION}"
+        else:
+            body = f"Now featured in {city}. {ANNOUNCE_CALL_TO_ACTION}"
+
+        # Customers of that city (same city name, any capitals), never the owner
+        pattern = city.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        customers = (
+            supabase.table("profiles").select("id")
+            .ilike("city", pattern).eq("role", "customer").neq("id", shop["owner_id"])
             .execute()
-        )
-        notif_type = "scheme" if is_scheme else "promotion"
-        title_label = "New Scheme" if is_scheme else "Featured Promotion"
-        body_text = f"{data.title}: {data.description[:120]}"
-
-        for row in city_users_res.data or []:
-            uid = row["id"]
-            try:
-                create_notification(
-                    user_id=uid,
-                    type=notif_type,
-                    title=f"{title_label} at {shop_name}",
-                    body=body_text,
-                    shop_name=shop_name,
-                    shop_id=shop_id,
-                )
-            except Exception as e:
-                logger.warning("Failed to notify user %s: %s", uid, e)
+        ).data or []
+        user_ids = [c["id"] for c in customers]
+        for i in range(0, len(user_ids), _ANNOUNCE_BATCH):
+            supabase.table("notifications").insert([
+                {"user_id": uid, "type": "promotion", "title": title, "body": body,
+                 "shop_name": name, "shop_id": shop_id}
+                for uid in user_ids[i:i + _ANNOUNCE_BATCH]
+            ]).execute()
+        push_service.notify_users(user_ids, "promotion", title, body, {"shop_id": shop_id})
+        logger.info("Elite announcement for shop %s sent to %d customers in %s", shop_id, len(user_ids), city)
+        return len(user_ids)
     except Exception as e:
-        logger.warning("Failed to fetch city customers for notifications: %s", e)
-
-    return promotion
+        logger.error("Elite announcement for shop %s failed: %s", shop_id, e)
+        return 0
 
 
 def _parse_dt(value: str) -> datetime:

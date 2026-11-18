@@ -136,9 +136,9 @@ void main() {
         await tester.pumpWidget(MaterialApp(home: ManageShopScreen(shop: _shop())));
         await _settle(tester);
         expect(find.text('No customers in queue'), findsOneWidget);
-        // Above "Live Queue" as always, and again inside the empty-queue box
-        expect(find.text('Add Walk-in Customer'), findsNWidgets(2));
-        final button = find.text('Add Walk-in Customer').last;
+        // One button, above "Live Queue", also when the queue is empty
+        expect(find.text('Add Walk-in Customer'), findsOneWidget);
+        final button = find.text('Add Walk-in Customer');
         await tester.ensureVisible(button);
         await tester.tap(button);
         await _settle(tester);

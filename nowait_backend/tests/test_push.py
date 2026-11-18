@@ -90,7 +90,8 @@ def test_network_trouble_never_raises(push_on):
 
 @pytest.mark.parametrize("kind,pushed", [
     ("your_turn", True), ("almost_there", True), ("skipped", True), ("coming", True),
-    ("scheme", False), ("promotion", False), ("queue_update", False),
+    ("new_customer", True), ("promotion", True),  # promotion = the one-time Elite announcement
+    ("scheme", False), ("queue_update", False),
 ])
 def test_only_queue_alerts_are_pushed(push_on, kind, pushed):
     with patch.object(push_service, "_pool") as pool:

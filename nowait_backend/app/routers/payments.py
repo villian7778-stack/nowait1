@@ -160,7 +160,11 @@ def _activate(txn: dict):
     of leaving a paid-but-never-activated order that can't be retried. Activations for one
     shop run one at a time, so two payments landing together both add their days."""
     with lock_for(f"activate:{txn['shop_id']}"):
-        return _activate_unlocked(txn)
+        result = _activate_unlocked(txn)
+    if txn["purpose"] == "promotion":
+        # Only reached once per order (the paid claim is atomic): tell the city's customers
+        promotion_service.announce_elite_promotion(txn["shop_id"])
+    return result
 
 
 def _activate_unlocked(txn: dict):

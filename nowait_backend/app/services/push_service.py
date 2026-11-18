@@ -25,9 +25,10 @@ from app.database import supabase
 
 logger = logging.getLogger(__name__)
 
-# Alerts that are worth a push. Scheme / promotion announcements stay in-app (they go to every
-# customer in a city - pushing them would be spam).
-PUSH_TYPES = {"your_turn", "almost_there", "skipped", "coming", "new_customer"}
+# Alerts that are worth a push. Schemes are never announced; "promotion" is the one-time
+# "Elite Promotion" announcement after an owner pays for one (promotion_service), at most once
+# per shop per day.
+PUSH_TYPES = {"your_turn", "almost_there", "skipped", "coming", "new_customer", "promotion"}
 
 # Must match the channels the app creates (lib/services/push_service.dart).
 ANDROID_CHANNEL_ID = "nowait_alerts"
@@ -134,6 +135,22 @@ def _owner_alert_row(user_id: str) -> list:
         return supabase.table("profiles").select("fcm_token, new_customer_alerts").eq("id", user_id).limit(1).execute().data
     except Exception:
         return supabase.table("profiles").select("fcm_token").eq("id", user_id).limit(1).execute().data
+
+
+def notify_users(user_ids: list, kind: str, title: str, body: str, data: dict | None = None) -> None:
+    """The same push to many users (announcements): phone codes are looked up 200 at a time,
+    and the messages go out on the background pool. Never raises."""
+    if not user_ids or kind not in PUSH_TYPES or not enabled():
+        return
+    payload = {"type": kind, **(data or {})}
+    for i in range(0, len(user_ids), 200):
+        try:
+            rows = supabase.table("profiles").select("fcm_token").in_("id", user_ids[i:i + 200]).execute().data
+        except Exception as e:
+            logger.warning("Push announcement: phone codes not loaded: %s", e.__class__.__name__)
+            continue
+        for token in {r.get("fcm_token") for r in rows or [] if r.get("fcm_token")}:
+            _pool.submit(send_now, token, title, body, payload)
 
 
 def notify_user(user_id: str | None, kind: str, title: str, body: str, data: dict | None = None) -> None:

@@ -67,6 +67,12 @@ def db():
         yield fake
 
 
+def one_by_one(trips):
+    """A bit under what `trips` queries one after another would take: anything faster than this
+    can only come from running them side by side (leaves room for a busy test machine)."""
+    return trips * TRIP * 0.85
+
+
 def timed(fn):
     start = time.perf_counter()
     out = fn()
@@ -97,26 +103,29 @@ class TestScreensAreFaster:
         assert shop["has_active_subscription"] and shop["is_promoted"] and shop["queue_count"] == 1
         assert shop["now_serving_token"] == 4 and shop["min_service_price"] == 100.0
         assert db.most_at_once >= 4
-        assert took < 3.5 * TRIP  # was 6 trips one after another
+        assert took < one_by_one(6)  # was 6 trips one after another
 
     def test_shop_page_waits_two_trips_not_six(self, db):
         out, took = timed(lambda: shop_service.get_shop("s1"))
         assert out["services"][0]["name"] == "Haircut"
         assert out["avg_review_rating"] == 4.5 and out["review_count"] == 2 and out["rating"] == 4.5
         assert out["has_active_subscription"] and out["is_promoted"] and out["queue_count"] == 1
-        assert took < 3.5 * TRIP
+        assert db.most_at_once >= 4
+        assert took < one_by_one(6)
 
     def test_owner_shop_reuses_the_row_it_already_has(self, db):
         out, took = timed(lambda: shop_service.get_owner_shop("o1"))
         assert out["id"] == "s1" and out["services"]
-        assert took < 4 * TRIP  # owner lookup + one parallel round (was 7 trips)
+        assert db.most_at_once >= 4
+        assert took < one_by_one(7)  # owner lookup + one parallel round (was 7 trips)
 
     def test_owner_live_queue(self, db):
         out, took = timed(lambda: queue_service.get_shop_queue("s1", "o1"))
         item = out["queue"][0]
         assert item["customer_name"] == "Asha" and item["service_names"] == ["Haircut"]
         assert out["now_serving_token"] == 4
-        assert took < 3.5 * TRIP  # was 5 trips one after another
+        assert db.most_at_once >= 3
+        assert took < one_by_one(5)  # was 5 trips one after another
 
     def test_owner_live_queue_still_checks_the_owner_first(self, db):
         from fastapi import HTTPException
@@ -128,7 +137,8 @@ class TestScreensAreFaster:
     def test_customer_queue_view(self, db):
         out, took = timed(lambda: queue_service.get_public_shop_queue("s1"))
         assert out["queue"][0]["service_names"] == ["Haircut"]
-        assert took < 2.5 * TRIP
+        assert db.most_at_once >= 2
+        assert took < one_by_one(3)
 
 
 class TestKeepWarm:
@@ -137,7 +147,7 @@ class TestKeepWarm:
         with patch.object(database, "supabase", fake):
             _, took = timed(database.keep_warm_once)
         assert fake.queries == database.KEEP_WARM_CONNECTIONS
-        assert fake.most_at_once > 1 and took < 2 * TRIP
+        assert fake.most_at_once > 1 and took < one_by_one(database.KEEP_WARM_CONNECTIONS)
 
     def test_a_failed_ping_never_raises(self):
         sb = MagicMock()

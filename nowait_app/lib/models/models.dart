@@ -438,6 +438,10 @@ class NotificationModel {
 
 enum NotificationType { yourTurn, almostThere, skipped, promotion, scheme, coming, newCustomer }
 
+/// The server starts an Elite Promotion announcement's text with this when the shop also has an
+/// offer running (promotion_service.OFFER_ACTIVE_PREFIX): the app then shows an "Offer active" tag.
+const offerActivePrefix = '🎁 Offer active: ';
+
 // ── Staff ─────────────────────────────────────────────────────────────────────
 
 class StaffMember {

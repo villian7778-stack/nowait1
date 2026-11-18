@@ -737,17 +737,8 @@ class _ManageShopScreenState extends State<ManageShopScreen>
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: AppColors.surfaceContainerLowest, borderRadius: BorderRadius.circular(14)),
-          child: Column(
-            children: [
-              Text('No customers in queue', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
-              const SizedBox(height: 12),
-              // Empty queue is exactly when a walk-in is likely: offer it right here too
-              GhostButton(
-                label: _l.tr('addWalkIn'),
-                icon: Icons.person_add_alt_1_rounded,
-                onPressed: _showWalkInSheet,
-              ),
-            ],
+          child: Center(
+            child: Text('No customers in queue', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
           ),
         ),
       ];

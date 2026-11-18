@@ -99,7 +99,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_l.tr('queueTab')),
+                  Flexible(child: Text(_l.tr('queueTab'), maxLines: 1, overflow: TextOverflow.ellipsis)),
                   if (unreadQueue > 0) ...[
                     const SizedBox(width: 6),
                     _UnreadBadge(count: unreadQueue),
@@ -112,7 +112,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_l.tr('promotionsTab')),
+                    Flexible(child: Text(_l.tr('promotionsTab'), maxLines: 1, overflow: TextOverflow.ellipsis)),
                     if (unreadPromo > 0) ...[
                       const SizedBox(width: 6),
                       _UnreadBadge(count: unreadPromo),
@@ -332,6 +332,19 @@ class _NotifTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                // Elite Promotion announcement: "★ Elite", plus "Offer active" when the shop has one
+                if (notif.type == NotificationType.promotion) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _Tag(icon: Icons.star_rounded, label: LocaleService.instance.tr('eliteBadge'), gradient: true),
+                      if (notif.body.startsWith(offerActivePrefix))
+                        _Tag(icon: Icons.local_offer_rounded, label: LocaleService.instance.tr('offerActiveTag')),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -346,6 +359,42 @@ class _NotifTile extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool gradient;
+
+  const _Tag({required this.icon, required this.label, this.gradient = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = gradient ? Colors.white : AppColors.tertiary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        gradient: gradient ? AppColors.primaryGradient135 : null,
+        color: gradient ? null : AppColors.tertiaryFixed.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: fg),
+            ),
+          ),
         ],
       ),
     );
