@@ -13,6 +13,7 @@ def create_notification(
     body: str,
     shop_name: str,
     shop_id: Optional[str] = None,
+    push_data: Optional[dict] = None,
 ) -> dict:
     data = {
         "user_id": user_id,
@@ -24,7 +25,7 @@ def create_notification(
     }
     result = supabase.table("notifications").insert(data).execute()
     # Also to the phone, for the queue alerts (background, never fails this call)
-    push_service.notify_user(user_id, type, title, body, {"shop_id": shop_id})
+    push_service.notify_user(user_id, type, title, body, {"shop_id": shop_id, **(push_data or {})})
     return result.data[0] if result.data else {}
 
 

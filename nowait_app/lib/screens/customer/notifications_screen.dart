@@ -64,6 +64,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       NotificationType.almostThere,
       NotificationType.skipped,
       NotificationType.coming,
+      NotificationType.newCustomer,
     };
     final queueNotifs = _notifications.where((n) => _queueTypes.contains(n.type)).toList();
     // Promotions: scheme offers + featured promotion notifications
@@ -268,6 +269,8 @@ class _NotifTile extends StatelessWidget {
         return (Icons.local_offer_outlined, AppColors.primary, AppColors.primary.withValues(alpha: 0.1));
       case NotificationType.coming:
         return (Icons.directions_walk_rounded, AppColors.primary, AppColors.primary.withValues(alpha: 0.1));
+      case NotificationType.newCustomer:
+        return (Icons.person_add_alt_1_rounded, AppColors.tertiary, AppColors.tertiaryFixed.withValues(alpha: 0.3));
     }
   }
 

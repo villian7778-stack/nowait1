@@ -27,10 +27,13 @@ logger = logging.getLogger(__name__)
 
 # Alerts that are worth a push. Scheme / promotion announcements stay in-app (they go to every
 # customer in a city - pushing them would be spam).
-PUSH_TYPES = {"your_turn", "almost_there", "skipped", "coming"}
+PUSH_TYPES = {"your_turn", "almost_there", "skipped", "coming", "new_customer"}
 
-# Must match the channel the app creates (lib/services/push_service.dart).
+# Must match the channels the app creates (lib/services/push_service.dart).
 ANDROID_CHANNEL_ID = "nowait_alerts"
+# Owner "New customer joined": own channel with the shop bell (res/raw/new_customer.mp3).
+NEW_CUSTOMER_CHANNEL_ID = "nowait_new_customer"
+_ANDROID_SOUND = {NEW_CUSTOMER_CHANNEL_ID: "new_customer"}
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
@@ -93,6 +96,7 @@ def send_now(fcm_token: str, title: str, body: str, data: dict | None = None) ->
     creds = _credentials()
     if not creds or not fcm_token:
         return False
+    channel = NEW_CUSTOMER_CHANNEL_ID if (data or {}).get("type") == "new_customer" else ANDROID_CHANNEL_ID
     message = {
         "message": {
             "token": fcm_token,
@@ -100,7 +104,7 @@ def send_now(fcm_token: str, title: str, body: str, data: dict | None = None) ->
             "data": {k: str(v) for k, v in (data or {}).items() if v is not None},
             "android": {
                 "priority": "HIGH",
-                "notification": {"channel_id": ANDROID_CHANNEL_ID, "sound": "default"},
+                "notification": {"channel_id": channel, "sound": _ANDROID_SOUND.get(channel, "default")},
             },
         }
     }
@@ -123,6 +127,15 @@ def send_now(fcm_token: str, title: str, body: str, data: dict | None = None) ->
     return False
 
 
+def _owner_alert_row(user_id: str) -> list:
+    """fcm_token + the owner's mute choice; before migrate_new_customer_alerts.sql has run the
+    column is missing, so fall back to the token alone (alerts on)."""
+    try:
+        return supabase.table("profiles").select("fcm_token, new_customer_alerts").eq("id", user_id).limit(1).execute().data
+    except Exception:
+        return supabase.table("profiles").select("fcm_token").eq("id", user_id).limit(1).execute().data
+
+
 def notify_user(user_id: str | None, kind: str, title: str, body: str, data: dict | None = None) -> None:
     """Queue a push for this user's phone, if this alert type is pushed, push is configured and
     the user allowed notifications. Never raises, never blocks the caller."""
@@ -137,8 +150,12 @@ def notify_user(user_id: str | None, kind: str, title: str, body: str, data: dic
 
     def work():
         try:
-            row = supabase.table("profiles").select("fcm_token").eq("id", user_id).limit(1).execute().data
-            token = (row or [{}])[0].get("fcm_token")
+            row = (_owner_alert_row(user_id) if kind == "new_customer" else
+                   supabase.table("profiles").select("fcm_token").eq("id", user_id).limit(1).execute().data)
+            profile = (row or [{}])[0]
+            if kind == "new_customer" and profile.get("new_customer_alerts") is False:
+                return  # the owner muted it (Profile tab)
+            token = profile.get("fcm_token")
             if token:
                 send_now(token, title, body, {"type": kind, **(data or {})})
         except Exception as e:  # background work must never crash the pool

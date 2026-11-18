@@ -6,9 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'api_client.dart';
 import 'auth_service.dart';
+import 'new_customer_bell.dart';
 
 /// Push notifications (Firebase Cloud Messaging): "It's your turn", "Almost your turn", "Skipped"
-/// for customers, "I'm coming" for shop owners - also when the app is closed. The server decides
+/// for customers, "I'm coming" and "New customer joined" for shop owners - also when the app is
+/// closed. The server decides
 /// what to send (nowait_backend/app/services/push_service.py).
 ///
 /// After login the phone's FCM token is sent to the server (asking for the notification permission
@@ -21,6 +23,13 @@ class PushService {
 
   /// Must match the channel the server sends to and the manifest's default channel.
   static const channelId = 'nowait_alerts';
+
+  /// Owner "New customer joined": its own channel, so it plays the shop bell
+  /// (android/app/src/main/res/raw/new_customer.mp3, same sound as the in-app bell). Android fixes
+  /// a channel's sound when it is first created - to change the sound later, use a new channel id
+  /// here and in the server's push_service.py.
+  static const newCustomerChannelId = 'nowait_new_customer';
+  static const _newCustomerSound = RawResourceAndroidNotificationSound('new_customer');
 
   /// Tests (and platforms without Firebase) skip all of this.
   @visibleForTesting
@@ -42,14 +51,20 @@ class PushService {
       await _local.initialize(
         settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
       );
-      await _local
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(const AndroidNotificationChannel(
-            channelId,
-            'Queue alerts',
-            description: 'Your turn, almost your turn, and customers on the way',
-            importance: Importance.high,
-          ));
+      final android = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        channelId,
+        'Queue alerts',
+        description: 'Your turn, almost your turn, and customers on the way',
+        importance: Importance.high,
+      ));
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        newCustomerChannelId,
+        'New customers',
+        description: 'Shop owners: a bell when a customer joins your queue',
+        importance: Importance.high,
+        sound: _newCustomerSound,
+      ));
       // With the app open, Android doesn't show a push by itself: show it here.
       _foregroundSub = FirebaseMessaging.onMessage.listen(_showWhileOpen);
       _ready = true;
@@ -75,6 +90,8 @@ class PushService {
       if (perm.authorizationStatus == AuthorizationStatus.denied) return; // their choice: in-app only
       final token = await messaging.getToken();
       if (token != null) await _send(token);
+      // This phone's mute choice for "New customer joined" (owners) follows the account here
+      await NewCustomerBell.instance.syncToServer();
       _tokenRefreshSub ??= messaging.onTokenRefresh.listen((t) {
         if (AuthService.instance.isLoggedIn) _send(t);
       });
@@ -108,18 +125,31 @@ class PushService {
   Future<void> _showWhileOpen(RemoteMessage message) async {
     final n = message.notification;
     if (n == null) return;
+    final newCustomer = message.data['type'] == 'new_customer';
+    // With the owner app open the queue check may already have rung for this customer:
+    // then show it quietly (and if the push came first, the check won't ring again).
+    final sound = !newCustomer || NewCustomerBell.instance.takeFromPush(message.data['queue_entry_id']?.toString());
     try {
       await _local.show(
         id: message.hashCode & 0x7fffffff,
         title: n.title,
         body: n.body,
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            channelId,
-            'Queue alerts',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
+        notificationDetails: NotificationDetails(
+          android: newCustomer
+              ? AndroidNotificationDetails(
+                  newCustomerChannelId,
+                  'New customers',
+                  importance: Importance.high,
+                  priority: Priority.high,
+                  sound: _newCustomerSound,
+                  silent: !sound,
+                )
+              : const AndroidNotificationDetails(
+                  channelId,
+                  'Queue alerts',
+                  importance: Importance.high,
+                  priority: Priority.high,
+                ),
         ),
       );
     } catch (e) {

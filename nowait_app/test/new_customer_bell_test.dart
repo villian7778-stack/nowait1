@@ -91,6 +91,46 @@ void main() {
     expect(rings, 1);
   });
 
+  test('push first: sounds once, and the queue check does not ring again for that customer', () async {
+    queue = [_entry('a')];
+    bell.start('s1', checkNow: false);
+    await check();
+    expect(bell.takeFromPush('b'), isTrue); // push for the new customer: make the sound
+    expect(bell.takeFromPush('b'), isFalse); // the same push again: quiet
+    queue = [...queue, _entry('b')];
+    await check();
+    expect(rings, 0); // already announced by the push
+    queue = [...queue, _entry('c')];
+    await check();
+    expect(rings, 1); // a different new customer still rings
+  });
+
+  test('check first: the push that follows for the same customer is quiet', () async {
+    bell.start('s1', checkNow: false);
+    await check();
+    queue = [_entry('b')];
+    await check();
+    expect(rings, 1);
+    expect(bell.takeFromPush('b'), isFalse);
+  });
+
+  test('a slow check that started before the join does not ring after the push', () async {
+    bell.start('s1', checkNow: false);
+    await check();
+    expect(bell.takeFromPush('b'), isTrue);
+    await check(); // the server answer didn't include "b" yet
+    queue = [_entry('b')];
+    await check();
+    expect(rings, 0);
+  });
+
+  test('muted: the push is quiet; push without an entry id (older server) sounds', () async {
+    expect(bell.takeFromPush(null), isTrue);
+    await bell.setEnabled(false);
+    expect(bell.takeFromPush('x'), isFalse);
+    expect(bell.takeFromPush(null), isFalse);
+  });
+
   test('offline: no ring, no crash', () async {
     bell.start('s1', checkNow: false);
     await http.runWithClient(bell.check, () => MockClient((_) async => throw http.ClientException('offline')));
@@ -120,10 +160,10 @@ void main() {
         for (var i = 0; i < 6; i++) {
           await tester.pump(const Duration(milliseconds: 250));
         }
-        expect(find.text('New customer sound'), findsOneWidget);
-        expect(find.textContaining('Bell when a customer joins'), findsOneWidget);
+        expect(find.text('New customer alerts'), findsOneWidget);
+        expect(find.textContaining('Notification with a bell when a customer joins'), findsOneWidget);
         final toggle = find.descendant(
-            of: find.ancestor(of: find.text('New customer sound'), matching: find.byType(Row)).first,
+            of: find.ancestor(of: find.text('New customer alerts'), matching: find.byType(Row)).first,
             matching: find.byType(Switch));
         await tester.ensureVisible(toggle);
         expect(tester.widget<Switch>(toggle).value, isTrue);

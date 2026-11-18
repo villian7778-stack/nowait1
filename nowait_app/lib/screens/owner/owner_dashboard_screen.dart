@@ -67,7 +67,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             onRefresh: () => setState(() {}),
             onShopLoaded: (shop) {
               setState(() => _cachedShop = shop);
-              // Bell when a customer joins online (sound only; muted from the Profile tab)
+              // Bell when a customer joins online (with the server's push; muted from the Profile tab)
               if (shop != null) NewCustomerBell.instance.start(shop.id);
             },
           ),

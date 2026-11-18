@@ -419,6 +419,8 @@ class NotificationModel {
         type = NotificationType.scheme;
       case 'coming':
         type = NotificationType.coming;
+      case 'new_customer':
+        type = NotificationType.newCustomer;
       default:
         type = NotificationType.yourTurn;
     }
@@ -434,7 +436,7 @@ class NotificationModel {
   }
 }
 
-enum NotificationType { yourTurn, almostThere, skipped, promotion, scheme, coming }
+enum NotificationType { yourTurn, almostThere, skipped, promotion, scheme, coming, newCustomer }
 
 // ── Staff ─────────────────────────────────────────────────────────────────────
 

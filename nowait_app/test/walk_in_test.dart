@@ -126,6 +126,33 @@ void main() {
     }, () => MockClient(server.handle));
   });
 
+  for (final width in [320.0, 420.0]) {
+    testWidgets('empty queue: the Add Walk-in button is still there and works (${width.toInt()} px)', (tester) async {
+      tester.view.physicalSize = Size(width, 2600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final server = _Server()..queue.clear();
+      await http.runWithClient(() async {
+        await tester.pumpWidget(MaterialApp(home: ManageShopScreen(shop: _shop())));
+        await _settle(tester);
+        expect(find.text('No customers in queue'), findsOneWidget);
+        // Above "Live Queue" as always, and again inside the empty-queue box
+        expect(find.text('Add Walk-in Customer'), findsNWidgets(2));
+        final button = find.text('Add Walk-in Customer').last;
+        await tester.ensureVisible(button);
+        await tester.tap(button);
+        await _settle(tester);
+        await tester.tap(find.text('Haircut').last);
+        await tester.pump();
+        await tester.tap(find.text('Add to Queue'));
+        await _settle(tester);
+        expect(server.walkInBodies.single['service_ids'], ['cut']);
+        expect(find.byType(WalkInTag), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      }, () => MockClient(server.handle));
+    });
+  }
+
   testWidgets('customers see walk-ins in the queue with the Walk-in tag', (tester) async {
     tester.view.physicalSize = const Size(420, 2600);
     tester.view.devicePixelRatio = 1.0;

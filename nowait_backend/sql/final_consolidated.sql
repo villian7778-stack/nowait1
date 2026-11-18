@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
 CREATE TABLE IF NOT EXISTS notifications (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    type       TEXT NOT NULL CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'scheme', 'queue_update', 'coming')),
+    type       TEXT NOT NULL CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'scheme', 'queue_update', 'coming', 'new_customer')),
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,
     shop_name  TEXT NOT NULL,
@@ -209,6 +209,8 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email                TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS queue_ban_until      TIMESTAMPTZ;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS queue_ban_categories JSONB DEFAULT '{}';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS fcm_token            TEXT;
+-- Owner's "New customer joined" push on/off (the bell switch on the owner Profile tab)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS new_customer_alerts  BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS state         TEXT DEFAULT '';
 ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours TEXT;
@@ -260,10 +262,10 @@ ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
 ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
     CHECK (plan IN ('basic', 'premium', 'trial'));
 
--- Widen the notifications.type check to include 'scheme' (added after 'promotion')
+-- Widen the notifications.type check: 'scheme' (after 'promotion'), 'new_customer' (owner: a customer joined)
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
-    CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'scheme', 'queue_update', 'coming'));
+    CHECK (type IN ('your_turn', 'almost_there', 'skipped', 'promotion', 'scheme', 'queue_update', 'coming', 'new_customer'));
 
 -- ============================================================
 -- INDEXES

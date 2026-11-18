@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.database import execute_one, supabase
 from app.locks import lock_for
+from app.services import push_service
 from app.services.notification_service import create_notification
 from app.services.staff_service import _is_owner
 
@@ -294,9 +295,34 @@ def join_queue(shop_id: str, user_id: str, service_id: Optional[str] = None, ser
         raise HTTPException(status_code=500, detail="Failed to join queue")
 
     entry = result.data if isinstance(result.data, dict) else result.data[0]
-    shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes").eq("id", shop_id))
+    shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes, owner_id").eq("id", shop_id))
     shop_data = shop.data or {"name": "Unknown", "avg_wait_minutes": 10}
+    _notify_owner_new_customer(shop_id, shop_data, entry, user_id)
     return _build_entry_response(entry, shop_data["name"], avg_wait)
+
+
+def _notify_owner_new_customer(shop_id: str, shop: dict, entry: dict, user_id: str) -> None:
+    """The owner's "New customer joined" notification + push (with the shop bell; the owner can
+    mute the push on the Profile tab). Online joins only - walk-ins are added by the owner. Never
+    fails the join: the customer is already in the queue."""
+    owner_id = shop.get("owner_id")
+    if not owner_id or owner_id == user_id:
+        return
+    try:
+        profile = execute_one(supabase.table("profiles").select("name").eq("id", user_id))
+        name = ((profile.data or {}).get("name") or "").strip() or "A customer"
+        title = "New customer joined"
+        body = f"Token #{entry.get('token_number')} · {name} joined your queue"
+        # the app uses the entry id so the open owner app doesn't ring twice for one customer
+        data = {"queue_entry_id": entry.get("id")}
+        try:
+            create_notification(owner_id, "new_customer", title, body, shop.get("name") or "", shop_id, push_data=data)
+        except Exception as e:
+            # e.g. migrate_new_customer_alerts.sql not run yet (type not allowed): still push
+            logger.warning("Owner new-customer notification not saved (shop=%s): %s", shop_id, e)
+            push_service.notify_user(owner_id, "new_customer", title, body, {"shop_id": shop_id, **data})
+    except Exception as e:
+        logger.warning("Owner new-customer alert failed (shop=%s): %s", shop_id, e)
 
 
 # ── customer status ───────────────────────────────────────────────────────────

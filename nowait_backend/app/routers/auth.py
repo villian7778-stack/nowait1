@@ -129,6 +129,22 @@ def save_fcm_token(body: dict, current_user: dict = Depends(get_current_user)):
     return {"message": "FCM token saved"}
 
 
+@router.put("/new-customer-alerts", summary="Owner: turn the 'New customer joined' push on/off")
+def set_new_customer_alerts(body: dict, current_user: dict = Depends(get_current_user)):
+    """The bell switch on the owner Profile tab. Only changes the caller's own row."""
+    from fastapi import HTTPException
+    from app.database import supabase
+    enabled = body.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="enabled must be true or false")
+    try:
+        supabase.table("profiles").update({"new_customer_alerts": enabled}).eq("id", current_user["id"]).execute()
+    except Exception:
+        # migrate_new_customer_alerts.sql not run yet: nothing to save, alerts stay on
+        raise HTTPException(status_code=503, detail="Not available yet")
+    return {"new_customer_alerts": enabled}
+
+
 @router.delete("/fcm-token", summary="Stop push notifications to this user's phone (logout)")
 def clear_fcm_token(current_user: dict = Depends(get_current_user)):
     """Called by the app at logout, so the next person on the phone doesn't get this user's alerts."""
