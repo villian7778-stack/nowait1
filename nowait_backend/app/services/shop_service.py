@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import HTTPException
 
-from app.database import execute_one, supabase
+from app.database import execute_one, run_parallel, supabase
 from app.locks import lock_for
 from app.schemas.shop import ShopCreate, ShopUpdate
 from app.services import review_service
@@ -58,11 +58,21 @@ def _get_queue_stats(shop_id: str) -> dict:
 
 
 def _enrich_shop(shop: dict) -> dict:
-    has_sub = _has_active_subscription(shop["id"])
-    active_promotions = _get_active_promotions(shop["id"])
+    return _enrich_shop_with(shop)[0]
+
+
+def _enrich_shop_with(shop: dict, extra: tuple = ()) -> tuple:
+    """(the shop with its subscription / promotion / queue status, plus the results of `extra`
+    (more no-argument query functions)) - all fetched at the same time."""
+    sid = shop["id"]
+    has_sub, active_promotions, stats, *extra_results = run_parallel(
+        lambda: _has_active_subscription(sid),
+        lambda: _get_active_promotions(sid),
+        lambda: _get_queue_stats(sid),
+        *extra,
+    )
     # is_promoted = shop paid for a visibility boost (title == "Featured Promotion")
     is_promoted = any(p.get("title") == _PROMOTION_BOOST_TITLE for p in active_promotions)
-    stats = _get_queue_stats(shop["id"])
     return {
         **shop,
         # A shop without an active subscription is never shown as open
@@ -72,7 +82,7 @@ def _enrich_shop(shop: dict) -> dict:
         "is_promoted": is_promoted,
         "active_promotions": active_promotions,
         **stats,
-    }
+    }, extra_results
 
 
 def _price_range(prices: list) -> dict:
@@ -100,57 +110,65 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
     shop_ids = [s["id"] for s in raw_shops]
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Batch query 1: active subscriptions
-    sub_result = (
-        supabase.table("subscriptions")
-        .select("shop_id")
-        .in_("shop_id", shop_ids)
-        .eq("status", "active")
-        .gt("expires_at", now_iso)
-        .execute()
-    )
+    # The five batch queries below don't depend on each other: run them at the same time
+    def subscriptions():
+        return (
+            supabase.table("subscriptions")
+            .select("shop_id")
+            .in_("shop_id", shop_ids)
+            .eq("status", "active")
+            .gt("expires_at", now_iso)
+            .execute()
+        )
+
+    def promotions():
+        return (
+            supabase.table("promotions")
+            .select("*")
+            .in_("shop_id", shop_ids)
+            .eq("is_active", True)
+            .gt("valid_until", now_iso)
+            .execute()
+        )
+
+    def queues():
+        return (
+            supabase.table("queue_entries")
+            .select("shop_id, token_number, status")
+            .in_("shop_id", shop_ids)
+            .in_("status", ["waiting", "serving"])
+            .execute()
+        )
+
+    def reviews():
+        try:
+            return review_service.get_batch_review_summaries(shop_ids)
+        except Exception as e:
+            logger.error("get_batch_review_summaries failed: %s", e)
+            return {}
+
+    def prices():
+        # service prices, so the app can sort shops by their cheapest / dearest service
+        return (
+            supabase.table("services")
+            .select("shop_id, price")
+            .in_("shop_id", shop_ids)
+            .execute()
+        )
+
+    sub_result, promo_result, queue_result, review_summaries, price_result = run_parallel(
+        subscriptions, promotions, queues, reviews, prices)
+
     shops_with_sub = {r["shop_id"] for r in (sub_result.data or [])}
 
-    # Batch query 2: active promotions
-    promo_result = (
-        supabase.table("promotions")
-        .select("*")
-        .in_("shop_id", shop_ids)
-        .eq("is_active", True)
-        .gt("valid_until", now_iso)
-        .execute()
-    )
     promos_by_shop: dict = {}
     for p in (promo_result.data or []):
         promos_by_shop.setdefault(p["shop_id"], []).append(p)
 
-    # Batch query 3: queue stats
-    queue_result = (
-        supabase.table("queue_entries")
-        .select("shop_id, token_number, status")
-        .in_("shop_id", shop_ids)
-        .in_("status", ["waiting", "serving"])
-        .execute()
-    )
     queue_by_shop: dict = {}
     for e in (queue_result.data or []):
         queue_by_shop.setdefault(e["shop_id"], []).append(e)
 
-    # Batch query 4: review summaries
-    try:
-        review_summaries = review_service.get_batch_review_summaries(shop_ids)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error("get_batch_review_summaries failed: %s", e)
-        review_summaries = {}
-
-    # Batch query 5: service prices, so the app can sort shops by their cheapest / dearest service
-    price_result = (
-        supabase.table("services")
-        .select("shop_id, price")
-        .in_("shop_id", shop_ids)
-        .execute()
-    )
     prices_by_shop: dict = {}
     for s in (price_result.data or []):
         if s.get("price") is not None:
@@ -187,19 +205,20 @@ def list_shops(city: Optional[str] = None, category: Optional[str] = None, open_
     return {"shops": shops, "total": len(shops)}
 
 
-def get_shop(shop_id: str) -> dict:
-    result = execute_one(supabase.table("shops").select("*").eq("id", shop_id))
-    if not result.data:
+def get_shop(shop_id: str, row: Optional[dict] = None) -> dict:
+    """`row`: the shops row when the caller already has it (saves one round trip)."""
+    if row is None:
+        row = execute_one(supabase.table("shops").select("*").eq("id", shop_id)).data
+    if not row:
         raise HTTPException(status_code=404, detail="Shop not found")
-    shop = _enrich_shop(result.data)  # already includes active_promotions
-
-    # Get services
-    svc_result = supabase.table("services").select("*").eq("shop_id", shop_id).execute()
+    # status, services and reviews all at once
+    shop, (svc_result, rev) = _enrich_shop_with(row, extra=(
+        lambda: supabase.table("services").select("*").eq("shop_id", shop_id).execute(),
+        lambda: review_service.get_review_summary(shop_id),
+    ))
     shop["services"] = svc_result.data or []
     shop.update(_price_range([float(s["price"]) for s in shop["services"] if s.get("price") is not None]))
 
-    # Include review summary
-    rev = review_service.get_review_summary(shop_id)
     shop["avg_review_rating"] = rev["average_rating"]
     shop["review_count"] = rev["total_reviews"]
     shop["rating"] = rev["average_rating"]
@@ -210,7 +229,7 @@ def get_owner_shop(owner_id: str) -> dict:
     result = execute_one(supabase.table("shops").select("*").eq("owner_id", owner_id))
     if not result.data:
         raise HTTPException(status_code=404, detail="No shop found for this owner")
-    return get_shop(result.data["id"])
+    return get_shop(result.data["id"], row=result.data)
 
 
 _ONE_SHOP_MESSAGE = "You already have a shop. Use update to modify it."

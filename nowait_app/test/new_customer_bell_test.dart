@@ -131,6 +131,41 @@ void main() {
     expect(bell.takeFromPush(null), isFalse);
   });
 
+  test('Manage Shop hands over its queue: rings for a new customer, and the bell skips its own request', () async {
+    var requests = 0;
+    bell.start('s1', checkNow: false);
+    bell.feed('s1', {'queue': [_entry('a')]}); // first look: already waiting
+    expect(rings, 0);
+    bell.feed('s1', {'queue': [_entry('a'), _entry('b')]});
+    expect(rings, 1);
+    await http.runWithClient(bell.check, () => MockClient((_) async {
+      requests++;
+      return http.Response(jsonEncode({'queue': queue}), 200);
+    }));
+    expect(requests, 0); // Manage Shop just looked: no second request
+    bell.feed('s1', {'queue': [_entry('a'), _entry('b')]});
+    expect(rings, 1);
+  });
+
+  test('an older answer arriving late does not ring again for a customer already announced', () async {
+    bell.start('s1', checkNow: false);
+    bell.feed('s1', {'queue': <Map<String, dynamic>>[]});
+    bell.feed('s1', {'queue': [_entry('b')]});
+    expect(rings, 1);
+    bell.feed('s1', {'queue': <Map<String, dynamic>>[]}); // stale answer without "b"
+    bell.feed('s1', {'queue': [_entry('b')]});
+    expect(rings, 1);
+  });
+
+  test("another shop's queue or a muted bell is ignored", () async {
+    bell.start('s1', checkNow: false);
+    bell.feed('s1', {'queue': <Map<String, dynamic>>[]});
+    bell.feed('other', {'queue': [_entry('x')]});
+    await bell.setEnabled(false);
+    bell.feed('s1', {'queue': [_entry('y')]});
+    expect(rings, 0);
+  });
+
   test('offline: no ring, no crash', () async {
     bell.start('s1', checkNow: false);
     await http.runWithClient(bell.check, () => MockClient((_) async => throw http.ClientException('offline')));

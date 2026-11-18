@@ -174,8 +174,14 @@ class _ShopsTabState extends State<_ShopsTab> {
   void initState() {
     super.initState();
     _loadShop();
-    // Refresh shop queue count every 10 seconds so the card stays live
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadShop());
+    // Refresh shop queue count every 10 seconds so the card stays live - only while the
+    // dashboard is on screen (not under Manage Shop etc.) and the app is open
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      final life = WidgetsBinding.instance.lifecycleState;
+      if (life != null && life != AppLifecycleState.resumed) return;
+      _loadShop();
+    });
   }
 
   @override

@@ -106,6 +106,15 @@ async def require_cloudflare(request: Request, call_next):
     return await call_next(request)
 
 
+
+
+@app.on_event("startup")
+def _warm_up_database() -> None:
+    # Keeps the connections to Supabase open, so the first request after a quiet spell is fast
+    from app.database import start_keep_warm
+    start_keep_warm()
+
+
 app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(reviews.router)

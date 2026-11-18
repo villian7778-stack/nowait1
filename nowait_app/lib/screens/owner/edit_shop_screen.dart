@@ -15,6 +15,7 @@ import '../../services/location_service.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/location_picker_widget.dart';
 import '../../widgets/searchable_picker_sheet.dart';
+import '../../widgets/shop_photo.dart';
 
 class EditShopScreen extends StatefulWidget {
   final ShopModel shop;
@@ -634,12 +635,11 @@ class _EditShopScreenState extends State<EditShopScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
-                                      child: Image.network(
+                                      child: ShopPhoto(
                                         url,
-                                        fit: BoxFit.cover,
                                         width: double.infinity,
                                         height: double.infinity,
-                                        errorBuilder: (_, __, ___) => Container(
+                                        fallback: () => Container(
                                           decoration: BoxDecoration(
                                             color: AppColors.surfaceContainerLow,
                                             borderRadius: BorderRadius.circular(12),

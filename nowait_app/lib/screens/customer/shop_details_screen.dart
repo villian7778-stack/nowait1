@@ -14,6 +14,7 @@ import '../../services/location_service.dart';
 import 'join_queue_sheet.dart';
 import 'reviews_screen.dart';
 import 'token_screen.dart';
+import '../../widgets/shop_photo.dart';
 
 class ShopDetailsScreen extends StatefulWidget {
   final ShopModel? shop;
@@ -156,18 +157,15 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                         onPageChanged: (i) => setState(() => _currentImage = i),
                         itemBuilder: (_, i) {
                           if (shop.images.isNotEmpty) {
-                            return Image.network(
+                            return ShopPhoto(
                               shop.images[i],
-                              fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
-                              loadingBuilder: (_, child, progress) => progress == null
-                                  ? child
-                                  : Container(
-                                      color: AppColors.surfaceContainerLow,
-                                      child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _accent.primary)),
-                                    ),
-                              errorBuilder: (_, __, ___) => _placeholderPage(shop, i),
+                              loading: () => Container(
+                                color: AppColors.surfaceContainerLow,
+                                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: _accent.primary)),
+                              ),
+                              fallback: () => _placeholderPage(shop, i),
                             );
                           }
                           return _placeholderPage(shop, i);

@@ -15,6 +15,7 @@ import '../../widgets/walk_in_tag.dart';
 import 'subscription_screen.dart';
 import '../../services/notification_service.dart';
 import '../customer/notifications_screen.dart';
+import '../../services/new_customer_bell.dart';
 
 class ManageShopScreen extends StatefulWidget {
   final ShopModel shop;
@@ -58,8 +59,14 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     _loadQueue();
     _loadUnreadCount();
     _loadSubscriptionExpiry();
-    // Auto-refresh queue every 5 seconds so new customers appear quickly
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadQueue());
+    // Auto-refresh queue every 5 seconds so new customers appear quickly - only while this
+    // screen is the one on top and the app is open (no requests from the background)
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      final life = WidgetsBinding.instance.lifecycleState;
+      if (life != null && life != AppLifecycleState.resumed) return;
+      _loadQueue();
+    });
   }
 
   @override
@@ -109,6 +116,7 @@ class _ManageShopScreenState extends State<ManageShopScreen>
     setState(() => _loadingQueue = true);
     try {
       final res = await QueueService.instance.getShopQueue(_shop.id);
+      NewCustomerBell.instance.feed(_shop.id, res); // the bell needn't ask the server again
       final raw = res['queue'] as List? ?? (res['entries'] as List? ?? []);
       if (mounted) {
         setState(() {

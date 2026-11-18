@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 import '../../widgets/auto_scroll.dart';
 import 'shop_details_screen.dart';
+import '../../widgets/shop_photo.dart';
 
 /// Promoted shops (paid "Featured Promotion", subscription active) from [shops], in random order.
 /// The home screen calls this on every load so each promoted shop gets a fair turn at the front.
@@ -226,7 +227,7 @@ class FeaturedShopCard extends StatelessWidget {
                 child: Icon(CategoryTheme.icon(shop.category), size: width * 0.5, color: color.withValues(alpha: 0.06)),
               ),
               Padding(
-          padding: const EdgeInsets.fromLTRB(9, 9, 9, 8),
+          padding: const EdgeInsets.fromLTRB(9, 8, 9, 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -239,10 +240,9 @@ class FeaturedShopCard extends StatelessWidget {
                       width: _thumb,
                       height: _thumb,
                       child: shop.images.isNotEmpty
-                          ? Image.network(
+                          ? ShopPhoto(
                               shop.images.first,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _placeholder(color),
+                              fallback: () => _placeholder(color),
                             )
                           : _placeholder(color),
                     ),
@@ -274,7 +274,7 @@ class FeaturedShopCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 3),
               // Address
               Row(
                 children: [
@@ -290,7 +290,7 @@ class FeaturedShopCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 3),
               // Rating, with the "Offer" badge right beside it when a scheme is running
               Row(
                 children: [

@@ -30,7 +30,8 @@ class NewCustomerBell with WidgetsBindingObserver {
   String? _shopId;
   Timer? _timer;
   Set<String>? _seen; // ids already in the queue; null = not checked yet
-  final Set<String> _pushed = {}; // ids a push already announced (a slow check mustn't ring again)
+  final Set<String> _pushed = {}; // ids already announced (push or bell): never ring for them again
+  DateTime? _lastFed; // Manage Shop handed us its queue at this time
   bool _foreground = true;
   bool _observing = false;
   bool _checking = false;
@@ -102,6 +103,7 @@ class NewCustomerBell with WidgetsBindingObserver {
     _shopId = null;
     _seen = null;
     _pushed.clear();
+    _lastFed = null;
     if (_observing) {
       WidgetsBinding.instance.removeObserver(this);
       _observing = false;
@@ -123,30 +125,48 @@ class NewCustomerBell with WidgetsBindingObserver {
     if (checkNow) check();
   }
 
+  /// Manage Shop already loads this shop's queue every few seconds: it hands the answer here, so
+  /// the bell doesn't ask the server for the same thing again.
+  void feed(String shopId, Map<String, dynamic> res) {
+    if (shopId != _shopId || !enabled.value) return;
+    _lastFed = DateTime.now();
+    _process(shopId, res);
+  }
+
   /// One check of the queue. Public for tests.
   @visibleForTesting
   Future<void> check() async {
     final shopId = _shopId;
     if (shopId == null || !enabled.value || _checking) return;
+    final fed = _lastFed;
+    if (fed != null && DateTime.now().difference(fed) < interval) return; // Manage Shop just looked
     _checking = true;
     try {
-      final res = await QueueService.instance.getShopQueue(shopId);
-      final queue = (res['queue'] as List? ?? const [])
-          .whereType<Map>()
-          .where((e) => e['is_walk_in'] != true) // the owner added those: no bell
-          .map((e) => e['id']?.toString())
-          .whereType<String>()
-          .toSet();
-      final seen = _seen;
-      final fresh = seen == null ? const <String>{} : queue.difference(seen).difference(_pushed);
-      if (fresh.isNotEmpty && enabled.value && _shopId == shopId) {
-        await ring();
-      }
-      _seen = queue;
+      _process(shopId, await QueueService.instance.getShopQueue(shopId));
     } catch (_) {
       // offline / server asleep: try again next time
     } finally {
       _checking = false;
+    }
+  }
+
+  void _process(String shopId, Map<String, dynamic> res) {
+    final queue = (res['queue'] as List? ?? const [])
+        .whereType<Map>()
+        .where((e) => e['is_walk_in'] != true) // the owner added those: no bell
+        .map((e) => e['id']?.toString())
+        .whereType<String>()
+        .toSet();
+    final seen = _seen;
+    final fresh = seen == null ? const <String>{} : queue.difference(seen).difference(_pushed);
+    _seen = queue;
+    if (fresh.isNotEmpty && enabled.value && _shopId == shopId) {
+      // remembered, so an older answer arriving late can't ring for them again
+      _pushed.addAll(fresh);
+      while (_pushed.length > 200) {
+        _pushed.remove(_pushed.first);
+      }
+      ring();
     }
   }
 

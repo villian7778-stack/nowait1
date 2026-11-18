@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from app.database import execute_one, supabase
+from app.database import execute_one, run_parallel, supabase
 from app.locks import lock_for
 from app.services import push_service
 from app.services.notification_service import create_notification
@@ -345,10 +345,19 @@ def get_my_queue_status(user_id: str, shop_id: Optional[str] = None) -> list:
         query = query.eq("shop_id", shop_id)
 
     result = query.execute()
+    rows = result.data or []
+    # All their shops in one query (this is polled every 10 s by the app)
+    shop_ids = list({e["shop_id"] for e in rows})
+    shops = {}
+    if shop_ids:
+        shops_result = (
+            supabase.table("shops").select("id, name, avg_wait_minutes, latitude, longitude")
+            .in_("id", shop_ids).execute()
+        )
+        shops = {s["id"]: s for s in (shops_result.data or [])}
     enriched = []
-    for entry in result.data or []:
-        shop = execute_one(supabase.table("shops").select("name, avg_wait_minutes, latitude, longitude").eq("id", entry["shop_id"]))
-        shop_data = shop.data or {"name": "Unknown", "avg_wait_minutes": 10}
+    for entry in rows:
+        shop_data = shops.get(entry["shop_id"]) or {"name": "Unknown", "avg_wait_minutes": 10}
         avg = shop_data["avg_wait_minutes"]
         response = _build_entry_response(entry, shop_data["name"], avg)
         response["shop_latitude"] = shop_data.get("latitude")
@@ -485,21 +494,24 @@ def add_walk_in(shop_id: str, owner_id: str, service_ids: list) -> dict:
 
 
 def get_shop_queue(shop_id: str, owner_id: str) -> dict:
-    if not _is_owner(shop_id, owner_id):
+    # The owner app asks every few seconds: the independent queries run at the same time
+    # (nothing is returned before the owner check below passes).
+    is_owner, shop, result = run_parallel(
+        lambda: _is_owner(shop_id, owner_id),
+        lambda: execute_one(supabase.table("shops").select("id, name, is_open, queue_paused, max_queue_size").eq("id", shop_id)),
+        lambda: (
+            supabase.table("queue_entries")
+            .select("*")
+            .eq("shop_id", shop_id)
+            .in_("status", ["waiting", "serving"])
+            .order("token_number")
+            .execute()
+        ),
+    )
+    if not is_owner:
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    shop = execute_one(supabase.table("shops").select("id, name, is_open, queue_paused, max_queue_size").eq("id", shop_id))
     if not shop.data:
         raise HTTPException(status_code=404, detail="Shop not found")
-
-    result = (
-        supabase.table("queue_entries")
-        .select("*")
-        .eq("shop_id", shop_id)
-        .in_("status", ["waiting", "serving"])
-        .order("token_number")
-        .execute()
-    )
     entries = result.data or []
 
     # Collect all service IDs for a single batch fetch
@@ -510,17 +522,14 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
             ids = [entry["service_id"]]
         all_service_ids.extend(ids)
 
-    services_map = {}
-    if all_service_ids:
-        svcs = _fetch_services_by_ids(list(set(all_service_ids)))
-        services_map = {s["id"]: s for s in svcs}
-
-    # Batch-fetch all customer profiles in one query (avoids N+1)
+    # Services and customer profiles in one batch each (no N+1), both at once
     user_ids = list({entry["user_id"] for entry in entries if entry.get("user_id")})
-    profiles_map = {}
-    if user_ids:
-        profiles_result = supabase.table("profiles").select("id, name, phone").in_("id", user_ids).execute()
-        profiles_map = {p["id"]: p for p in (profiles_result.data or [])}
+    svcs, profiles_result = run_parallel(
+        lambda: _fetch_services_by_ids(list(set(all_service_ids))) if all_service_ids else [],
+        lambda: supabase.table("profiles").select("id, name, phone").in_("id", user_ids).execute() if user_ids else None,
+    )
+    services_map = {s["id"]: s for s in svcs}
+    profiles_map = {p["id"]: p for p in ((profiles_result.data if profiles_result else None) or [])}
 
     queue_items = []
     for i, entry in enumerate(entries, 1):
@@ -576,20 +585,20 @@ def get_shop_queue(shop_id: str, owner_id: str) -> dict:
 # ── public queue view (no auth — customers polling) ───────────────────────────
 
 def get_public_shop_queue(shop_id: str) -> dict:
-    shop = execute_one(
-        supabase.table("shops").select("id, name, is_open, avg_wait_minutes").eq("id", shop_id)
+    shop, result = run_parallel(
+        lambda: execute_one(supabase.table("shops").select("id, name, is_open, avg_wait_minutes").eq("id", shop_id)),
+        lambda: (
+            supabase.table("queue_entries")
+            .select("*")
+            .eq("shop_id", shop_id)
+            .in_("status", ["waiting", "serving"])
+            .order("token_number")
+            .execute()
+        ),
     )
     if not shop.data:
         raise HTTPException(status_code=404, detail="Shop not found")
 
-    result = (
-        supabase.table("queue_entries")
-        .select("*")
-        .eq("shop_id", shop_id)
-        .in_("status", ["waiting", "serving"])
-        .order("token_number")
-        .execute()
-    )
     entries = result.data or []
 
     all_service_ids = []

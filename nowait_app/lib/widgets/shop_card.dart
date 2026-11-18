@@ -10,6 +10,7 @@ import '../screens/customer/reviews_screen.dart';
 import 'locked_shop_card.dart';
 import 'queue_paused_note.dart';
 import 'status_badge.dart';
+import 'shop_photo.dart';
 
 class ShopCard extends StatelessWidget {
   final ShopModel shop;
@@ -57,12 +58,11 @@ class ShopCard extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: shop.images.isNotEmpty
-                      ? Image.network(
+                      ? ShopPhoto(
                           shop.images.first,
                           width: 72,
                           height: 72,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _iconThumbnail(),
+                          fallback: _iconThumbnail,
                         )
                       : _iconThumbnail(),
                 ),

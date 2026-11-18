@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/category_theme.dart';
 import '../../widgets/shop_card.dart' show ShopCard, showSchemeSheet;
 import 'shop_details_screen.dart';
+import '../../widgets/shop_photo.dart';
 
 class SalonListScreen extends StatefulWidget {
   final String? category;
@@ -397,10 +398,9 @@ class _PromotedShopCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (shop.images.isNotEmpty)
-                      Image.network(
+                      ShopPhoto(
                         shop.images.first,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _gradientPlaceholder(),
+                        fallback: _gradientPlaceholder,
                       )
                     else
                       _gradientPlaceholder(),

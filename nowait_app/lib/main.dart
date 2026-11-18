@@ -20,6 +20,7 @@ import 'screens/update_required_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _registerFontLicenses();
   // Never let a release build that points at a development server reach users.
   final configProblem = kReleaseMode ? AppConfig.releaseConfigProblem() : null;
   if (configProblem != null) {
@@ -193,4 +194,16 @@ class _MisconfiguredBuildApp extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// The bundled fonts (assets/google_fonts/) are under the SIL Open Font License, which asks that
+/// the license travels with them: it shows on the app's licenses page.
+void _registerFontLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    for (final (family, file) in [('Inter', 'OFL-Inter.txt'), ('Plus Jakarta Sans', 'OFL-PlusJakartaSans.txt')]) {
+      final text = await rootBundle.loadString('assets/google_fonts/$file');
+      yield LicenseEntryWithLineBreaks([family], text);
+    }
+  });
 }

@@ -13,6 +13,7 @@ import '../../widgets/queue_paused_note.dart';
 import '../../widgets/shop_card.dart' show showSchemeSheet, DirectionsChip, ShopRatingRow;
 import 'featured_section.dart' show shuffledFeaturedShops;
 import 'shop_details_screen.dart';
+import '../../widgets/shop_photo.dart';
 
 IconData _categoryIconFor(String category) => CategoryTheme.icon(category);
 
@@ -747,7 +748,7 @@ class _PromotedShopCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     shop.images.isNotEmpty
-                        ? Image.network(shop.images.first, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder())
+                        ? ShopPhoto(shop.images.first, fallback: placeholder)
                         : placeholder(),
                     Positioned(top: 8, left: 8, child: badge(Icons.star_rounded, LocaleService.instance.tr('eliteBadge'),
                             fill: LinearGradient(colors: shopGradient, begin: Alignment.topLeft, end: Alignment.bottomRight))),
@@ -939,12 +940,11 @@ class _ShopListCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: shop.images.isNotEmpty
-                  ? Image.network(
+                  ? ShopPhoto(
                       shop.images.first,
                       width: 68,
                       height: 68,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _iconThumbnail(categoryColor),
+                      fallback: () => _iconThumbnail(categoryColor),
                     )
                   : _iconThumbnail(categoryColor),
             ),

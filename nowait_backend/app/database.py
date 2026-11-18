@@ -1,4 +1,7 @@
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 from postgrest._sync.client import SyncPostgrestClient
@@ -34,12 +37,17 @@ class _RetryingTransport(httpx.HTTPTransport):
 def _create_session(self, base_url, headers, timeout, verify=True, proxy=None) -> SyncClient:
     # HTTP/1.1 instead of the library's HTTP/2: one dead HTTP/2 connection fails every
     # request multiplexed on it, and idle HTTP/2 connections are what Supabase keeps closing.
+    # Keep idle connections for up to 60 s instead of httpx's 5 s: a new connection to Supabase
+    # (Singapore) costs a TLS handshake, about 0.2 s. keep_warm() below stops them going idle.
     return SyncClient(
         base_url=base_url,
         headers=headers,
         timeout=timeout,
         follow_redirects=True,
-        transport=_RetryingTransport(verify=verify, proxy=proxy),
+        transport=_RetryingTransport(
+            verify=verify, proxy=proxy,
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=60),
+        ),
     )
 
 
@@ -71,3 +79,56 @@ def execute_one(query) -> _OneResult:
         if str(e.code) == "204":
             return _OneResult(None)
         raise
+
+
+# ── speed: independent queries at the same time ───────────────────────────────
+
+# Every query is a round trip to Supabase (about 0.07-0.1 s from Mumbai). A screen's independent
+# queries run side by side here, so it waits for the slowest one instead of the sum. Only plain
+# queries run in this pool - never something that itself calls run_parallel (that could wait on
+# its own pool). The HTTP client is shared and thread-safe.
+_db_pool = ThreadPoolExecutor(max_workers=24, thread_name_prefix="db")
+
+
+def run_parallel(*calls):
+    """Run the given no-argument functions at the same time; returns their results in order.
+    An exception from any of them is raised here, like running them one after another."""
+    if len(calls) <= 1:
+        return [c() for c in calls]
+    futures = [_db_pool.submit(c) for c in calls]
+    return [f.result() for f in futures]
+
+
+# ── speed: keep the connections to Supabase warm ──────────────────────────────
+
+KEEP_WARM_SECONDS = 20
+KEEP_WARM_CONNECTIONS = 6  # about as many as one screen's parallel queries use
+_warm_started = False
+
+
+def _ping() -> None:
+    supabase.table("shops").select("id").limit(1).execute()
+
+
+def keep_warm_once() -> None:
+    """A few tiny queries at once, so that many pooled connections stay open and in use (the
+    first request after a quiet minute used to take ~1.6 s reconnecting). Never raises."""
+    try:
+        run_parallel(*([_ping] * KEEP_WARM_CONNECTIONS))
+    except Exception as e:
+        logger.info("Supabase keep-warm ping failed (%s) - next one in %ss", type(e).__name__, KEEP_WARM_SECONDS)
+
+
+def start_keep_warm() -> None:
+    """Background thread, started once when the server starts (main.py)."""
+    global _warm_started
+    if _warm_started:
+        return
+    _warm_started = True
+
+    def loop():
+        while True:
+            keep_warm_once()
+            time.sleep(KEEP_WARM_SECONDS)
+
+    threading.Thread(target=loop, name="supabase-keep-warm", daemon=True).start()
